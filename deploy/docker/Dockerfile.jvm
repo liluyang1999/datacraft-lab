@@ -1,0 +1,23 @@
+# syntax=docker/dockerfile:1
+#
+# Runtime image for the non-Spark surface: the online HTTP API and lightweight engine jobs.
+# Small (JRE + ~9MB jar). Default command serves the API on all interfaces, port 8080.
+
+ARG JAR_IMAGE=datacraft/jar-builder:latest
+ARG JRE_IMAGE=eclipse-temurin:21-jre
+
+FROM ${JAR_IMAGE} AS jar
+
+FROM ${JRE_IMAGE}
+WORKDIR /opt/datacraft
+COPY --from=jar /dist/datacraft-cli.jar ./datacraft-cli.jar
+
+ENV DATACRAFT_HOME=/opt/datacraft
+EXPOSE 8080
+
+# Basic container healthcheck against the API.
+HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
+    CMD ["sh", "-c", "wget -qO- http://127.0.0.1:8080/health || exit 1"]
+
+ENTRYPOINT ["java", "-jar", "/opt/datacraft/datacraft-cli.jar"]
+CMD ["--command", "serve-api", "--host", "0.0.0.0", "--port", "8080"]

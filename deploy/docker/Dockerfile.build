@@ -1,0 +1,27 @@
+# syntax=docker/dockerfile:1
+#
+# Builder image: compiles the reactor and produces the shaded CLI jar at /dist/datacraft-cli.jar.
+# Built once and consumed by the jvm / spark / airflow images via `COPY --from`. Uses JDK 21 (the
+# project's target bytecode) for a clean, reproducible build independent of the host JDK.
+
+ARG MAVEN_IMAGE=maven:3.9-eclipse-temurin-21
+FROM ${MAVEN_IMAGE}
+
+WORKDIR /workspace
+
+# 1) Copy only the POMs first so dependency resolution is cached independently of source changes.
+COPY pom.xml ./
+COPY datacraft-common/pom.xml datacraft-common/
+COPY datacraft-config/pom.xml datacraft-config/
+COPY datacraft-io/pom.xml datacraft-io/
+COPY datacraft-engine/pom.xml datacraft-engine/
+COPY datacraft-spark/pom.xml datacraft-spark/
+COPY datacraft-api/pom.xml datacraft-api/
+COPY datacraft-cli/pom.xml datacraft-cli/
+RUN mvn -B -ntp -pl datacraft-cli -am dependency:go-offline -DskipTests || true
+
+# 2) Copy sources and build the shaded jar (Spark stays provided, so the jar is a few MB).
+COPY . .
+RUN mvn -B -ntp -pl datacraft-cli -am package -DskipTests \
+    && mkdir -p /dist \
+    && cp datacraft-cli/target/datacraft-cli.jar /dist/datacraft-cli.jar

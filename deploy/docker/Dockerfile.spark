@@ -1,0 +1,27 @@
+# syntax=docker/dockerfile:1
+#
+# Spark job runner: the official Apache Spark image plus the CLI jar. Used to run Spark data jobs
+# via spark-submit, either standalone or launched by Airflow's DockerOperator on a multi-host setup.
+#
+# NOTE: confirm the SPARK_IMAGE tag exists for your Spark version on Docker Hub (apache/spark);
+# the Maven artifact version and the published image tag are released independently.
+
+ARG JAR_IMAGE=datacraft/jar-builder:latest
+ARG SPARK_IMAGE=apache/spark:4.1.2-scala2.13-java21-python3-ubuntu
+
+FROM ${JAR_IMAGE} AS jar
+
+FROM ${SPARK_IMAGE}
+USER root
+COPY --from=jar /dist/datacraft-cli.jar /opt/datacraft/datacraft-cli.jar
+RUN mkdir -p /opt/datacraft/data && chown -R spark:spark /opt/datacraft
+USER spark
+WORKDIR /opt/datacraft
+
+ENV DATACRAFT_HOME=/opt/datacraft
+
+# Pass spark-submit/job arguments at run time, e.g.:
+#   docker run --rm datacraft/spark --master local[*] \
+#     /opt/datacraft/datacraft-cli.jar --command spark-version
+ENTRYPOINT ["/opt/spark/bin/spark-submit", "--class", "com.example.datacraft.cli.Runner"]
+CMD ["--help"]

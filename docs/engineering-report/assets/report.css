@@ -1,0 +1,161 @@
+:root {
+  color-scheme: light;
+  --bg: #f7f8fa;
+  --panel: #ffffff;
+  --ink: #1f2933;
+  --muted: #5d6777;
+  --line: #d7dde6;
+  --accent: #1663a7;
+  --accent-soft: #e8f2fb;
+  --code: #102033;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--ink);
+  font-family:
+    "Segoe UI",
+    "Microsoft YaHei",
+    Arial,
+    sans-serif;
+  line-height: 1.65;
+}
+
+.page {
+  max-width: 1180px;
+  margin: 0 auto;
+  padding: 40px 28px 72px;
+}
+
+header {
+  border-bottom: 1px solid var(--line);
+  margin-bottom: 28px;
+  padding-bottom: 24px;
+}
+
+h1,
+h2,
+h3 {
+  line-height: 1.25;
+  margin: 0;
+}
+
+h1 {
+  font-size: 34px;
+}
+
+h2 {
+  border-bottom: 1px solid var(--line);
+  font-size: 24px;
+  margin-top: 34px;
+  padding-bottom: 8px;
+}
+
+h3 {
+  font-size: 18px;
+  margin-top: 22px;
+}
+
+p {
+  margin: 10px 0;
+}
+
+.subtitle {
+  color: var(--muted);
+  font-size: 16px;
+  margin-top: 10px;
+}
+
+.summary {
+  display: grid;
+  gap: 14px;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  margin: 24px 0;
+}
+
+.summary div,
+section {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+
+.summary div {
+  padding: 16px;
+}
+
+.summary strong {
+  display: block;
+  font-size: 14px;
+  margin-bottom: 6px;
+}
+
+section {
+  margin-top: 18px;
+  padding: 22px;
+}
+
+table {
+  border-collapse: collapse;
+  margin: 14px 0;
+  width: 100%;
+}
+
+th,
+td {
+  border: 1px solid var(--line);
+  padding: 10px 12px;
+  text-align: left;
+  vertical-align: top;
+}
+
+th {
+  background: var(--accent-soft);
+}
+
+code,
+pre {
+  color: var(--code);
+  font-family:
+    "Cascadia Code",
+    Consolas,
+    monospace;
+}
+
+pre {
+  background: #edf1f5;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  overflow-x: auto;
+  padding: 14px;
+}
+
+.tag {
+  background: var(--accent-soft);
+  border-radius: 999px;
+  color: var(--accent);
+  display: inline-block;
+  font-size: 13px;
+  margin: 2px 4px 2px 0;
+  padding: 2px 9px;
+}
+
+.callout {
+  background: #fff9e8;
+  border-left: 4px solid #c68618;
+  padding: 12px 14px;
+}
+
+ul {
+  padding-left: 22px;
+}
+
+footer {
+  color: var(--muted);
+  margin-top: 28px;
+}

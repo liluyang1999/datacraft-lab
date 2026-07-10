@@ -1,4 +1,5 @@
 !.mvn/
+**/target/
 !**/src/main/**/target/
 !**/src/test/**/target/
 
@@ -30,6 +31,24 @@ build/
 
 ### VS Code ###
 .vscode/
+
+### datacraft runtime ###
+/data/
+/logs/
+/tmp/
+/warehouse/
+/spark-warehouse/
+/.airflow/
+/.worktrees/
+
+### secrets / local env (keep .env.example tracked) ###
+.env
+**/.env
+!**/.env.example
+
+### Python (Airflow DAG tooling) ###
+__pycache__/
+*.py[cod]
 
 ### Mac OS ###
 .DS_Store

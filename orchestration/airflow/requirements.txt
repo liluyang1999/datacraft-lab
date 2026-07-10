@@ -1,0 +1,13 @@
+# Extra Python dependencies layered onto the official apache/airflow base image.
+#
+# Build against the matching Airflow constraints file for reproducible installs:
+#   pip install -r requirements.txt \
+#     --constraint "https://raw.githubusercontent.com/apache/airflow/constraints-${AIRFLOW_VERSION}/constraints-${PYTHON_VERSION}.txt"
+#
+# pyspark (providing spark-submit + the Spark runtime) is installed in Dockerfile.airflow because it
+# is large and version-locked to the JVM build's spark.version, not a pure Airflow dependency.
+
+apache-airflow-providers-standard
+apache-airflow-providers-sftp
+# FAB auth manager provides the username/password UI login used by the deployment compose.
+apache-airflow-providers-fab

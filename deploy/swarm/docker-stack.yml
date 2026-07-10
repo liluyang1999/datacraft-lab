@@ -1,0 +1,114 @@
+# datacraft-lab — multi-host deployment (Docker Swarm, Airflow 3.x, CeleryExecutor).
+#
+# Scales out from the single-host Compose file: Redis is added as the Celery broker and an
+# airflow-worker service runs task instances across worker nodes. State services (Postgres, Redis)
+# are pinned to the manager; stateless Airflow components and workers spread across the swarm.
+#
+# Swarm stacks cannot `build:` or read `.env` automatically — images must be pre-built and pushed to
+# a registry, and variables exported into the shell. Use deploy/scripts/swarm-deploy.sh, which does
+# both. Replace node-local volumes with networked storage (NFS/EBS) for real multi-node durability.
+#
+# Deploy (from repo root, on a swarm manager):
+#   export $(grep -v '^#' deploy/compose/.env | xargs)    # or: bash deploy/scripts/swarm-deploy.sh
+#   docker stack deploy -c deploy/swarm/docker-stack.yml datacraft
+
+x-airflow-common: &airflow-common
+  image: ${DATACRAFT_REGISTRY:-localhost:5000}/datacraft-airflow:${DATACRAFT_TAG:-latest}
+  env_file:
+    - ../compose/.env
+  environment: &airflow-env
+    AIRFLOW__CORE__EXECUTOR: CeleryExecutor
+    AIRFLOW__CORE__AUTH_MANAGER: airflow.providers.fab.auth_manager.fab_auth_manager.FabAuthManager
+    AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://${POSTGRES_USER:-airflow}:${POSTGRES_PASSWORD:-airflow}@postgres/${POSTGRES_DB:-airflow}
+    AIRFLOW__CELERY__BROKER_URL: redis://redis:6379/0
+    AIRFLOW__CELERY__RESULT_BACKEND: db+postgresql://${POSTGRES_USER:-airflow}:${POSTGRES_PASSWORD:-airflow}@postgres/${POSTGRES_DB:-airflow}
+    AIRFLOW__CORE__FERNET_KEY: ${AIRFLOW_FERNET_KEY:-}
+    AIRFLOW__CORE__LOAD_EXAMPLES: "false"
+    AIRFLOW__API__SECRET_KEY: ${AIRFLOW_API_SECRET_KEY:-please-change-me}
+    DATACRAFT_HOME: /opt/datacraft
+    DATACRAFT_CLI_JAR: /opt/datacraft/datacraft-cli.jar
+    DATACRAFT_SPARK_MASTER: ${DATACRAFT_SPARK_MASTER:-local[*]}
+  networks:
+    - datacraft-net
+  volumes:
+    - airflow-logs:/opt/airflow/logs
+    - datacraft-data:/opt/datacraft/data
+
+services:
+  postgres:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-airflow}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-airflow}
+      POSTGRES_DB: ${POSTGRES_DB:-airflow}
+    volumes:
+      - postgres-db:/var/lib/postgresql/data
+    networks:
+      - datacraft-net
+    deploy:
+      replicas: 1
+      placement:
+        constraints: [node.role == manager]
+
+  redis:
+    image: redis:7
+    networks:
+      - datacraft-net
+    deploy:
+      replicas: 1
+      placement:
+        constraints: [node.role == manager]
+
+  airflow-apiserver:
+    <<: *airflow-common
+    command: api-server
+    ports:
+      - "${AIRFLOW_WEB_PORT:-8080}:8080"
+    deploy:
+      replicas: 1
+      placement:
+        constraints: [node.role == manager]
+
+  airflow-scheduler:
+    <<: *airflow-common
+    command: scheduler
+    deploy:
+      replicas: 1
+
+  airflow-dag-processor:
+    <<: *airflow-common
+    command: dag-processor
+    deploy:
+      replicas: 1
+
+  airflow-triggerer:
+    <<: *airflow-common
+    command: triggerer
+    deploy:
+      replicas: 1
+
+  # Celery workers execute task instances; scale across nodes by raising replicas.
+  airflow-worker:
+    <<: *airflow-common
+    command: celery worker
+    deploy:
+      replicas: ${AIRFLOW_WORKER_REPLICAS:-2}
+
+  datacraft-api:
+    image: ${DATACRAFT_REGISTRY:-localhost:5000}/datacraft-jvm:${DATACRAFT_TAG:-latest}
+    ports:
+      - "${DATACRAFT_API_PORT:-8088}:8080"
+    networks:
+      - datacraft-net
+    deploy:
+      replicas: 1
+
+networks:
+  datacraft-net:
+    driver: overlay
+    attachable: true
+
+volumes:
+  postgres-db:
+  airflow-logs:
+  datacraft-data:

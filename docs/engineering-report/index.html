@@ -1,0 +1,277 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>datacraft-lab 工程开发文档</title>
+    <link rel="stylesheet" href="assets/report.css" />
+  </head>
+  <body>
+    <main class="page">
+      <header>
+        <h1>datacraft-lab 工程开发文档</h1>
+        <p class="subtitle">
+          Maven 多模块、Java/Scala 混合、Spark 本地执行、Airflow 编排与在线引擎中心的标准工程说明。
+        </p>
+      </header>
+
+      <div class="summary">
+        <div>
+          <strong>父项目</strong>
+          <span>datacraft-lab</span>
+        </div>
+        <div>
+          <strong>基础包名</strong>
+          <span>com.example.datacraft</span>
+        </div>
+        <div>
+          <strong>构建体系</strong>
+          <span>Maven Wrapper + 多模块 Reactor</span>
+        </div>
+        <div>
+          <strong>质量门</strong>
+          <span>Spotless、Scalafmt、google-java-format、Checkstyle、Maven Enforcer、JUnit、ScalaTest</span>
+        </div>
+      </div>
+
+      <section>
+        <h2>一、工程定位</h2>
+        <p>
+          本工程定位为个人数据处理在线通用引擎中心。核心目标不是把所有能力堆入一个入口类，而是建立清晰的端口、
+          抽象、实现和适配层，让本地批处理、Spark 作业、HTTP 在线调用和 Airflow 编排都能复用同一套作业执行语义。
+        </p>
+        <p>
+          当前工程采用保守的标准 JVM 结构：父 POM 统一管理版本和质量插件，子模块只声明自身依赖和模块级打包配置。
+          Java 用于稳定的领域端口和基础设施实现，Scala 用于 CLI、Spark 作业和更自然的数据处理入口。
+        </p>
+      </section>
+
+      <section>
+        <h2>二、模块总览</h2>
+        <table>
+          <thead>
+            <tr>
+              <th>模块</th>
+              <th>包名</th>
+              <th>职责</th>
+              <th>关键类型</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><code>datacraft-common</code></td>
+              <td><code>com.example.datacraft.common</code></td>
+              <td>跨模块基础模型，不依赖任何业务或基础设施模块。</td>
+              <td><code>Lifecycle</code>, <code>DataCraftException</code>, <code>AppInfo</code></td>
+            </tr>
+            <tr>
+              <td><code>datacraft-config</code></td>
+              <td><code>com.example.datacraft.config</code></td>
+              <td>配置加载和类型读取，隔离配置来源和消费方。</td>
+              <td><code>DataCraftConfig</code></td>
+            </tr>
+            <tr>
+              <td><code>datacraft-io</code></td>
+              <td><code>com.example.datacraft.io</code></td>
+              <td>本地文件、根目录约束存储端口、SFTP 传输。</td>
+              <td><code>StorageService</code>, <code>LocalStorageService</code>, <code>LocalFiles</code>, <code>SftpClient</code></td>
+            </tr>
+            <tr>
+              <td><code>datacraft-engine</code></td>
+              <td><code>com.example.datacraft.engine</code></td>
+              <td>作业契约、作业目录、执行请求与执行结果，是在线/离线复用的中心层。</td>
+              <td><code>DataJob</code>, <code>JobCatalog</code>, <code>JobRegistry</code>, <code>JobExecutionEngine</code></td>
+            </tr>
+            <tr>
+              <td><code>datacraft-spark</code></td>
+              <td><code>com.example.datacraft.spark</code></td>
+              <td>Spark 运行配置、Session 生命周期、可复用 DataFrame 读写，以及把 Spark 作业桥接到引擎 DataJob 契约。</td>
+              <td><code>SparkRuntimeConfig</code>, <code>SparkSessions</code>, <code>DataFrames</code>, <code>AbstractSparkDataJob</code>, <code>SparkJobs</code></td>
+            </tr>
+            <tr>
+              <td><code>datacraft-api</code></td>
+              <td><code>com.example.datacraft.api</code></td>
+              <td>轻量 HTTP 在线入口，调用引擎层，不持有业务逻辑。</td>
+              <td><code>EngineHttpServer</code>, <code>EngineJson</code>, <code>HttpJsonResponse</code></td>
+            </tr>
+            <tr>
+              <td><code>datacraft-cli</code></td>
+              <td><code>com.example.datacraft.cli</code></td>
+              <td>命令行入口，供本地用户、脚本和 Airflow 调用。</td>
+              <td><code>Runner</code>, <code>CliParser</code>, <code>CommandLineArgs</code></td>
+            </tr>
+          </tbody>
+        </table>
+      </section>
+
+      <section>
+        <h2>三、依赖方向</h2>
+        <p>模块依赖必须单向、清晰、可解释。当前推荐依赖方向如下：</p>
+        <pre><code>datacraft-common
+  -> datacraft-config
+  -> datacraft-io
+  -> datacraft-engine
+  -> datacraft-spark
+  -> datacraft-api
+  -> datacraft-cli
+
+orchestration/airflow
+  -> 调用 datacraft-cli 构建产物
+</code></pre>
+        <p>
+          实际 Maven 依赖不是简单链式，而是按职责声明。例如 API 依赖 engine，CLI 依赖 api、engine、io、spark。
+          禁止 common 反向依赖上层模块，禁止 API 或 CLI 持有具体业务实现。
+        </p>
+      </section>
+
+      <section>
+        <h2>四、核心抽象说明</h2>
+        <h3>1. 存储端口</h3>
+        <p>
+          <code>StorageService</code> 是应用层访问文件系统的稳定端口。它不暴露绝对路径，避免上层代码绕过根目录约束。
+          <code>LocalStorageService</code> 是根目录绑定实现，所有路径都必须是相对路径，并且不能通过 <code>..</code> 逃逸根目录。
+        </p>
+        <p>
+          <code>LocalFiles</code> 保留为低层 NIO 工具，不承担领域边界。这个分层避免了“工具函数直接散落到业务代码”。
+        </p>
+
+        <h3>2. 作业目录端口</h3>
+        <p>
+          <code>JobCatalog</code> 是只读作业目录端口，定义作业查询、列举和必需作业读取语义。
+          <code>JobRegistry</code> 是当前内存实现，负责注册、重复名称校验和稳定排序。
+        </p>
+        <p>
+          <code>JobExecutionEngine</code> 只依赖 <code>JobCatalog</code>，不绑定具体注册表。后续如果切换为数据库目录、
+          配置文件目录或插件扫描目录，不需要改执行引擎。
+        </p>
+
+        <h3>3. HTTP 在线入口</h3>
+        <p>
+          <code>EngineHttpServer</code> 只负责 HTTP 路由和执行流程协调。
+          <code>EngineJson</code> 负责引擎响应 JSON 编码，<code>HttpJsonResponse</code> 负责 HTTP 响应写入。
+          这个拆分避免服务器类同时承担路由、序列化和响应 I/O 三种职责。
+        </p>
+
+        <h3>4. Spark 运行抽象</h3>
+        <p>
+          <code>SparkRuntimeConfig</code> 描述 Spark 本地或集群运行参数。默认 master 是 <code>local[*]</code>，
+          适合在没有集群时使用本机多核心运行。<code>SparkSessions</code> 是 SparkSession 工厂和释放入口。
+        </p>
+      </section>
+
+      <section>
+        <h2>五、运行路径</h2>
+        <h3>CLI 执行内置作业</h3>
+        <pre><code>java -jar datacraft-cli/target/datacraft-cli.jar --command echo --param message=hello
+
+Runner
+  -> CliParser
+  -> BuiltInJobs.registry()
+  -> JobExecutionEngine
+  -> DataJob.run()
+  -> JobExecutionResult
+</code></pre>
+
+        <h3>HTTP 在线执行</h3>
+        <pre><code>POST /jobs/echo/runs?lifecycle=dev&amp;message=hello
+
+EngineHttpServer
+  -> parseQuery()
+  -> JobExecutionRequest
+  -> JobExecutionEngine
+  -> EngineJson.result()
+  -> HttpJsonResponse.write()
+</code></pre>
+
+        <h3>Airflow 编排</h3>
+        <pre><code>Airflow DAG
+  -> Maven package
+  -> java -jar datacraft-cli.jar --command ...
+  -> 复用 CLI 和 engine 能力
+</code></pre>
+      </section>
+
+      <section>
+        <h2>六、API 端点</h2>
+        <table>
+          <thead>
+            <tr>
+              <th>方法</th>
+              <th>路径</th>
+              <th>说明</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><code>GET</code></td>
+              <td><code>/health</code></td>
+              <td>服务健康检查。</td>
+            </tr>
+            <tr>
+              <td><code>GET</code></td>
+              <td><code>/jobs</code></td>
+              <td>列出当前作业目录中的作业名称和描述。</td>
+            </tr>
+            <tr>
+              <td><code>POST</code></td>
+              <td><code>/jobs/{jobName}/runs?lifecycle=dev&amp;key=value</code></td>
+              <td>同步触发一个作业，查询参数会进入 <code>JobExecutionRequest.parameters</code>。</td>
+            </tr>
+          </tbody>
+        </table>
+      </section>
+
+      <section>
+        <h2>七、开发规范</h2>
+        <ul>
+          <li>新增跨模块模型优先放入 <code>datacraft-common</code>，但 common 不允许依赖上层模块。</li>
+          <li>新增 IO 能力优先通过 <code>StorageService</code> 表达应用需求，再决定是否补充底层 <code>LocalFiles</code> 能力。</li>
+          <li>新增可执行任务必须实现 <code>DataJob</code>，并通过 <code>JobCatalog</code> 暴露给 CLI/API。</li>
+          <li>新增 Spark 作业应保持 Spark 相关代码在 <code>datacraft-spark</code> 或未来 Spark 业务模块内。</li>
+          <li>API 层不得直接写业务逻辑，只负责协议适配、请求转换和响应编码。</li>
+          <li>CLI 层不得复制 API 或 engine 逻辑，只做参数解析和入口编排。</li>
+        </ul>
+      </section>
+
+      <section>
+        <h2>八、质量门与验证</h2>
+        <p>父 POM 统一管理所有依赖版本和插件版本，当前质量门包括：</p>
+        <p>
+          <span class="tag">Maven Enforcer</span>
+          <span class="tag">Spotless</span>
+          <span class="tag">Scalafmt</span>
+          <span class="tag">google-java-format</span>
+          <span class="tag">Checkstyle</span>
+          <span class="tag">JUnit Jupiter</span>
+          <span class="tag">ScalaTest</span>
+        </p>
+        <pre><code>$env:JAVA_HOME='D:\Java'
+.\mvnw.cmd verify
+</code></pre>
+        <p class="callout">
+          当前工程在 JDK 21 字节码目标下构建。Windows 本机如果没有全局设置 <code>JAVA_HOME</code>，
+          需要在 PowerShell 会话内显式设置。
+        </p>
+        <p>
+          Maven 构建体系的完整布局、插件职责、生命周期绑定和生产命令详见
+          <a href="maven-build.html">Maven 构建配置专题报告</a>。
+        </p>
+      </section>
+
+      <section>
+        <h2>九、扩展建议</h2>
+        <ul>
+          <li>下一步可新增 <code>datacraft-jobs</code> 模块，集中放置实际数据处理作业。</li>
+          <li>当 HTTP API 面稳定后，再考虑引入成熟 Web 框架；当前 JDK HTTP server 更适合底座阶段。</li>
+          <li>当作业数量增多后，可新增插件扫描或配置驱动的 <code>JobCatalog</code> 实现。</li>
+          <li>当需要对象存储、HDFS 或云存储时，新增 <code>StorageService</code> 实现，而不是修改业务作业。</li>
+          <li>当 Airflow DAG 增多后，可在 <code>orchestration/airflow</code> 内增加统一模板和环境变量规范。</li>
+        </ul>
+      </section>
+
+      <footer>
+        <p>本文档目录：<code>docs/engineering-report/</code></p>
+      </footer>
+    </main>
+  </body>
+</html>
