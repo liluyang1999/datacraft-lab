@@ -1,5 +1,7 @@
 # datacraft-lab
 
+[![CI](https://github.com/liluyang1999/datacraft-lab/actions/workflows/ci.yml/badge.svg)](https://github.com/liluyang1999/datacraft-lab/actions/workflows/ci.yml)
+
 `datacraft-lab` is a personal data-processing factory built as a Maven multi-module JVM project. It
 combines Java and Scala, uses Spark as the heavy processing engine and plain JVM code for
 small-scenario work, exposes one execution engine through a CLI and an HTTP API, and uses **Apache
