@@ -89,6 +89,7 @@
     <div class="card"><div class="k">CLI Jar 体积</div><div class="v">8.61 MB</div></div>
     <div class="card"><div class="k">本地可验证模块</div><div class="v">5 / 7 全绿</div></div>
     <div class="card"><div class="k">新增 Spark 作业</div><div class="v">3</div></div>
+    <div class="card"><div class="k">GitHub CI</div><div class="v">5 / 5 全绿</div></div>
   </div>
 
   <h2>一、项目定位</h2>
@@ -180,17 +181,25 @@
     <span class="badge b-ok">CLI jar 冒烟通过</span>
     <span class="badge b-ok">DAG py_compile 通过</span>
     <span class="badge b-ok">脚本 bash -n 通过</span>
+    <span class="badge b-ok">GitHub CI 5 作业全绿</span>
   </p>
   <ul>
     <li><code>mvn verify</code>：common、config、io、engine、spark 全部 SUCCESS，格式化与静态检查干净，Enforcer 通过。</li>
     <li>CLI 实测：<code>list-jobs</code> 输出 5 个作业；<code>echo</code> / <code>noop</code> 成功；未知命令返回退出码 2。</li>
     <li>引擎测试补齐后共 13 项通过（新增 <code>JobExecutionResultTest</code> 6 项，覆盖指标合并、不可变性、时钟回拨与参数校验）。</li>
+    <li>
+      <strong>GitHub Actions 全绿（5 个作业）</strong>：JDK 21 完整 <code>verify</code>、CLI jar 冒烟、
+      JDK 25 前向兼容 canary、Airflow DAG 语法、部署脚本 lint（<code>bash -n</code> + ShellCheck）、
+      Compose 与 Swarm 编排文件校验。Linux 上 <code>datacraft-api</code> 与 <code>datacraft-cli</code>
+      的全部测试通过，<strong>反证了本机失败确系环境问题</strong>。
+    </li>
   </ul>
   <div class="note">
     <strong>已知本机限制（非代码缺陷）：</strong>
     本机 JDK 25 的 <code>java.nio.channels.Selector.open()</code> 故障（<code>Unable to establish loopback connection</code>），
     导致依赖 JDK HttpServer 的 <code>datacraft-api</code> 2 项测试与 <code>datacraft-cli</code> 1 项测试仅在本机失败。
-    已用独立探针程序定位为 JDK / 操作系统层问题，与项目代码无关；Linux 容器与 CI（JDK 21）环境不受影响。
+    已用独立探针程序定位为 JDK / 操作系统层问题，与项目代码无关。CI 中 JDK 21 与 JDK 25 两条流水线在 Linux 上均全部通过，
+    进一步证实该问题为 <strong>Windows 平台特有</strong>，与 JDK 版本无关。
     <strong>未以削弱或跳过测试的方式掩盖该问题。</strong>
   </div>
 
@@ -286,8 +295,8 @@ bash deploy/scripts/compose-up.sh                    # 启动单机栈
 
   <h2>十、后续建议</h2>
   <ol>
-    <li>安装 Docker 后执行 <code>docker compose config</code> 校验编排文件，并确认 <code>apache/airflow</code>、<code>apache/spark</code> 镜像标签在所选版本下确实存在。</li>
-    <li>推送后在 GitHub Actions 上确认 Linux + JDK 21 的完整 <code>mvn verify</code>（含本机无法运行的 HTTP 测试）通过。</li>
+    <li><s>在 CI 中校验编排文件</s>——已完成：CI 每次推送均执行 <code>docker compose config</code> 校验 Compose 与 Swarm 文件。仍需在实际构建镜像前确认 <code>apache/airflow</code>、<code>apache/spark</code> 镜像标签在所选版本下确实存在。</li>
+    <li><s>在 GitHub Actions 确认完整 <code>mvn verify</code> 通过</s>——已完成，JDK 21 与 JDK 25 均通过。</li>
     <li>先以单机 Compose 上线运行一段时间，确有并发或高可用需求时再切换至 Swarm。</li>
     <li>生产环境以 <code>docker secret</code> 或云端密钥管理替代 <code>.env</code> 明文。</li>
   </ol>

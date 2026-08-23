@@ -22,7 +22,9 @@ All notable changes to this project are documented here. The format follows
 - **Docs**: cloud (Cloudflare vs AWS) decision + cost analysis and a tutorial-grade deployment
   guide; refreshed README and architecture; a consolidated standalone review report at
   `PROJECT-REVIEW.html`.
-- **CI**: GitHub Actions running `mvn verify` on JDK 21 plus a DAG syntax check.
+- **CI**: GitHub Actions running `mvn verify` on JDK 21, a runnable-jar smoke test, a
+  non-blocking JDK 25 forward-compat canary, DAG syntax checks, deployment-script linting
+  (`bash -n` + ShellCheck), and Compose/Swarm topology validation. No deployment is automated.
 
 ### Changed
 - Spark dependencies are now **`provided`** (`${spark.scope}`); the CLI jar shrinks to ~9 MB and
@@ -30,6 +32,11 @@ All notable changes to this project are documented here. The format follows
 - The CLI is now a **generic engine dispatcher** (control commands `list-jobs`/`serve-api`, all
   other names dispatched as jobs) with `--config`, `--host`, and meaningful exit codes.
 - The HTTP API serializes responses with **Jackson** (correct escaping) and can bind all interfaces.
+
+- `mvnw` and the deployment scripts are marked executable in git, so `./mvnw` works on Linux CI
+  runners (this was the cause of the first failing CI run).
+- `deploy/compose/.env.example` now documents the Swarm-only variables `DATACRAFT_REGISTRY`,
+  `DATACRAFT_TAG`, and `AIRFLOW_WORKER_REPLICAS`.
 
 ### Removed
 - The unused `SparkJob` trait (superseded by `AbstractSparkDataJob`).

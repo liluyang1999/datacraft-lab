@@ -205,7 +205,8 @@ the Spark runtime) for **local** mode. For a real cluster, set `DATACRAFT_SPARK_
   `mvn -B -ntp verify`; the API is validated in CI and inside containers.
 - **Image tags**: `Dockerfile.airflow` pins `apache/airflow:3.0.2` and `Dockerfile.spark` pins an
   `apache/spark` tag — confirm these exist for your chosen versions before building.
-- **`docker compose config`**: run it once after editing the Compose/Swarm files; Airflow
-  occasionally renames components/flags between minors.
+- **`docker compose config`**: CI validates both the Compose and the Swarm file on every push, so
+  syntax and interpolation errors are caught automatically. Still re-run it locally after editing
+  them, since Airflow occasionally renames components/flags between minors.
 - **Secrets**: `.env` is gitignored. Never commit real keys. For Swarm/production prefer
   `docker secret`.
