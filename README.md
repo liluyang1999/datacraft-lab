@@ -21,6 +21,7 @@ Airflow 3.x** as the orchestrator. It ships with Docker Compose (single host) an
 Airflow assets live in [`orchestration/airflow`](orchestration/airflow); deployment assets in
 [`deploy/`](deploy). Architecture details: [`docs/architecture.md`](docs/architecture.md).
 Deployment + the Cloudflare-vs-AWS decision: [`docs/deployment/cloud-and-deployment.md`](docs/deployment/cloud-and-deployment.md).
+A consolidated review report (Chinese, standalone HTML) is at [`PROJECT-REVIEW.html`](PROJECT-REVIEW.html).
 
 ## Prerequisites
 

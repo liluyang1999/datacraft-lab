@@ -112,8 +112,16 @@
             </tr>
             <tr>
               <td>Scala/Spark 生态</td>
-              <td><code>scala.version</code>, <code>scala.binary.version</code>, <code>spark.version</code></td>
-              <td>Scala 二进制版本影响 Spark 依赖坐标，必须集中维护。</td>
+              <td><code>scala.version</code>, <code>scala.binary.version</code>, <code>spark.version</code>, <code>spark.scope</code></td>
+              <td>
+                Scala 二进制版本影响 Spark 依赖坐标，必须集中维护；<code>spark.scope</code> 默认为
+                <code>provided</code>，Spark 运行时由集群 / <code>spark-submit</code> 提供，使 CLI 制品保持精简。
+              </td>
+            </tr>
+            <tr>
+              <td>JSON 序列化</td>
+              <td><code>jackson.version</code>（以 <code>jackson-bom</code> 方式 import）</td>
+              <td>通过 BOM 统一锁定 Jackson 全家桶版本，供 <code>datacraft-api</code> 序列化 HTTP 响应使用。</td>
             </tr>
             <tr>
               <td>测试依赖</td>
@@ -295,6 +303,13 @@
         <p>
           用于运行 Maven Dependency Plugin 的依赖分析。当前设置为不因 warning 阻断构建，适合先作为审计报告入口。
           等项目依赖边界进一步稳定后，可逐步收紧为失败即阻断。
+        </p>
+
+        <h3>bundled-spark</h3>
+        <p>
+          将 <code>spark.scope</code> 由 <code>provided</code> 切换为 <code>compile</code>，把 Spark 运行时一并打入制品，
+          用于没有 <code>spark-submit</code> 的环境下直接 <code>java -jar</code> 运行。产物体积显著增大，
+          仅建议笔记本规模的本地实验使用。
         </p>
       </section>
 

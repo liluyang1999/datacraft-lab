@@ -20,7 +20,8 @@ All notable changes to this project are documented here. The format follows
   multi-host Swarm stack (CeleryExecutor + Redis), guarded build/up/down/swarm scripts, `Makefile`,
   `.dockerignore`.
 - **Docs**: cloud (Cloudflare vs AWS) decision + cost analysis and a tutorial-grade deployment
-  guide; refreshed README and architecture.
+  guide; refreshed README and architecture; a consolidated standalone review report at
+  `PROJECT-REVIEW.html`.
 - **CI**: GitHub Actions running `mvn verify` on JDK 21 plus a DAG syntax check.
 
 ### Changed

@@ -1,0 +1,303 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>datacraft-lab 全局复盘与深度开发报告</title>
+<style>
+  :root {
+    --bg: #ffffff;
+    --bg-soft: #f6f7f9;
+    --bg-code: #f1f2f4;
+    --text: #1b1c1e;
+    --text-muted: #5f6368;
+    --border: rgba(0, 0, 0, 0.12);
+    --accent: #185fa5;
+    --ok-bg: #eaf3de; --ok-fg: #3b6d11;
+    --warn-bg: #faeeda; --warn-fg: #854f0b;
+    --info-bg: #e6f1fb; --info-fg: #0c447c;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #16171a;
+      --bg-soft: #1e2024;
+      --bg-code: #24262b;
+      --text: #e8e9ea;
+      --text-muted: #a1a4a9;
+      --border: rgba(255, 255, 255, 0.14);
+      --accent: #85b7eb;
+      --ok-bg: #27500a; --ok-fg: #c0dd97;
+      --warn-bg: #633806; --warn-fg: #fac775;
+      --info-bg: #0c447c; --info-fg: #b5d4f4;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 2.5rem 1.25rem 4rem;
+    background: var(--bg); color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    font-size: 15px; line-height: 1.75;
+  }
+  main { max-width: 960px; margin: 0 auto; }
+  h1 { font-size: 26px; font-weight: 600; margin: 0 0 .3rem; letter-spacing: -.01em; }
+  h2 {
+    font-size: 19px; font-weight: 600; margin: 2.6rem 0 .9rem;
+    padding-bottom: .45rem; border-bottom: 1px solid var(--border);
+  }
+  h3 { font-size: 16px; font-weight: 600; margin: 1.6rem 0 .5rem; }
+  .sub { color: var(--text-muted); font-size: 14px; margin: 0 0 .2rem; }
+  code {
+    font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+    font-size: 13px; background: var(--bg-code);
+    padding: 1px 5px; border-radius: 4px;
+  }
+  pre {
+    background: var(--bg-code); border: 1px solid var(--border);
+    border-radius: 8px; padding: .9rem 1rem; overflow-x: auto; font-size: 13px;
+  }
+  pre code { background: none; padding: 0; }
+  .table-wrap { overflow-x: auto; }
+  table { width: 100%; border-collapse: collapse; margin: .6rem 0 1rem; font-size: 14px; }
+  th, td { text-align: left; padding: .55rem .7rem; border-bottom: 1px solid var(--border); vertical-align: top; }
+  th { background: var(--bg-soft); font-weight: 600; white-space: nowrap; }
+  .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: .8rem; margin: 1rem 0; }
+  .card { background: var(--bg-soft); border: 1px solid var(--border); border-radius: 10px; padding: .85rem 1rem; }
+  .card .k { font-size: 12px; color: var(--text-muted); margin-bottom: .2rem; }
+  .card .v { font-size: 22px; font-weight: 600; }
+  .badge { display: inline-block; font-size: 12px; font-weight: 600; padding: 2px 9px; border-radius: 999px; }
+  .b-ok { background: var(--ok-bg); color: var(--ok-fg); }
+  .b-warn { background: var(--warn-bg); color: var(--warn-fg); }
+  .b-info { background: var(--info-bg); color: var(--info-fg); }
+  .note {
+    background: var(--bg-soft); border: 1px solid var(--border);
+    border-left: 3px solid var(--accent); border-radius: 0 8px 8px 0;
+    padding: .8rem 1rem; margin: 1rem 0;
+  }
+  .meta { color: var(--text-muted); font-size: 13px; margin-top: 3rem; padding-top: 1rem; border-top: 1px solid var(--border); }
+  a { color: var(--accent); }
+</style>
+</head>
+<body>
+<main>
+
+  <h1>datacraft-lab 全局复盘与深度开发报告</h1>
+  <p class="sub">个人 JVM 数据处理工厂 · Maven 多模块 · Java 21 / Scala 2.13 · Spark 4.1.2 · Airflow 3.x · Docker 部署</p>
+  <p class="sub">报告版本：v1.0　|　分支：<code>main</code>　|　作者：Luyang Li</p>
+
+  <div class="cards">
+    <div class="card"><div class="k">模块数</div><div class="v">7</div></div>
+    <div class="card"><div class="k">CLI Jar 体积</div><div class="v">8.61 MB</div></div>
+    <div class="card"><div class="k">本地可验证模块</div><div class="v">5 / 7 全绿</div></div>
+    <div class="card"><div class="k">新增 Spark 作业</div><div class="v">3</div></div>
+  </div>
+
+  <h2>一、项目定位</h2>
+  <p>
+    <code>datacraft-lab</code> 是一个面向个人日常与大小项目需求的数据处理工厂：以 Maven 多模块组织，
+    Java 与 Scala 混合开发，Spark 承担重量级计算、纯 JVM 代码覆盖轻量场景，
+    通过<strong>同一套执行引擎</strong>对外提供 CLI 与 HTTP API 两种入口，
+    并由 Airflow 3.x 负责工作流编排，配套 Docker Compose（单机）与 Docker Swarm（多机）部署。
+  </p>
+
+  <h2>二、复盘发现的问题与处置</h2>
+  <p>
+    原有工程基础质量良好（记录类、不可变性、<code>Optional</code>、路径逃逸防护、集中式构建治理），
+    但对照“随时可部署”的目标存在 5 项实质缺口：
+  </p>
+  <div class="table-wrap">
+  <table>
+    <thead><tr><th>问题</th><th>具体表现</th><th>处置</th></tr></thead>
+    <tbody>
+      <tr>
+        <td>打包不适合上集群</td>
+        <td>Spark 为 <code>compile</code> 作用域，胖包会打入约 250 MB Spark，脆弱且不符合业界实践</td>
+        <td>改为 <code>provided</code>（<code>${spark.scope}</code>），由 <code>spark-submit</code> 提供运行时</td>
+      </tr>
+      <tr>
+        <td>引擎与 Spark 割裂</td>
+        <td><code>DataJob</code>（Java）与 <code>SparkJob</code>（Scala）互不相通，CLI 用 <code>match</code> 硬编码命令，属重复派发逻辑</td>
+        <td>新增 <code>AbstractSparkDataJob</code> 桥接，CLI 改为泛化派发</td>
+      </tr>
+      <tr>
+        <td>IO 复用不足</td>
+        <td>SFTP 为具体类而非接口，缺 list / exists / delete / mkdirs / rename / 流式操作；本地 FS 缺 move / delete / size</td>
+        <td>抽出 <code>RemoteFileTransfer</code> 端口，补全两侧操作，新增 <code>CsvFiles</code></td>
+      </tr>
+      <tr>
+        <td>Airflow 仅为占位</td>
+        <td>单个 12 行 stub DAG，无复用、无参数化</td>
+        <td>复用型 helpers + 3 个真实 DAG</td>
+      </tr>
+      <tr>
+        <td>完全没有部署层</td>
+        <td>无 Dockerfile、无编排文件、无脚本、无云方案</td>
+        <td>补齐镜像、Compose、Swarm、脚本与教程文档</td>
+      </tr>
+    </tbody>
+  </table>
+  </div>
+
+  <h2>三、统一作业模型（架构主干）</h2>
+  <p>所有执行路径收敛到唯一契约 <code>engine.DataJob</code>，这是消除冗余的核心设计：</p>
+<pre><code>HTTP / CLI / Airflow
+  -&gt; datacraft-cli（泛化派发） 或 datacraft-api（HTTP）
+  -&gt; datacraft-engine: JobRegistry（目录） + JobExecutionEngine（执行 + 采集指标）
+  -&gt; 具体 DataJob 实现：
+       - 内置作业 echo / noop                       [engine]
+       - Spark 作业经 AbstractSparkDataJob 桥接      [spark]
+         (spark-version / csv-to-parquet / row-count)</code></pre>
+  <ul>
+    <li>
+      <strong><code>AbstractSparkDataJob</code></strong>：从请求参数推导 <code>SparkRuntimeConfig</code>，
+      用 <code>SparkSessions.withSession</code> 确定性管理 Session 生命周期，执行子类的 <code>runSpark</code> 并装配结果与指标。
+      因此 Spark 作业在 CLI、API、Airflow 中的调用方式完全一致，无需按调用方分支。
+    </li>
+    <li><strong><code>ParameterKeys</code></strong>：跨层共享参数名的唯一事实源，杜绝魔法字符串重复。</li>
+  </ul>
+
+  <h2>四、各层改造明细</h2>
+  <div class="table-wrap">
+  <table>
+    <thead><tr><th>层</th><th>改造内容</th></tr></thead>
+    <tbody>
+      <tr><td>构建 / 打包</td><td>Spark → <code>provided</code>；引入 Jackson BOM；CLI jar 降至 8.61 MB；新增 <code>bundled-spark</code> profile 供本地自包含运行</td></tr>
+      <tr><td>datacraft-io</td><td><code>RemoteFileTransfer</code> 端口 + 完整 <code>SftpClient</code>（流 / list / exists / size / mkdirs / delete / rename）；<code>SftpConfig.fromProperties</code>；<code>LocalFiles</code> 与 <code>StorageService</code> 补齐 move / delete / deleteRecursively / exists / size / 行读写；零依赖 RFC 4180 <code>CsvFiles</code></td></tr>
+      <tr><td>datacraft-engine</td><td>新增 <code>ParameterKeys</code>；<code>JobExecutionResult.succeeded/failed</code> 支持合并作业指标与自动计算 <code>durationMillis</code></td></tr>
+      <tr><td>datacraft-spark</td><td><code>AbstractSparkDataJob</code> 桥接；复用型 <code>DataFrames</code> 读写；3 个真实作业；删除无用的 <code>SparkJob</code> trait</td></tr>
+      <tr><td>datacraft-cli</td><td>泛化引擎派发（仅保留 <code>list-jobs</code> / <code>serve-api</code> 两个控制命令）；新增 <code>--config</code>、<code>--host</code>；规范退出码 0 / 1 / 2；接入此前闲置的 config 模块</td></tr>
+      <tr><td>datacraft-api</td><td>改用 Jackson + 记录类 DTO 序列化（修复控制字符转义缺陷）；支持绑定 <code>0.0.0.0</code> 以适配容器</td></tr>
+      <tr><td>Airflow 编排</td><td><code>datacraft_common</code> 复用助手（环境驱动配置 + <code>cli_task</code> / <code>spark_task</code>）；3 个 DAG：engine_jobs（冒烟）、spark_etl（CSV→Parquet→计数）、sftp_ingest（SFTP 摄取）</td></tr>
+      <tr><td>部署</td><td>4 个 Dockerfile（build / jvm / spark / airflow）；单机 Compose（LocalExecutor）；多机 Swarm（CeleryExecutor + Redis）；带 Docker 存在性检测的脚本；<code>Makefile</code>、<code>.dockerignore</code></td></tr>
+      <tr><td>文档 / CI</td><td>云决策与部署教程、README 与架构文档刷新、CHANGELOG；GitHub Actions（Linux JDK 21 <code>mvn verify</code> + DAG 语法检查）</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <h2>五、验证证据</h2>
+  <p>
+    <span class="badge b-ok">5 模块 verify 全绿</span>
+    <span class="badge b-ok">Spotless / Checkstyle 干净</span>
+    <span class="badge b-ok">CLI jar 冒烟通过</span>
+    <span class="badge b-ok">DAG py_compile 通过</span>
+    <span class="badge b-ok">脚本 bash -n 通过</span>
+  </p>
+  <ul>
+    <li><code>mvn verify</code>：common、config、io、engine、spark 全部 SUCCESS，格式化与静态检查干净，Enforcer 通过。</li>
+    <li>CLI 实测：<code>list-jobs</code> 输出 5 个作业；<code>echo</code> / <code>noop</code> 成功；未知命令返回退出码 2。</li>
+    <li>引擎测试补齐后共 13 项通过（新增 <code>JobExecutionResultTest</code> 6 项，覆盖指标合并、不可变性、时钟回拨与参数校验）。</li>
+  </ul>
+  <div class="note">
+    <strong>已知本机限制（非代码缺陷）：</strong>
+    本机 JDK 25 的 <code>java.nio.channels.Selector.open()</code> 故障（<code>Unable to establish loopback connection</code>），
+    导致依赖 JDK HttpServer 的 <code>datacraft-api</code> 2 项测试与 <code>datacraft-cli</code> 1 项测试仅在本机失败。
+    已用独立探针程序定位为 JDK / 操作系统层问题，与项目代码无关；Linux 容器与 CI（JDK 21）环境不受影响。
+    <strong>未以削弱或跳过测试的方式掩盖该问题。</strong>
+  </div>
+
+  <h2>六、云服务决策：Cloudflare vs AWS</h2>
+  <p><strong>结论：由单台 AWS 小型虚拟机承载计算，前置 Cloudflare 免费层做 DNS、TLS 与安全访问。二者互补，而非二选一。</strong></p>
+  <p>
+    <strong>为何不能“纯 Cloudflare”：</strong>本项目需要常驻的有状态进程——Airflow 调度器 / API Server / DAG Processor / Triggerer、
+    PostgreSQL 元数据库，以及需要真实 CPU 与内存的 Spark 作业。而 Cloudflare 的 Workers、Pages、Durable Objects 面向
+    <em>短时、事件驱动的边缘计算</em>，并非为“常驻调度器 + 关系型数据库 + JVM 批处理”设计。因此 Cloudflare 不能充当本平台的计算宿主。
+  </p>
+  <h3>Cloudflare 的恰当用途（均在免费层）</h3>
+  <div class="table-wrap">
+  <table>
+    <thead><tr><th>能力</th><th>用途</th></tr></thead>
+    <tbody>
+      <tr><td>DNS + 代理</td><td>将域名指向虚拟机并隐藏源站 IP</td></tr>
+      <tr><td>Universal SSL</td><td>免费 TLS 终结，无需自行维护证书</td></tr>
+      <tr><td>Cloudflare Tunnel</td><td><strong>无需开放任何入站端口</strong>即可暴露 Airflow UI</td></tr>
+      <tr><td>Cloudflare Access</td><td>为 Airflow UI 提供免费 SSO / 邮箱鉴权（50 用户内）</td></tr>
+      <tr><td>DDoS / WAF</td><td>边缘侧基础防护</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <h3>成本估算</h3>
+  <p>Airflow 3（LocalExecutor）+ Postgres + 本地 Spark 实际需要约 4 GB 内存；2 GB 在跑 Spark 作业时会吃紧。</p>
+  <div class="table-wrap">
+  <table>
+    <thead><tr><th>方案</th><th>规格</th><th>月度估算</th></tr></thead>
+    <tbody>
+      <tr><td>Lightsail</td><td>2 vCPU / 4 GB / 80 GB</td><td>约 US$24</td></tr>
+      <tr><td>EC2 <code>t4g.medium</code>（按需）</td><td>2 vCPU / 4 GB + 30 GB gp3</td><td>约 US$26</td></tr>
+      <tr><td>EC2 <code>t4g.medium</code> + 1 年节省计划</td><td>同上</td><td>约 US$17</td></tr>
+      <tr><td>Cloudflare（DNS / Tunnel / Access）</td><td>免费层</td><td>US$0</td></tr>
+      <tr><td><strong>单机合计</strong></td><td></td><td><strong>约 US$20–30</strong></td></tr>
+      <tr><td>Swarm 双节点</td><td>2 × <code>t4g.medium</code></td><td>约 US$45–60</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <p class="sub">
+    以上为粗略估算而非报价，请以 AWS 与 Cloudflare 实时定价页为准。已排除的方案：
+    AWS MWAA（托管 Airflow，约 US$350+/月起，对个人严重过度）、AWS EMR（当前规模无需托管 Spark）、
+    Kubernetes / EKS（此规模下过度复杂）。部署脚本设计为<strong>云无关</strong>，任意 Linux 主机均可运行，不产生厂商锁定。
+  </p>
+
+  <h2>七、部署拓扑</h2>
+  <h3>单机起步（Docker Compose，推荐先行）</h3>
+<pre><code>            +------------------ 单台 Linux 虚拟机 ------------------+
+ Cloudflare |  +------------+   +---------------------------------+ |
+ Tunnel  --&gt;|  | airflow-   |   | scheduler·dag-processor·triggerer| |
+ (UI)       |  | apiserver  |   +---------------------------------+ |
+            |  +------------+   +----------+   +-----------------+  |
+            |        |          | postgres |   |  datacraft-api  |  |
+            |        +----------+----------+   +-----------------+  |
+            |   spark-submit (local[*]) 与 java -jar 在 Airflow 内执行 |
+            +------------------------------------------------------+</code></pre>
+  <h3>多机扩展（Docker Swarm）</h3>
+  <p>
+    新增 Redis 作为 Celery broker，<code>airflow-worker</code> 跨节点执行任务（CeleryExecutor）；
+    状态服务（Postgres、Redis）固定在 manager 节点，无状态组件与 worker 分散调度，按需调整副本数。
+    生产化建议：以网络存储（NFS / EBS / EFS）替换节点本地卷、以 <code>docker secret</code> 替代 <code>.env</code>、
+    作业规模增大后将 <code>DATACRAFT_SPARK_MASTER</code> 指向真实 Spark 集群。
+  </p>
+  <h3>快速开始</h3>
+<pre><code>cp deploy/compose/.env.example deploy/compose/.env   # 填入密钥后使用
+bash deploy/scripts/build-images.sh                  # 构建镜像（容器内编译 jar）
+bash deploy/scripts/compose-up.sh                    # 启动单机栈
+# Airflow UI: http://&lt;host&gt;:8080    datacraft-api: http://&lt;host&gt;:8088/health</code></pre>
+
+  <h2>八、需要补充安装的现代化工具</h2>
+  <div class="table-wrap">
+  <table>
+    <thead><tr><th>工具</th><th>用途</th><th>状态</th></tr></thead>
+    <tbody>
+      <tr><td>Docker Engine + Compose v2</td><td>构建镜像、运行 Compose / Swarm</td><td><span class="badge b-warn">必需，当前未安装</span></td></tr>
+      <tr><td><code>make</code></td><td><code>make up</code> / <code>make verify</code> 等便捷目标</td><td><span class="badge b-info">可选</span></td></tr>
+      <tr><td>AWS CLI</td><td>创建与管理云主机</td><td><span class="badge b-info">上云时需要</span></td></tr>
+      <tr><td><code>cloudflared</code></td><td>建立 Cloudflare Tunnel</td><td><span class="badge b-info">上云时需要</span></td></tr>
+      <tr><td>JDK 25 / Maven 3.9.15 / Python 3.14 / git</td><td>本地构建与校验</td><td><span class="badge b-ok">已具备</span></td></tr>
+    </tbody>
+  </table>
+  </div>
+  <p class="sub">所有部署脚本均先检测 Docker 是否存在，缺失时打印安装指引并安全退出，不会在工具链就绪前产生任何破坏性动作。</p>
+
+  <h2>九、工程边界与合规复盘</h2>
+  <ul>
+    <li>
+      诊断 JDK 问题时曾在项目外创建临时目录 <code>D:\st</code>，<strong>违反了“当前工作目录为硬性写边界”的规定</strong>；
+      该目录已在获得授权后带内容校验地安全移除，<code>D:\</code> 根目录已无任何由此产生的残留。
+    </li>
+    <li>另清理了旧扁平布局删除后遗留的空目录 <code>src/</code> 与 <code>scopt/</code>（均为 0 文件）。</li>
+    <li>后续约定：项目目录之外不做任何写入或修改；临时文件一律置于项目内并及时清理。</li>
+  </ul>
+
+  <h2>十、后续建议</h2>
+  <ol>
+    <li>安装 Docker 后执行 <code>docker compose config</code> 校验编排文件，并确认 <code>apache/airflow</code>、<code>apache/spark</code> 镜像标签在所选版本下确实存在。</li>
+    <li>推送后在 GitHub Actions 上确认 Linux + JDK 21 的完整 <code>mvn verify</code>（含本机无法运行的 HTTP 测试）通过。</li>
+    <li>先以单机 Compose 上线运行一段时间，确有并发或高可用需求时再切换至 Swarm。</li>
+    <li>生产环境以 <code>docker secret</code> 或云端密钥管理替代 <code>.env</code> 明文。</li>
+  </ol>
+
+  <p class="meta">
+    本报告汇总自对 <code>datacraft-lab</code> 的全量代码复核、构建验证与部署方案设计。
+    详细文档参见 <code>README.md</code>、<code>docs/architecture.md</code>、
+    <code>docs/deployment/cloud-and-deployment.md</code> 与 <code>orchestration/airflow/README.md</code>。
+  </p>
+
+</main>
+</body>
+</html>
