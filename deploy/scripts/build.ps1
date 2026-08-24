@@ -3,7 +3,7 @@
 $ErrorActionPreference = 'Stop'
 
 if (-not $env:JAVA_HOME) {
-    Write-Host '[datacraft] Tip: set $env:JAVA_HOME to a JDK 21+ install for a clean build.'
+    Write-Host '[datacraft] Tip: set $env:JAVA_HOME to a JDK 25+ install for a clean build.'
 }
 
 $repoRoot = Resolve-Path (Join-Path $PSScriptRoot '..\..')

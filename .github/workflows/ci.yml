@@ -33,10 +33,22 @@ jobs:
       - name: Verify
         run: ./mvnw -B -ntp verify
 
-      # `verify` also runs SparkPipelineSpec, which boots a real SparkSession and so proves
-      # Spark 4.2.0 actually runs on JDK 25 (that suite self-cancels only on hosts whose JVM
-      # cannot open NIO selectors at all, which Linux runners can).
-      #
+      # SparkPipelineSpec boots a real SparkSession, so it is what proves Spark 4.2.0 actually
+      # runs on JDK 25. It self-cancels on hosts that cannot open NIO selectors, and a canceled
+      # suite would still report as a passing build - which would hide exactly what must be
+      # proven here. Fail loudly instead.
+      - name: Assert the Spark suite really ran
+        run: |
+          REPORT=datacraft-spark/target/surefire-reports/datacraft-spark-scalatest.txt
+          test -f "$REPORT" || { echo "::error::scalatest report not found at $REPORT"; exit 1; }
+          grep -q "SparkPipelineSpec" "$REPORT" || { echo "::error::SparkPipelineSpec never ran"; exit 1; }
+          if ! grep -q "canceled 0," "$REPORT"; then
+            echo "::error::Spark suite was canceled - Spark did not start on this JDK"
+            cat "$REPORT"
+            exit 1
+          fi
+          grep -E "Tests: succeeded" "$REPORT"
+
       # This smoke test proves the shaded jar is runnable and that Spark stays out of it
       # (Spark is a provided dependency; these commands must not need it).
       - name: Smoke-test the CLI jar
