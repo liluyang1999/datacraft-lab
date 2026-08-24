@@ -4,7 +4,7 @@
 # Small (JRE + ~9MB jar). Default command serves the API on all interfaces, port 8080.
 
 ARG JAR_IMAGE=datacraft/jar-builder:latest
-ARG JRE_IMAGE=eclipse-temurin:21-jre
+ARG JRE_IMAGE=eclipse-temurin:25-jre
 
 FROM ${JAR_IMAGE} AS jar
 

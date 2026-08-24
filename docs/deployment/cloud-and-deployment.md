@@ -79,9 +79,10 @@ and **git**. To build and deploy the containers you additionally need:
 | **AWS CLI** *(for AWS)* | Provision/manage the VM | `https://aws.amazon.com/cli/` |
 | **cloudflared** *(for Cloudflare Tunnel)* | Expose the UI securely | `https://developers.cloudflare.com/cloudflare-one/` |
 
-> A JDK 21 is the project's target bytecode. Local JDK 25 builds and runs fine (it compiles to
-> `release 21`); the CI and container builds use JDK 21 for parity. See the note in §6 about the
-> local JDK-25 HTTP-server test limitation on Windows.
+> The project targets **Java 25** bytecode, so every runtime (local, container, and Spark cluster)
+> must be JDK 25. Prefer **25.0.3 or newer** — Spark 4.2.0 deprecates older Java 25 releases. The
+> container images use `eclipse-temurin:25-jre` and `apache/spark:4.2.0-...-java25-...` accordingly.
+> See the note in §6 about the local NIO-selector limitation on this Windows workstation.
 
 Every deployment script checks for Docker first and prints install guidance if it is missing, so
 nothing destructive happens before the toolchain is ready.

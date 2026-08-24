@@ -2,7 +2,7 @@
 #
 # Airflow image for the single-host (Compose) and multi-host (Swarm) deployments. Extends the
 # official Airflow image with:
-#   * a JRE 21 (to run the non-Spark CLI jar)                      -> copied from eclipse-temurin
+#   * a JRE 25 (to run the non-Spark CLI jar)                      -> copied from eclipse-temurin
 #   * pyspark (provides spark-submit + the Spark runtime)          -> pinned to the JVM Spark version
 #   * the datacraft-cli jar and the DAGs
 #
@@ -11,15 +11,15 @@
 
 ARG JAR_IMAGE=datacraft/jar-builder:latest
 ARG AIRFLOW_IMAGE=apache/airflow:3.0.2
-ARG JRE_IMAGE=eclipse-temurin:21-jre
+ARG JRE_IMAGE=eclipse-temurin:25-jre
 
 FROM ${JAR_IMAGE} AS jar
 FROM ${JRE_IMAGE} AS jre
 
 FROM ${AIRFLOW_IMAGE}
-ARG SPARK_VERSION=4.1.2
+ARG SPARK_VERSION=4.2.0
 
-# --- JRE 21 (exact version, independent of the base image's Debian java packages) ---
+# --- JRE 25 (exact version, independent of the base image's Debian java packages) ---
 COPY --from=jre /opt/java/openjdk /opt/java/openjdk
 ENV JAVA_HOME=/opt/java/openjdk
 ENV PATH="${JAVA_HOME}/bin:${PATH}"

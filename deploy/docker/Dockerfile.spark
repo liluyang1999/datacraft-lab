@@ -3,11 +3,11 @@
 # Spark job runner: the official Apache Spark image plus the CLI jar. Used to run Spark data jobs
 # via spark-submit, either standalone or launched by Airflow's DockerOperator on a multi-host setup.
 #
-# NOTE: confirm the SPARK_IMAGE tag exists for your Spark version on Docker Hub (apache/spark);
-# the Maven artifact version and the published image tag are released independently.
+# The java25 variant is required: the jar targets Java 25 bytecode, so the Spark runtime must be
+# Java 25 too. Spark 4.2.0 supports Java 17/21/25.
 
 ARG JAR_IMAGE=datacraft/jar-builder:latest
-ARG SPARK_IMAGE=apache/spark:4.1.2-scala2.13-java21-python3-ubuntu
+ARG SPARK_IMAGE=apache/spark:4.2.0-scala2.13-java25-python3-ubuntu
 
 FROM ${JAR_IMAGE} AS jar
 

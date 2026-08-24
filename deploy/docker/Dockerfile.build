@@ -1,10 +1,10 @@
 # syntax=docker/dockerfile:1
 #
 # Builder image: compiles the reactor and produces the shaded CLI jar at /dist/datacraft-cli.jar.
-# Built once and consumed by the jvm / spark / airflow images via `COPY --from`. Uses JDK 21 (the
+# Built once and consumed by the jvm / spark / airflow images via `COPY --from`. Uses JDK 25 (the
 # project's target bytecode) for a clean, reproducible build independent of the host JDK.
 
-ARG MAVEN_IMAGE=maven:3.9-eclipse-temurin-21
+ARG MAVEN_IMAGE=maven:3.9-eclipse-temurin-25
 FROM ${MAVEN_IMAGE}
 
 WORKDIR /workspace

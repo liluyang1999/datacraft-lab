@@ -16,24 +16,28 @@ permissions:
 
 jobs:
   build:
-    name: Build & verify (JDK 21)
+    name: Build & verify (JDK 25)
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
 
-      - name: Set up JDK 21
+      - name: Set up JDK 25
         uses: actions/setup-java@v4
         with:
           distribution: temurin
-          java-version: "21"
+          java-version: "25"
           cache: maven
 
       # Full gate: Spotless format check, Checkstyle, Enforcer, unit tests, shaded package.
       - name: Verify
         run: ./mvnw -B -ntp verify
 
-      # Proves the shaded jar is actually runnable and that Spark stays out of it
+      # `verify` also runs SparkPipelineSpec, which boots a real SparkSession and so proves
+      # Spark 4.2.0 actually runs on JDK 25 (that suite self-cancels only on hosts whose JVM
+      # cannot open NIO selectors at all, which Linux runners can).
+      #
+      # This smoke test proves the shaded jar is runnable and that Spark stays out of it
       # (Spark is a provided dependency; these commands must not need it).
       - name: Smoke-test the CLI jar
         run: |
@@ -47,29 +51,9 @@ jobs:
         if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: surefire-reports-jdk21
+          name: surefire-reports-jdk25
           path: "**/target/surefire-reports/**"
           if-no-files-found: ignore
-
-  forward-compat:
-    # Non-blocking canary: the developer workstation runs JDK 25, so this catches
-    # forward-compatibility breakage early without gating the branch.
-    name: Forward-compat canary (JDK 25)
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
-    continue-on-error: true
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Set up JDK 25
-        uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: "25"
-          cache: maven
-
-      - name: Verify
-        run: ./mvnw -B -ntp verify
 
   dags:
     name: Airflow DAG syntax

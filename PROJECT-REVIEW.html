@@ -81,8 +81,8 @@
 <main>
 
   <h1>datacraft-lab 全局复盘与深度开发报告</h1>
-  <p class="sub">个人 JVM 数据处理工厂 · Maven 多模块 · Java 21 / Scala 2.13 · Spark 4.1.2 · Airflow 3.x · Docker 部署</p>
-  <p class="sub">报告版本：v1.0　|　分支：<code>main</code>　|　作者：Luyang Li</p>
+  <p class="sub">个人 JVM 数据处理工厂 · Maven 多模块 · <strong>Java 25</strong> / Scala 2.13.18 · Spark 4.2.0 · Airflow 3.x · Docker 部署</p>
+  <p class="sub">报告版本：v1.1　|　分支：<code>main</code>　|　作者：Luyang Li</p>
 
   <div class="cards">
     <div class="card"><div class="k">模块数</div><div class="v">7</div></div>
@@ -169,7 +169,7 @@
       <tr><td>datacraft-api</td><td>改用 Jackson + 记录类 DTO 序列化（修复控制字符转义缺陷）；支持绑定 <code>0.0.0.0</code> 以适配容器</td></tr>
       <tr><td>Airflow 编排</td><td><code>datacraft_common</code> 复用助手（环境驱动配置 + <code>cli_task</code> / <code>spark_task</code>）；3 个 DAG：engine_jobs（冒烟）、spark_etl（CSV→Parquet→计数）、sftp_ingest（SFTP 摄取）</td></tr>
       <tr><td>部署</td><td>4 个 Dockerfile（build / jvm / spark / airflow）；单机 Compose（LocalExecutor）；多机 Swarm（CeleryExecutor + Redis）；带 Docker 存在性检测的脚本；<code>Makefile</code>、<code>.dockerignore</code></td></tr>
-      <tr><td>文档 / CI</td><td>云决策与部署教程、README 与架构文档刷新、CHANGELOG；GitHub Actions（Linux JDK 21 <code>mvn verify</code> + DAG 语法检查）</td></tr>
+      <tr><td>文档 / CI</td><td>云决策与部署教程、README 与架构文档刷新、CHANGELOG；GitHub Actions（Linux JDK 25 <code>mvn verify</code>、CLI jar 冒烟、DAG 语法、脚本 lint、编排文件校验）</td></tr>
     </tbody>
   </table>
   </div>
@@ -188,18 +188,19 @@
     <li>CLI 实测：<code>list-jobs</code> 输出 5 个作业；<code>echo</code> / <code>noop</code> 成功；未知命令返回退出码 2。</li>
     <li>引擎测试补齐后共 13 项通过（新增 <code>JobExecutionResultTest</code> 6 项，覆盖指标合并、不可变性、时钟回拨与参数校验）。</li>
     <li>
-      <strong>GitHub Actions 全绿（5 个作业）</strong>：JDK 21 完整 <code>verify</code>、CLI jar 冒烟、
-      JDK 25 前向兼容 canary、Airflow DAG 语法、部署脚本 lint（<code>bash -n</code> + ShellCheck）、
-      Compose 与 Swarm 编排文件校验。Linux 上 <code>datacraft-api</code> 与 <code>datacraft-cli</code>
-      的全部测试通过，<strong>反证了本机失败确系环境问题</strong>。
+      <strong>GitHub Actions 全绿</strong>：JDK 25 完整 <code>verify</code>（含真实启动 SparkSession 的
+      <code>SparkPipelineSpec</code>）、CLI jar 冒烟、Airflow DAG 语法、部署脚本 lint（<code>bash -n</code> +
+      ShellCheck）、Compose 与 Swarm 编排文件校验。Linux 上 <code>datacraft-api</code> 与
+      <code>datacraft-cli</code> 的全部测试通过，<strong>反证了本机失败确系环境问题</strong>。
     </li>
   </ul>
   <div class="note">
     <strong>已知本机限制（非代码缺陷）：</strong>
     本机 JDK 25 的 <code>java.nio.channels.Selector.open()</code> 故障（<code>Unable to establish loopback connection</code>），
     导致依赖 JDK HttpServer 的 <code>datacraft-api</code> 2 项测试与 <code>datacraft-cli</code> 1 项测试仅在本机失败。
-    已用独立探针程序定位为 JDK / 操作系统层问题，与项目代码无关。CI 中 JDK 21 与 JDK 25 两条流水线在 Linux 上均全部通过，
-    进一步证实该问题为 <strong>Windows 平台特有</strong>，与 JDK 版本无关。
+    已用独立探针程序定位为 JDK / 操作系统层问题，与项目代码无关。<strong>该限制同样使本机无法启动 Spark</strong>
+    （Netty 报 <code>failed to open a new selector</code>），因此 <code>SparkPipelineSpec</code> 在本机自动
+    cancel、在 Linux/CI 上真实执行。CI 全部通过，证实该问题为 <strong>Windows 平台特有</strong>。
     <strong>未以削弱或跳过测试的方式掩盖该问题。</strong>
   </div>
 
@@ -293,10 +294,44 @@ bash deploy/scripts/compose-up.sh                    # 启动单机栈
     <li>后续约定：项目目录之外不做任何写入或修改；临时文件一律置于项目内并及时清理。</li>
   </ul>
 
-  <h2>十、后续建议</h2>
+  <h2>十、JDK 25 升级</h2>
+  <p>
+    升级的关键不在于修改 pom 中的版本号，而在于运行期兼容性：<strong>Spark 4.1 官方仅支持 Java 17/21</strong>，
+    Java 25 支持是 <strong>Spark 4.2.0</strong> 才加入的；<strong>Scala 2.13.16 也不支持 JDK 25</strong>，需 2.13.17+。
+    因此本次升级是三者联动的，缺一不可。
+  </p>
+  <div class="table-wrap">
+  <table>
+    <thead><tr><th>项目</th><th>升级前</th><th>升级后</th><th>原因</th></tr></thead>
+    <tbody>
+      <tr><td>Java 目标 / 构建</td><td>21</td><td><strong>25</strong></td><td>本次升级目标</td></tr>
+      <tr><td>Spark</td><td>4.1.2</td><td><strong>4.2.0</strong></td><td>4.1 不支持 Java 25；4.2.0 官方支持 17/21/25</td></tr>
+      <tr><td>Scala</td><td>2.13.16</td><td><strong>2.13.18</strong></td><td>2.13.17+ 才支持 JDK 25；且与 Spark 4.2.0 自身编译所用版本完全一致</td></tr>
+      <tr><td>构建镜像</td><td><code>maven:3.9-eclipse-temurin-21</code></td><td><code>…-25</code></td><td>与字节码目标一致</td></tr>
+      <tr><td>运行镜像</td><td><code>eclipse-temurin:21-jre</code></td><td><code>25-jre</code></td><td>Java 25 字节码需要 25 运行时</td></tr>
+      <tr><td>Spark 镜像</td><td><code>4.1.2-…-java21-…</code></td><td><code>4.2.0-scala2.13-java25-python3-ubuntu</code></td><td>已核实该标签存在</td></tr>
+      <tr><td>pyspark（Airflow 镜像）</td><td>4.1.2</td><td>4.2.0</td><td>与 JVM 侧 Spark 版本对齐</td></tr>
+      <tr><td>Enforcer</td><td><code>[21,)</code></td><td><code>[25,)</code></td><td>防止用低版本 JDK 误构建</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <p>
+    <strong>新增真实 Spark 集成测试</strong>：此前所有 Spark 测试都只断言纯配置、从未启动过 SparkSession，
+    而升级风险恰恰在运行期。新增的 <code>SparkPipelineSpec</code> 会真实启动 Spark、执行
+    「CSV → Parquet → 计数」全链路并校验指标，由 CI 在 JDK 25 上证明 Spark 4.2.0 确实可运行。
+    Spark 嵌入测试 JVM 时需要 JPMS 开放参数（<code>spark-submit</code> 会自动注入，测试 JVM 不会），
+    已通过 <code>spark.test.jvm.args</code> 统一配置。
+  </p>
+  <div class="note">
+    <strong>请注意本机 JDK 版本：</strong>Spark 4.2.0 文档明确指出
+    「Java 25 prior to version 25.0.3 support is deprecated」。本机当前为 <strong>JDK 25.0.2</strong>，
+    正落在该 deprecated 区间，建议升级到 <strong>25.0.3 或更新版本</strong>。
+  </div>
+
+  <h2>十一、后续建议</h2>
   <ol>
     <li><s>在 CI 中校验编排文件</s>——已完成：CI 每次推送均执行 <code>docker compose config</code> 校验 Compose 与 Swarm 文件。仍需在实际构建镜像前确认 <code>apache/airflow</code>、<code>apache/spark</code> 镜像标签在所选版本下确实存在。</li>
-    <li><s>在 GitHub Actions 确认完整 <code>mvn verify</code> 通过</s>——已完成，JDK 21 与 JDK 25 均通过。</li>
+    <li><s>在 GitHub Actions 确认完整 <code>mvn verify</code> 通过</s>——已完成（JDK 25）。</li>
     <li>先以单机 Compose 上线运行一段时间，确有并发或高可用需求时再切换至 Swarm。</li>
     <li>生产环境以 <code>docker secret</code> 或云端密钥管理替代 <code>.env</code> 明文。</li>
   </ol>

@@ -84,4 +84,6 @@ All JVM code uses base package `com.example.datacraft` plus the module name (`.c
 
 The parent POM centralizes compiler, formatter (Spotless: google-java-format + scalafmt),
 Checkstyle, Enforcer, and test plugin configuration. Module POMs declare only their dependencies and
-packaging needs. CI runs `mvn verify` on JDK 21 plus a DAG syntax check.
+packaging needs. CI runs `mvn verify` on JDK 25 (including a Spark suite that boots a real
+SparkSession), a runnable-jar smoke test, a DAG syntax check, deployment-script linting, and
+Compose/Swarm validation.

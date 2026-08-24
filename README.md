@@ -27,7 +27,8 @@ A consolidated review report (Chinese, standalone HTML) is at [`PROJECT-REVIEW.h
 
 ## Prerequisites
 
-- **JDK 21+** to build (this workspace has JDK 25 at `D:\Java`; the build targets Java 21 bytecode).
+- **JDK 25+** to build and run (the build targets Java 25 bytecode). This workspace has JDK 25 at
+  `D:\Java`. Use **25.0.3 or newer**: Spark 4.2.0 deprecates Java 25 releases older than 25.0.3.
 - **Maven 3.9+** (or the bundled `mvnw`/`mvnw.cmd`).
 - **Docker Engine + Compose v2** — only for the container deployment (not required to build/test).
 - **Python 3.10+** — only to syntax-check the Airflow DAGs locally.
