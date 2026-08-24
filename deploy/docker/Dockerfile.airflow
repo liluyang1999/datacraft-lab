@@ -10,7 +10,7 @@
 # DATACRAFT_SPARK_MASTER to the cluster URL, or launch the dedicated Spark image with DockerOperator.
 
 ARG JAR_IMAGE=datacraft/jar-builder:latest
-ARG AIRFLOW_IMAGE=apache/airflow:3.0.2
+ARG AIRFLOW_IMAGE=apache/airflow:3.3.1
 ARG JRE_IMAGE=eclipse-temurin:25-jre
 
 FROM ${JAR_IMAGE} AS jar
@@ -34,9 +34,13 @@ USER airflow
 COPY orchestration/airflow/requirements.txt /tmp/requirements.txt
 RUN pip install --no-cache-dir "pyspark==${SPARK_VERSION}" -r /tmp/requirements.txt
 
-# pyspark ships spark-submit under its package bin/. The path below matches the Python in
-# apache/airflow:3.0.x (3.12); update it if you pin a base image with a different Python minor.
-ENV SPARK_HOME=/home/airflow/.local/lib/python3.12/site-packages/pyspark
+# pyspark ships spark-submit under its package bin/. Resolve that path instead of hardcoding a
+# Python minor version, so the image keeps working when the Airflow base image bumps Python.
+RUN python -c 'import pathlib, pyspark; print(pathlib.Path(pyspark.__file__).parent)' > /tmp/pyspark_home
+USER root
+RUN ln -sfn "$(cat /tmp/pyspark_home)" /opt/pyspark && rm /tmp/pyspark_home
+USER airflow
+ENV SPARK_HOME=/opt/pyspark
 ENV PATH="${SPARK_HOME}/bin:${PATH}"
 
 # --- DAGs + datacraft environment ---

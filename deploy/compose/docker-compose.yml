@@ -42,7 +42,7 @@ x-airflow-common: &airflow-common
 
 services:
   postgres:
-    image: postgres:16
+    image: postgres:18
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-airflow}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-airflow}
@@ -63,7 +63,11 @@ services:
     command:
       - -c
       - |
+        set -e
         airflow db migrate
+        # The FAB auth manager keeps its user/role tables in a separate schema, so this second
+        # migration is required before `airflow users create` can work.
+        airflow fab-db migrate
         airflow users create \
           --username "${AIRFLOW_ADMIN_USERNAME:-admin}" \
           --password "${AIRFLOW_ADMIN_PASSWORD:-admin}" \

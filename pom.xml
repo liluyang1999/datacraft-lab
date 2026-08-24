@@ -52,15 +52,15 @@
              equivalent set automatically at runtime, so this is only required for tests. -->
         <spark.test.jvm.args>-XX:+IgnoreUnrecognizedVMOptions --add-opens=java.base/java.lang=ALL-UNNAMED --add-opens=java.base/java.lang.invoke=ALL-UNNAMED --add-opens=java.base/java.lang.reflect=ALL-UNNAMED --add-opens=java.base/java.io=ALL-UNNAMED --add-opens=java.base/java.net=ALL-UNNAMED --add-opens=java.base/java.nio=ALL-UNNAMED --add-opens=java.base/java.util=ALL-UNNAMED --add-opens=java.base/java.util.concurrent=ALL-UNNAMED --add-opens=java.base/java.util.concurrent.atomic=ALL-UNNAMED --add-opens=java.base/jdk.internal.ref=ALL-UNNAMED --add-opens=java.base/sun.nio.ch=ALL-UNNAMED --add-opens=java.base/sun.nio.cs=ALL-UNNAMED --add-opens=java.base/sun.security.action=ALL-UNNAMED --add-opens=java.base/sun.util.calendar=ALL-UNNAMED -Djdk.reflect.useDirectMethodHandle=false -Dio.netty.tryReflectionSetAccessible=true</spark.test.jvm.args>
 
-        <jackson.version>2.18.2</jackson.version>
-        <jsch.version>0.2.25</jsch.version>
-        <junit.jupiter.version>5.13.1</junit.jupiter.version>
-        <scala.maven.plugin.version>4.9.2</scala.maven.plugin.version>
+        <jackson.version>2.22.2</jackson.version>
+        <jsch.version>2.28.7</jsch.version>
+        <junit.jupiter.version>6.1.3</junit.jupiter.version>
+        <scala.maven.plugin.version>4.9.10</scala.maven.plugin.version>
         <scalatest.version>3.2.19</scalatest.version>
         <scalatest.maven.plugin.version>2.2.0</scalatest.maven.plugin.version>
         <scopt.version>4.1.0</scopt.version>
-        <spotless.version>2.46.1</spotless.version>
-        <google.java.format.version>1.28.0</google.java.format.version>
+        <spotless.version>3.10.0</spotless.version>
+        <google.java.format.version>1.36.1</google.java.format.version>
         <maven.clean.plugin.version>3.5.0</maven.clean.plugin.version>
         <maven.checkstyle.plugin.version>3.6.0</maven.checkstyle.plugin.version>
         <maven.compiler.plugin.version>3.15.0</maven.compiler.plugin.version>
@@ -69,10 +69,10 @@
         <maven.enforcer.plugin.version>3.6.3</maven.enforcer.plugin.version>
         <maven.failsafe.plugin.version>3.5.3</maven.failsafe.plugin.version>
         <maven.install.plugin.version>3.1.4</maven.install.plugin.version>
-        <maven.jar.plugin.version>3.4.2</maven.jar.plugin.version>
+        <maven.jar.plugin.version>3.5.1</maven.jar.plugin.version>
         <maven.javadoc.plugin.version>3.12.0</maven.javadoc.plugin.version>
-        <maven.resources.plugin.version>3.3.1</maven.resources.plugin.version>
-        <maven.shade.plugin.version>3.6.0</maven.shade.plugin.version>
+        <maven.resources.plugin.version>3.5.0</maven.resources.plugin.version>
+        <maven.shade.plugin.version>3.6.2</maven.shade.plugin.version>
         <maven.site.plugin.version>3.22.0</maven.site.plugin.version>
         <maven.source.plugin.version>3.4.0</maven.source.plugin.version>
         <maven.surefire.plugin.version>3.5.3</maven.surefire.plugin.version>
@@ -372,7 +372,7 @@
                             <include>src/test/scala/**/*.scala</include>
                         </includes>
                         <scalafmt>
-                            <version>3.8.4</version>
+                            <version>3.11.5</version>
                             <file>${maven.multiModuleProjectDirectory}/.scalafmt.conf</file>
                             <scalaMajorVersion>${scala.binary.version}</scalaMajorVersion>
                         </scalafmt>

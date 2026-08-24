@@ -15,7 +15,7 @@ CID="$(docker ps --filter name=datacraft_airflow-scheduler -q | head -n1)"
 [[ -n "${CID}" ]] || die "No running airflow-scheduler task found. Deploy the stack first (swarm-deploy.sh)."
 
 log "Running db migrate + admin user creation inside ${CID}..."
-docker exec "${CID}" bash -lc "airflow db migrate && airflow users create \
+docker exec "${CID}" bash -lc "airflow db migrate && airflow fab-db migrate && airflow users create \
   --username '${AIRFLOW_ADMIN_USERNAME:-admin}' \
   --password '${AIRFLOW_ADMIN_PASSWORD:-admin}' \
   --firstname Data --lastname Craft --role Admin \

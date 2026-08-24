@@ -39,6 +39,15 @@ All notable changes to this project are documented here. The format follows
   `apache/spark:4.2.0-scala2.13-java25-python3-ubuntu`; the Airflow image pins `pyspark==4.2.0`.
   Use JDK **25.0.3+** — Spark 4.2.0 deprecates older Java 25 releases.
 - CI now runs the full gate on JDK 25; the separate JDK 25 canary is gone because 25 is the target.
+- **Aligned every remaining framework with the JDK 25 baseline** (stable releases only; all
+  release-candidate / milestone / beta offers were deliberately rejected): Jackson 2.18.2 -> 2.22.2,
+  JUnit 5.13.1 -> 6.1.3, jsch 0.2.25 -> 2.28.7, scala-maven-plugin 4.9.2 -> 4.9.10,
+  Spotless 2.46.1 -> 3.10.0, google-java-format 1.28.0 -> 1.36.1, scalafmt 3.8.4 -> 3.11.5,
+  maven-jar 3.4.2 -> 3.5.1, maven-resources 3.3.1 -> 3.5.0, maven-shade 3.6.0 -> 3.6.2,
+  Maven Wrapper 3.9.9 -> 3.9.16, Airflow image 3.0.2 -> 3.3.1, Postgres 16 -> 18, Redis 7 -> 8.
+  Deliberately kept: Scala 2.13.18 and Spark 4.2.0 (latest stable; the newer offers were a Scala 3
+  RC and a Spark preview), scalatest 3.2.19, scopt 4.1.0, and the Maven plugins whose only newer
+  builds are 4.0.0 betas or milestones.
 - Spark dependencies are now **`provided`** (`${spark.scope}`); the CLI jar shrinks to ~9 MB and
   Spark jobs run via `spark-submit`. A `bundled-spark` profile restores a self-contained local jar.
 - The CLI is now a **generic engine dispatcher** (control commands `list-jobs`/`serve-api`, all
@@ -49,6 +58,12 @@ All notable changes to this project are documented here. The format follows
   runners (this was the cause of the first failing CI run).
 - `deploy/compose/.env.example` now documents the Swarm-only variables `DATACRAFT_REGISTRY`,
   `DATACRAFT_TAG`, and `AIRFLOW_WORKER_REPLICAS`.
+
+- `airflow fab-db migrate` now runs during initialisation. The FAB auth manager keeps its
+  user/role tables in a separate schema, so without it `airflow users create` fails and no admin
+  account exists to log in with.
+- The Airflow image resolves `SPARK_HOME` from the installed pyspark package instead of hardcoding
+  a `python3.12` site-packages path, so it survives a Python bump in the Airflow base image.
 
 ### Removed
 - The unused `SparkJob` trait (superseded by `AbstractSparkDataJob`).

@@ -29,9 +29,9 @@ final class CsvToParquetJob extends AbstractSparkDataJob {
       spark: SparkSession,
       parameters: Map[String, String]
   ): Map[String, String] = {
-    val input  = requireParameter(parameters, ParameterKeys.INPUT)
-    val output = requireParameter(parameters, ParameterKeys.OUTPUT)
-    val mode   = parameters.getOrElse(ParameterKeys.WRITE_MODE, "overwrite")
+    val input       = requireParameter(parameters, ParameterKeys.INPUT)
+    val output      = requireParameter(parameters, ParameterKeys.OUTPUT)
+    val mode        = parameters.getOrElse(ParameterKeys.WRITE_MODE, "overwrite")
     val readOptions = Map(
       "header"      -> parameters.getOrElse(ParameterKeys.HEADER, "true"),
       "delimiter"   -> parameters.getOrElse(ParameterKeys.DELIMITER, ","),
@@ -57,8 +57,8 @@ final class RowCountJob extends AbstractSparkDataJob {
       spark: SparkSession,
       parameters: Map[String, String]
   ): Map[String, String] = {
-    val input  = requireParameter(parameters, ParameterKeys.INPUT)
-    val format = parameters.getOrElse(ParameterKeys.INPUT_FORMAT, "parquet")
+    val input   = requireParameter(parameters, ParameterKeys.INPUT)
+    val format  = parameters.getOrElse(ParameterKeys.INPUT_FORMAT, "parquet")
     val options = Map(
       "header"      -> parameters.getOrElse(ParameterKeys.HEADER, "true"),
       "inferSchema" -> "true"

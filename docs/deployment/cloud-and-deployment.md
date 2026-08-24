@@ -204,8 +204,11 @@ the Spark runtime) for **local** mode. For a real cluster, set `DATACRAFT_SPARK_
   HTTP-server tests and `serve-api` cannot run locally here. This is a JDK/OS issue, not a code
   defect — it works on Linux (containers, CI). Build/test the rest with
   `mvn -B -ntp verify`; the API is validated in CI and inside containers.
-- **Image tags**: `Dockerfile.airflow` pins `apache/airflow:3.0.2` and `Dockerfile.spark` pins an
-  `apache/spark` tag — confirm these exist for your chosen versions before building.
+- **Image tags**: `Dockerfile.airflow` pins `apache/airflow:3.3.1` and `Dockerfile.spark` pins
+  `apache/spark:4.2.0-scala2.13-java25-python3-ubuntu`. Both tags were verified to exist, but
+  re-check before building if you change versions.
+- **Metadata database**: Postgres 18 (Airflow 3.3.1 supports 14-18). A future Postgres major
+  bump needs a `pg_dump`/restore, not just an image tag change.
 - **`docker compose config`**: CI validates both the Compose and the Swarm file on every push, so
   syntax and interpolation errors are caught automatically. Still re-run it locally after editing
   them, since Airflow occasionally renames components/flags between minors.

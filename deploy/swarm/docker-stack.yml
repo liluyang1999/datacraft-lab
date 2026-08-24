@@ -36,7 +36,7 @@ x-airflow-common: &airflow-common
 
 services:
   postgres:
-    image: postgres:16
+    image: postgres:18
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-airflow}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-airflow}
@@ -51,7 +51,7 @@ services:
         constraints: [node.role == manager]
 
   redis:
-    image: redis:7
+    image: redis:8
     networks:
       - datacraft-net
     deploy:
