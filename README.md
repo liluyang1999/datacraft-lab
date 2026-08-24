@@ -24,6 +24,7 @@ Airflow assets live in [`orchestration/airflow`](orchestration/airflow); deploym
 [`deploy/`](deploy). Architecture details: [`docs/architecture.md`](docs/architecture.md).
 Deployment + the Cloudflare-vs-AWS decision: [`docs/deployment/cloud-and-deployment.md`](docs/deployment/cloud-and-deployment.md).
 A consolidated review report (Chinese, standalone HTML) is at [`PROJECT-REVIEW.html`](PROJECT-REVIEW.html).
+The cloud vendor evaluation, cost estimates and decision tree are in [`CLOUD-DEPLOYMENT-ANALYSIS.html`](CLOUD-DEPLOYMENT-ANALYSIS.html).
 
 ## Prerequisites
 

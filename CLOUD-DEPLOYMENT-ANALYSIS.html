@@ -1,0 +1,349 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>datacraft-lab 云部署选型分析报告</title>
+<style>
+  :root {
+    --bg: #ffffff; --bg-soft: #f6f7f9; --bg-code: #f1f2f4;
+    --text: #1b1c1e; --text-muted: #5f6368; --border: rgba(0,0,0,.12);
+    --accent: #185fa5;
+    --ok-bg: #eaf3de; --ok-fg: #3b6d11;
+    --warn-bg: #faeeda; --warn-fg: #854f0b;
+    --info-bg: #e6f1fb; --info-fg: #0c447c;
+    --bad-bg: #fcebeb; --bad-fg: #a32d2d;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #16171a; --bg-soft: #1e2024; --bg-code: #24262b;
+      --text: #e8e9ea; --text-muted: #a1a4a9; --border: rgba(255,255,255,.14);
+      --accent: #85b7eb;
+      --ok-bg: #27500a; --ok-fg: #c0dd97;
+      --warn-bg: #633806; --warn-fg: #fac775;
+      --info-bg: #0c447c; --info-fg: #b5d4f4;
+      --bad-bg: #791f1f; --bad-fg: #f7c1c1;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 2.5rem 1.25rem 4rem;
+    background: var(--bg); color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    font-size: 15px; line-height: 1.75;
+  }
+  main { max-width: 1000px; margin: 0 auto; }
+  h1 { font-size: 26px; font-weight: 600; margin: 0 0 .3rem; letter-spacing: -.01em; }
+  h2 {
+    font-size: 19px; font-weight: 600; margin: 2.6rem 0 .9rem;
+    padding-bottom: .45rem; border-bottom: 1px solid var(--border);
+  }
+  h3 { font-size: 16px; font-weight: 600; margin: 1.6rem 0 .5rem; }
+  .sub { color: var(--text-muted); font-size: 14px; margin: 0 0 .2rem; }
+  code {
+    font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+    font-size: 13px; background: var(--bg-code); padding: 1px 5px; border-radius: 4px;
+  }
+  pre {
+    background: var(--bg-code); border: 1px solid var(--border);
+    border-radius: 8px; padding: .9rem 1rem; overflow-x: auto; font-size: 13px;
+  }
+  pre code { background: none; padding: 0; }
+  .table-wrap { overflow-x: auto; }
+  table { width: 100%; border-collapse: collapse; margin: .6rem 0 1rem; font-size: 14px; }
+  th, td { text-align: left; padding: .55rem .7rem; border-bottom: 1px solid var(--border); vertical-align: top; }
+  th { background: var(--bg-soft); font-weight: 600; white-space: nowrap; }
+  .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px,1fr)); gap: .8rem; margin: 1rem 0; }
+  .card { background: var(--bg-soft); border: 1px solid var(--border); border-radius: 10px; padding: .85rem 1rem; }
+  .card .k { font-size: 12px; color: var(--text-muted); margin-bottom: .2rem; }
+  .card .v { font-size: 20px; font-weight: 600; }
+  .badge { display: inline-block; font-size: 12px; font-weight: 600; padding: 2px 9px; border-radius: 999px; white-space: nowrap; }
+  .b-ok { background: var(--ok-bg); color: var(--ok-fg); }
+  .b-warn { background: var(--warn-bg); color: var(--warn-fg); }
+  .b-info { background: var(--info-bg); color: var(--info-fg); }
+  .b-bad { background: var(--bad-bg); color: var(--bad-fg); }
+  .note {
+    background: var(--bg-soft); border: 1px solid var(--border);
+    border-left: 3px solid var(--accent); border-radius: 0 8px 8px 0;
+    padding: .8rem 1rem; margin: 1rem 0;
+  }
+  .warn { border-left-color: #ba7517; }
+  .meta { color: var(--text-muted); font-size: 13px; margin-top: 3rem; padding-top: 1rem; border-top: 1px solid var(--border); }
+  a { color: var(--accent); }
+</style>
+</head>
+<body>
+<main>
+
+  <h1>datacraft-lab 云部署选型分析报告</h1>
+  <p class="sub">报告版本 v2.0　|　评估日期 2026-08-24　|　对应技术栈：JDK 25 · Spark 4.2.0 · Scala 2.13.18 · Airflow 3.3.1 · Postgres 18 · Redis 8</p>
+  <p class="sub">本报告替代上一版（v1.0）的厂商选型结论，重新做了完整评估。</p>
+
+  <h2>零、本次为何要重新评估</h2>
+  <p>上一版分析有三处前提已经改变，其中两处会直接改变结论：</p>
+  <div class="table-wrap">
+  <table>
+    <thead><tr><th>变化</th><th>说明</th><th>对结论的影响</th></tr></thead>
+    <tbody>
+      <tr>
+        <td>技术栈整体升级</td>
+        <td>JDK 21→25、Spark 4.1.2→4.2.0、Airflow 3.0.2→3.3.1、Postgres 16→18、Redis 7→8</td>
+        <td>需重新核算内存与镜像架构支持</td>
+      </tr>
+      <tr>
+        <td><strong>地理位置修正</strong></td>
+        <td>从本项目 git 提交时区 <code>+0900</code> 判断，您位于 <strong>日本（JST）</strong>。上一版按 us-east-1 估价，实际应按 <strong>ap-northeast-1（东京）</strong></td>
+        <td>东京区通常比弗吉尼亚贵约 10–20%，上一版成本估算偏低</td>
+      </tr>
+      <tr>
+        <td><strong>Oracle 免费额度腰斩</strong></td>
+        <td>2026-06-15 起 Always Free 的 Ampere A1 从 4 OCPU/24GB 降为 <strong>2 OCPU/12GB</strong>，且自 2026-08-18 起终止超限实例。Oracle 未发公告，仅静默改了文档</td>
+        <td>免费方案仍可行（12GB 远超本项目需求），但需重新审视其可靠性</td>
+      </tr>
+    </tbody>
+  </table>
+  </div>
+
+  <h2>一、工作负载画像（选型的硬约束）</h2>
+  <p>选型的第一性问题不是「哪家便宜」，而是「这套负载到底是什么形状」。</p>
+  <div class="table-wrap">
+  <table>
+    <thead><tr><th>组件</th><th>形态</th><th>常驻内存估算</th></tr></thead>
+    <tbody>
+      <tr><td>Airflow api-server</td><td>常驻 HTTP 服务</td><td>~400–600 MB</td></tr>
+      <tr><td>Airflow scheduler</td><td>常驻循环</td><td>~400–600 MB</td></tr>
+      <tr><td>Airflow dag-processor</td><td>常驻解析进程</td><td>~300–500 MB</td></tr>
+      <tr><td>Airflow triggerer</td><td>常驻异步事件循环</td><td>~250–400 MB</td></tr>
+      <tr><td>Postgres 18（元数据库）</td><td>常驻有状态数据库</td><td>~200–400 MB</td></tr>
+      <tr><td>datacraft-api（JVM）</td><td>常驻 HTTP 服务</td><td>~150–300 MB</td></tr>
+      <tr><td>Spark 作业（<code>local[*]</code>）</td><td><strong>突发</strong>，driver+executor 同进程</td><td>作业期间 +1–2 GB</td></tr>
+      <tr><td>Redis 8（仅多机 Swarm 需要）</td><td>常驻 broker</td><td>~50–100 MB</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <p>
+    合计：<strong>空闲约 1.8–2.8 GB；跑 Spark 作业时约 3.5–5 GB</strong>。
+    因此 <strong>4 GB 是可用下限，8 GB 及以上才算宽裕</strong>；2 GB 会在作业期 OOM。
+  </p>
+  <div class="note">
+    <strong>由此得出的第一条硬结论：</strong>本项目需要的是<strong>常驻的、有状态的虚拟机或容器主机</strong>——
+    有长生命周期进程、有关系型数据库、有需要真实 CPU 与内存的批处理。
+    这条约束直接排除了所有「短时、事件驱动」的边缘/无服务器计算产品。
+  </div>
+
+  <h2>二、Cloudflare 的正确定位：不做计算，但值得用</h2>
+  <p>
+    Cloudflare 的计算产品（Workers、Pages、Durable Objects、Workers Containers）面向<em>短时、事件驱动的边缘执行</em>，
+    不是为「常驻 Airflow 调度器 + 关系型数据库 + JVM/Spark 批处理」设计的。
+    <strong>所以 Cloudflare 不能作为本平台的计算宿主</strong>——这不是价格问题，是产品形态不匹配。
+  </p>
+  <p>但 Cloudflare 在<strong>免费层</strong>上能承担三个真实且有价值的角色：</p>
+  <div class="table-wrap">
+  <table>
+    <thead><tr><th>能力</th><th>在本项目中的作用</th><th>价值</th></tr></thead>
+    <tbody>
+      <tr><td>DNS + 反向代理</td><td>域名指向主机并隐藏源站 IP</td><td><span class="badge b-ok">推荐</span></td></tr>
+      <tr><td>Universal SSL</td><td>免费 TLS 终结，免维护证书</td><td><span class="badge b-ok">推荐</span></td></tr>
+      <tr><td><strong>Cloudflare Tunnel</strong></td><td><strong>不开放任何入站端口</strong>即可暴露 Airflow UI；主机可无公网 IP</td><td><span class="badge b-ok">强烈推荐</span></td></tr>
+      <tr><td><strong>Cloudflare Access</strong>（Zero Trust）</td><td>在 Airflow UI 前加一层邮箱/SSO 鉴权（50 用户内免费）</td><td><span class="badge b-ok">强烈推荐</span></td></tr>
+      <tr><td><strong>R2 对象存储</strong></td><td>存放 Parquet 产出与 Postgres 备份。S3 兼容、<strong>零出流量费</strong>，免费额度 10 GB</td><td><span class="badge b-info">按需，很划算</span></td></tr>
+      <tr><td>Workers / Pages</td><td>承载本项目的计算</td><td><span class="badge b-bad">不适用</span></td></tr>
+    </tbody>
+  </table>
+  </div>
+  <p>
+    R2 值得单独强调：数据湖类产出（Parquet）与数据库备份放在 R2，比放 AWS S3 更省——
+    <strong>S3 的跨区/公网出流量要收费，R2 的出流量为零</strong>。而 <code>datacraft-io</code> 的
+    <code>StorageService</code> 端口设计本就便于后续接入 S3 兼容后端。
+  </p>
+
+  <h2>三、候选厂商横向评估</h2>
+  <div class="table-wrap">
+  <table>
+    <thead><tr><th>方案</th><th>规格</th><th>东京可用</th><th>评估</th></tr></thead>
+    <tbody>
+      <tr>
+        <td><strong>Oracle Cloud Always Free</strong><br>（Ampere A1，ARM）</td>
+        <td>2 OCPU / 12 GB / 200 GB 块存储</td>
+        <td>✅ Tokyo &amp; Osaka</td>
+        <td><span class="badge b-ok">成本最优</span> 免费且内存远超需求。<strong>但</strong>：额度刚被静默腰斩、A1 容量长期紧张常报 out-of-capacity、无 SLA、闲置实例可能被回收</td>
+      </tr>
+      <tr>
+        <td><strong>AWS Lightsail</strong></td>
+        <td>2 vCPU / 4 GB / 80 GB SSD</td>
+        <td>✅ Tokyo</td>
+        <td><span class="badge b-ok">最省心</span> 固定月价、含流量额度、一键 Ubuntu；不易被账单意外</td>
+      </tr>
+      <tr>
+        <td><strong>AWS EC2 <code>t4g.medium</code></strong><br>（Graviton，ARM）</td>
+        <td>2 vCPU / 4 GB + EBS gp3</td>
+        <td>✅ Tokyo</td>
+        <td><span class="badge b-ok">弹性最好</span> 可用 Savings Plan 显著降价；能随时纵向扩容、挂快照、接 IAM/S3 生态</td>
+      </tr>
+      <tr>
+        <td>Vultr / Linode(Akamai)</td>
+        <td>2 vCPU / 4 GB</td>
+        <td>✅ Tokyo</td>
+        <td><span class="badge b-info">可选</span> 价格与 Lightsail 相当，界面简单；生态与备份能力弱于 AWS</td>
+      </tr>
+      <tr>
+        <td>Hetzner</td>
+        <td>2–4 vCPU / 4–8 GB</td>
+        <td>❌ 仅欧美</td>
+        <td><span class="badge b-warn">谨慎</span> 单价全场最低（约为东京方案的 1/4），但从日本访问约 200–250 ms。批处理可接受，交互式 UI 体感差</td>
+      </tr>
+      <tr>
+        <td>GCP / Azure 通用 VM</td>
+        <td>e2-medium 等</td>
+        <td>✅ Tokyo</td>
+        <td><span class="badge b-info">可选</span> 与 EC2 同档，无特别优势；若已有该生态可考虑</td>
+      </tr>
+      <tr>
+        <td>AWS MWAA（托管 Airflow）</td>
+        <td>最小环境</td>
+        <td>✅</td>
+        <td><span class="badge b-bad">排除</span> 约 US$350+/月起，对个人项目严重过度</td>
+      </tr>
+      <tr>
+        <td>AWS EMR / Glue（托管 Spark）</td>
+        <td>—</td>
+        <td>✅</td>
+        <td><span class="badge b-bad">排除</span> 当前数据量用 <code>local[*]</code> 足够，托管 Spark 是纯浪费</td>
+      </tr>
+      <tr>
+        <td>Kubernetes / EKS / GKE</td>
+        <td>—</td>
+        <td>✅</td>
+        <td><span class="badge b-bad">排除</span> 此规模下运维复杂度与控制面成本都不划算；Swarm 已能覆盖多机需求</td>
+      </tr>
+      <tr>
+        <td>Cloudflare Workers 系</td>
+        <td>—</td>
+        <td>—</td>
+        <td><span class="badge b-bad">不适用</span> 见第二节</td>
+      </tr>
+    </tbody>
+  </table>
+  </div>
+
+  <h2>四、成本估算（东京区）</h2>
+  <div class="note warn">
+    <strong>关于这些数字的诚实说明：</strong>下表为<strong>估算区间</strong>，不是报价。
+    云厂商的区域定价、汇率与促销经常变动，而我在检索中<strong>未能取到东京区的逐项精确单价</strong>
+    （公开比价站多只给最低区或基准价）。请在下单前用官方计算器按 <code>ap-northeast-1</code> 实际核对：
+    <a href="https://calculator.aws/">AWS 计算器</a>、
+    <a href="https://aws.amazon.com/lightsail/pricing/">Lightsail 定价</a>、
+    <a href="https://www.oracle.com/cloud/free/">Oracle 免费层</a>。
+  </div>
+  <div class="table-wrap">
+  <table>
+    <thead><tr><th>方案</th><th>规格</th><th>月成本估算（东京）</th><th>说明</th></tr></thead>
+    <tbody>
+      <tr><td>Oracle Always Free</td><td>2 OCPU / 12 GB ARM</td><td><strong>US$0</strong></td><td>额度内永久免费</td></tr>
+      <tr><td>Lightsail 4 GB</td><td>2 vCPU / 4 GB / 80 GB</td><td>约 US$20–26</td><td>固定价，含流量额度</td></tr>
+      <tr><td>EC2 <code>t4g.medium</code> 按需</td><td>2 vCPU / 4 GB + 30 GB gp3</td><td>约 US$28–32</td><td>基准价约 $0.034/h，东京上浮</td></tr>
+      <tr><td>EC2 <code>t4g.medium</code> + 1 年 Savings Plan</td><td>同上</td><td>约 US$19–23</td><td>基准约 $0.021/h，降幅约 38%</td></tr>
+      <tr><td>Vultr / Linode 4 GB（东京）</td><td>2 vCPU / 4 GB</td><td>约 US$20–24</td><td>—</td></tr>
+      <tr><td>Hetzner 4–8 GB（欧美）</td><td>2–4 vCPU</td><td>约 US$5–8</td><td>延迟代价见上表</td></tr>
+      <tr><td>Cloudflare（DNS/Tunnel/Access）</td><td>免费层</td><td>US$0</td><td>—</td></tr>
+      <tr><td>Cloudflare R2</td><td>10 GB 内</td><td>US$0</td><td>超出后按量，出流量仍为 0</td></tr>
+      <tr><td colspan="2"><strong>单机推荐组合（Lightsail/EC2 + Cloudflare）</strong></td><td><strong>约 US$20–32</strong></td><td>—</td></tr>
+      <tr><td colspan="2">Swarm 双节点</td><td>约 US$45–65</td><td>仅在单机不够时</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <h2>五、ARM 架构可行性核验（本次实测）</h2>
+  <p>
+    成本最优的两个方案（AWS <code>t4g</code> Graviton、Oracle Ampere A1）<strong>都是 ARM64</strong>。
+    这意味着一个常被忽略、但会直接让方案失效的前提：<strong>所有容器镜像必须有 arm64 变体</strong>。
+    我逐个查询了镜像清单，结果如下：
+  </p>
+  <div class="table-wrap">
+  <table>
+    <thead><tr><th>镜像</th><th>支持架构</th><th>ARM 可用</th></tr></thead>
+    <tbody>
+      <tr><td><code>apache/spark:4.2.0-scala2.13-java25-python3-ubuntu</code></td><td>amd64, arm64</td><td><span class="badge b-ok">✅</span></td></tr>
+      <tr><td><code>apache/airflow:3.3.1</code></td><td>amd64, arm64</td><td><span class="badge b-ok">✅</span></td></tr>
+      <tr><td><code>eclipse-temurin:25-jre</code></td><td>amd64, arm64/v8, ppc64le, s390x</td><td><span class="badge b-ok">✅</span></td></tr>
+      <tr><td><code>maven:3.9-eclipse-temurin-25</code></td><td>amd64, arm64/v8, …</td><td><span class="badge b-ok">✅</span></td></tr>
+      <tr><td><code>postgres:18</code></td><td>amd64, arm64/v8, …</td><td><span class="badge b-ok">✅</span></td></tr>
+      <tr><td><code>redis:8</code></td><td>amd64, arm64/v8, …</td><td><span class="badge b-ok">✅</span></td></tr>
+    </tbody>
+  </table>
+  </div>
+  <p>
+    <strong>结论：ARM 方案技术上完全成立</strong>，六个镜像全部具备 arm64。
+    加上本项目的 JVM 制品是<strong>架构无关的字节码</strong>（Spark 为 <code>provided</code>，不打包任何本地库），
+    因此在 x86 与 ARM 之间迁移无需重新适配代码。这使「用 ARM 省 20–40% 成本」成为可安全采纳的选项。
+  </p>
+
+  <h2>六、推荐方案</h2>
+  <h3>方案 A：零成本起步 <span class="badge b-info">先试这个</span></h3>
+  <p>
+    <strong>Oracle Cloud Always Free（Ampere A1，2 OCPU / 12 GB，东京或大阪）+ Cloudflare 免费层。</strong>
+    月成本 US$0，内存是需求的 3 倍，跑单机 Compose 栈非常宽裕。
+  </p>
+  <p>
+    <strong>代价要说清楚：</strong>A1 容量长期紧张，创建实例常遇 out-of-capacity 需反复重试；
+    免费层无 SLA；而且 Oracle 刚刚在<strong>没有任何公告</strong>的情况下把额度砍半、并终止超限实例——
+    这说明该层级的条款可能再次单方面变更。<strong>因此：适合做实验与自用，不适合承载你不能丢的东西</strong>，
+    且务必把 Postgres 备份放到 R2 或本地。
+  </p>
+
+  <h3>方案 B：稳健低成本 <span class="badge b-ok">长期主力推荐</span></h3>
+  <p>
+    <strong>AWS Lightsail 4 GB（东京）+ Cloudflare 免费层</strong>，约 US$20–26/月。
+    固定月价、账单可预测、含流量额度、快照备份简单。适合「希望它稳定跑着、不想操心」的场景。
+  </p>
+
+  <h3>方案 C：需要弹性时</h3>
+  <p>
+    <strong>EC2 <code>t4g.medium</code>（ARM）+ 1 年 Savings Plan + Cloudflare</strong>，约 US$19–23/月。
+    比 Lightsail 略便宜且能随时改机型、挂 EBS 快照、接 IAM/S3。代价是需要自己管安全组、EBS 与账单。
+  </p>
+
+  <h3>决策树</h3>
+<pre><code>能接受「可能需要反复重试才能开到机器、且条款可能再变」吗？
+├─ 是 → 方案 A：Oracle Always Free（$0）
+│         └─ 之后若被回收或不够用 → 平移到方案 B（脚本云无关，迁移成本很低）
+└─ 否 → 想要账单可预测、少操心吗？
+         ├─ 是 → 方案 B：Lightsail 4 GB（约 $20–26）
+         └─ 否，想要弹性与 AWS 生态 → 方案 C：EC2 t4g.medium + Savings Plan（约 $19–23）
+
+延迟不敏感、只跑批处理、想把成本压到极限？
+└─ 方案 D：Hetzner 欧美节点（约 $5–8），接受 200–250 ms 交互延迟</code></pre>
+
+  <div class="note">
+    <strong>统一前提：</strong>无论选哪家，都<strong>先用单机 Docker Compose（LocalExecutor）</strong>，
+    仅当任务并发或高可用需求超出单机时再切 Swarm。本项目的部署脚本与编排文件是<strong>云无关</strong>的，
+    在任意 Linux 主机上都能跑，所以上述选择<strong>不构成厂商锁定</strong>，换家的成本主要只是重建主机与迁移 Postgres 数据。
+  </div>
+
+  <h2>七、安全与运维要点</h2>
+  <ul>
+    <li><strong>不开放入站端口</strong>：用 Cloudflare Tunnel 由主机向外拨出，Airflow UI 不暴露在公网，配合 Access 做鉴权。</li>
+    <li><strong>密钥管理</strong>：<code>.env</code> 仅适合单机起步；生产应改用 <code>docker secret</code>（Swarm）或云端密钥服务。<code>.env</code> 已在 <code>.gitignore</code> 中，切勿提交。</li>
+    <li><strong>备份</strong>：定期 <code>pg_dump</code> Airflow 元数据库并上传到 R2/S3。Postgres 大版本升级需 dump/restore，不能只换镜像标签。</li>
+    <li><strong>JDK 补丁版本</strong>：Spark 4.2.0 将「早于 25.0.3 的 Java 25」标记为 deprecated。部署前确认镜像内 JRE ≥ 25.0.3（<code>docker run --rm eclipse-temurin:25-jre java -version</code>）。</li>
+    <li><strong>可观测性</strong>：单机阶段用 <code>docker compose logs</code> + Airflow 自带 UI 足够；上量后再考虑接入外部日志/指标。</li>
+  </ul>
+
+  <h2>八、待您核实与决策的事项</h2>
+  <ol>
+    <li><strong>成本数字</strong>：本报告的月费为估算区间，请用官方计算器按东京区核对后再决策。</li>
+    <li><strong>Oracle 免费层容量</strong>：能否在东京/大阪成功开出 A1 实例，只能实际尝试才知道。</li>
+    <li><strong>镜像构建验证</strong>：本机未安装 Docker，因此镜像标签虽已确认存在、架构已确认支持，但<strong>尚未实际构建过</strong>。首次执行 <code>deploy/scripts/build-images.sh</code> 时会真正验证。</li>
+    <li><strong>Airflow 3.3.1 运行时行为</strong>：CI 仅校验编排文件语法，不启动容器。3.0.2 → 3.3.1 跨了三个次版本，首次启动时请留意组件参数是否有变更（已修正 FAB 用户表迁移缺失的问题）。</li>
+  </ol>
+
+  <p class="meta">
+    评估依据：Spark 4.2.0 与 Airflow 3.3.1 官方文档、Docker Hub 镜像清单实测（架构支持）、
+    Maven Central 版本元数据，以及公开定价资料。
+    部署操作步骤见 <code>docs/deployment/cloud-and-deployment.md</code>；
+    项目整体复盘见 <code>PROJECT-REVIEW.html</code>。
+  </p>
+
+</main>
+</body>
+</html>

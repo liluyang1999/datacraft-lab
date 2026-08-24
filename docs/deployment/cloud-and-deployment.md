@@ -6,64 +6,28 @@ architecture described in [`docs/architecture.md`](../architecture.md).
 
 ---
 
-## 1. Cloud decision: Cloudflare vs. AWS
+## 1. Cloud decision — summary
 
-**Short answer: host the workload on a single small AWS VM, and put Cloudflare's free tier in front
-of it for DNS, TLS, and secure access.** They are complementary, not alternatives.
+The full vendor evaluation, cost estimates, ARM-architecture verification and decision tree live in
+[`CLOUD-DEPLOYMENT-ANALYSIS.html`](../../CLOUD-DEPLOYMENT-ANALYSIS.html) (Chinese). It is kept as a
+single source of truth so the numbers are not duplicated and cannot drift. The conclusion:
 
-### Why not "Cloudflare only"
+- **Cloudflare cannot host the compute.** Workers/Pages/Durable Objects are short-lived edge
+  runtimes; this platform needs long-lived stateful processes (Airflow scheduler, Postgres) and real
+  CPU/memory for Spark. Use Cloudflare for **DNS, TLS, Tunnel, Access** (all free) and optionally
+  **R2** for Parquet output and database backups — R2 charges no egress.
+- **Run the workload on one small VM.** Sizing: ~2–3 GB idle, ~4–5 GB while a Spark job runs, so
+  4 GB is the practical floor.
+- **Recommended, in order:** Oracle Cloud Always Free (Ampere A1, free, but capacity is scarce and
+  the free allowance was silently halved in June 2026) → AWS Lightsail 4 GB in Tokyo (predictable
+  fixed price, the long-term pick) → EC2 `t4g.medium` with a Savings Plan (cheaper, more elastic,
+  more to manage).
+- **Rejected:** MWAA (~US$350+/mo), EMR/Glue (unnecessary at this data size), Kubernetes/EKS
+  (operationally disproportionate — Swarm already covers multi-host).
+- **All images support arm64** (verified), so the cheaper ARM instances are safe to use.
 
-`datacraft-lab` runs **long-lived, stateful processes**: the Airflow scheduler, API server,
-DAG processor, and triggerer, a PostgreSQL metadata database, and Spark jobs that need real CPU and
-memory. Cloudflare's compute products — Workers, Pages, Durable Objects, and the newer Workers
-Containers — are built for **short-lived, event-driven, edge** execution. They are excellent for
-HTTP handlers and cron-style functions but are not designed to run an always-on Airflow scheduler
-with an attached relational database and JVM/Spark batch jobs. So Cloudflare cannot be the *compute*
-host for this platform.
-
-What Cloudflare **is** ideal for (and all on the **free** plan):
-
-| Cloudflare feature | Use here |
-| --- | --- |
-| DNS + proxy | Point `airflow.yourdomain.com` at the VM, hide its origin IP. |
-| Universal SSL | Free TLS termination — no certbot to manage. |
-| Cloudflare Tunnel (`cloudflared`) | Expose the Airflow UI **without opening any inbound port** or needing a public IP. |
-| Cloudflare Access (Zero Trust) | Free SSO/email-gated auth in front of the Airflow UI (up to 50 users). |
-| DDoS / WAF | Basic protection at the edge. |
-
-### Why AWS for the compute
-
-| Option | Verdict for a personal lab |
-| --- | --- |
-| **AWS Lightsail** (fixed-price VM) | **Recommended for simplicity** — predictable monthly price, one-click Ubuntu. |
-| **AWS EC2** (`t4g` Graviton/ARM) | **Recommended for cost** — cheapest with a savings plan; flexible. |
-| AWS MWAA (managed Airflow) | ❌ ~US$350+/mo minimum — wildly overkill/expensive for personal use. |
-| AWS EMR (managed Spark) | ❌ Not needed; jobs run in local Spark on the VM at this scale. |
-| AWS RDS (managed Postgres) | Optional; the Postgres container on the same VM is free and fine for a lab. |
-
-The deployment is **cloud-agnostic**: the Compose/Swarm files and scripts run on *any* Linux host
-(AWS, a Hetzner/DigitalOcean VPS, or a home server). AWS is the recommendation, not a lock-in.
-
-### Sizing & cost (estimates — verify current prices)
-
-Airflow 3 (LocalExecutor) + Postgres + local Spark realistically wants **~4 GB RAM**; 2 GB is tight
-once a Spark job runs. Rough monthly estimates, us-east-1, early-2026 ballpark:
-
-| Setup | Spec | Est. monthly |
-| --- | --- | --- |
-| Lightsail | 2 vCPU / 4 GB / 80 GB | ~US$24 |
-| EC2 `t4g.medium` on-demand | 2 vCPU / 4 GB + 30 GB gp3 | ~US$26 |
-| EC2 `t4g.medium` + 1-yr Savings Plan | same | ~US$17 |
-| Cloudflare (DNS/Tunnel/Access) | Free plan | US$0 |
-| **Single-host total** | | **~US$20–30** |
-| Swarm (2× `t4g.medium`) | HA / scale-out | ~US$45–60 |
-
-> Treat these as estimates, not quotes. Always confirm against the live AWS and Cloudflare pricing
-> pages for your region before committing.
-
-**Recommendation:** start on **one EC2 `t4g.medium` (or Lightsail 4 GB)** with the single-host
-Compose stack, fronted by **Cloudflare Tunnel + Access**. Scale to Swarm only when one host is no
-longer enough (see §4).
+The scripts and orchestration files are **cloud-agnostic** and run on any Linux host, so none of the
+above is a lock-in.
 
 ---
 

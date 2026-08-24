@@ -24,7 +24,10 @@ All notable changes to this project are documented here. The format follows
   `.dockerignore`.
 - **Docs**: cloud (Cloudflare vs AWS) decision + cost analysis and a tutorial-grade deployment
   guide; refreshed README and architecture; a consolidated standalone review report at
-  `PROJECT-REVIEW.html`.
+  `PROJECT-REVIEW.html`, and a re-done cloud vendor evaluation at
+  `CLOUD-DEPLOYMENT-ANALYSIS.html` (Tokyo-region pricing, Oracle free-tier change, verified
+  arm64 image support, decision tree). The deployment guide now points at it instead of
+  keeping a second copy of the numbers.
 - **CI**: GitHub Actions running `mvn verify` on JDK 25, a runnable-jar smoke test, a
   DAG syntax checks, deployment-script linting
   (`bash -n` + ShellCheck), and Compose/Swarm topology validation. No deployment is automated.
