@@ -5,12 +5,18 @@
 # host with no broker — the cheapest footprint that still runs the full platform.
 #
 # Quick start (from repo root):
-#   cp deploy/compose/.env.example deploy/compose/.env   # then edit secrets
+#   python3 deploy/scripts/deployment_env.py init
 #   bash deploy/scripts/build-images.sh
 #   bash deploy/scripts/compose-up.sh
 #
 # Airflow occasionally adjusts component names/flags between minors. If a service fails to start,
 # run `docker compose config` and cross-check the official Airflow docker-compose for your version.
+
+x-logging: &bounded-logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
 
 x-airflow-common: &airflow-common
   image: datacraft/airflow:latest
@@ -21,6 +27,9 @@ x-airflow-common: &airflow-common
     - .env
   environment: &airflow-env
     AIRFLOW__CORE__EXECUTOR: LocalExecutor
+    AIRFLOW__CORE__PARALLELISM: ${AIRFLOW_PARALLELISM:-1}
+    AIRFLOW__DAG_PROCESSOR__PARSING_PROCESSES: ${AIRFLOW_PARSING_PROCESSES:-1}
+    AIRFLOW__API__WORKERS: "1"
     AIRFLOW__CORE__AUTH_MANAGER: airflow.providers.fab.auth_manager.fab_auth_manager.FabAuthManager
     AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://${POSTGRES_USER:-airflow}:${POSTGRES_PASSWORD:-airflow}@postgres/${POSTGRES_DB:-airflow}
     AIRFLOW__CORE__FERNET_KEY: ${AIRFLOW_FERNET_KEY:-}
@@ -31,7 +40,7 @@ x-airflow-common: &airflow-common
     AIRFLOW__CORE__EXECUTION_API_SERVER_URL: http://airflow-apiserver:8080/execution/
     DATACRAFT_HOME: /opt/datacraft
     DATACRAFT_CLI_JAR: /opt/datacraft/datacraft-cli.jar
-    DATACRAFT_SPARK_MASTER: ${DATACRAFT_SPARK_MASTER:-local[*]}
+    DATACRAFT_SPARK_MASTER: ${DATACRAFT_SPARK_MASTER:-local[2]}
   volumes:
     - ../../orchestration/airflow/dags:/opt/airflow/dags
     - airflow-logs:/opt/airflow/logs
@@ -41,10 +50,12 @@ x-airflow-common: &airflow-common
     postgres:
       condition: service_healthy
   restart: unless-stopped
+  logging: *bounded-logging
 
 services:
   postgres:
     image: postgres:18
+    logging: *bounded-logging
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-airflow}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-airflow}
@@ -69,7 +80,7 @@ services:
     <<: *airflow-common
     command: api-server
     ports:
-      - "${AIRFLOW_WEB_PORT:-8080}:8080"
+      - "${AIRFLOW_WEB_BIND:-127.0.0.1}:${AIRFLOW_WEB_PORT:-8080}:8080"
     healthcheck:
       test: ["CMD", "curl", "--fail", "http://localhost:8080/api/v2/monitor/health"]
       interval: 30s
@@ -84,6 +95,12 @@ services:
   airflow-scheduler:
     <<: *airflow-common
     command: scheduler
+    healthcheck:
+      test: ["CMD-SHELL", 'airflow jobs check --job-type SchedulerJob --hostname "$${HOSTNAME}"']
+      interval: 60s
+      timeout: 30s
+      retries: 3
+      start_period: 30s
     depends_on:
       airflow-init:
         condition: service_completed_successfully
@@ -93,6 +110,12 @@ services:
   airflow-dag-processor:
     <<: *airflow-common
     command: dag-processor
+    healthcheck:
+      test: ["CMD-SHELL", 'airflow jobs check --job-type DagProcessorJob --hostname "$${HOSTNAME}"']
+      interval: 60s
+      timeout: 30s
+      retries: 3
+      start_period: 30s
     depends_on:
       airflow-init:
         condition: service_completed_successfully
@@ -102,6 +125,12 @@ services:
   airflow-triggerer:
     <<: *airflow-common
     command: triggerer
+    healthcheck:
+      test: ["CMD-SHELL", 'airflow jobs check --job-type TriggererJob --hostname "$${HOSTNAME}"']
+      interval: 60s
+      timeout: 30s
+      retries: 3
+      start_period: 30s
     depends_on:
       airflow-init:
         condition: service_completed_successfully
@@ -111,6 +140,7 @@ services:
   # The JVM online engine API (independent of Airflow; handy for synchronous job runs).
   datacraft-api:
     image: datacraft/jvm:latest
+    logging: *bounded-logging
     build:
       context: ../..
       dockerfile: deploy/docker/Dockerfile.jvm

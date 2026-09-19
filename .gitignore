@@ -37,6 +37,7 @@ build/
 /logs/
 /tmp/
 /warehouse/
+/backups/
 /spark-warehouse/
 /.airflow/
 /.worktrees/

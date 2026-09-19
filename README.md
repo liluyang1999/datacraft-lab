@@ -107,9 +107,14 @@ POST /jobs/{jobName}/runs?lifecycle=dev&key=value
   recommendation and cost analysis: [`docs/deployment/cloud-and-deployment.md`](docs/deployment/cloud-and-deployment.md).
 
 ```bash
+python3 deploy/scripts/deployment_env.py init  # create private secrets without overwriting a file
 bash deploy/scripts/build-images.sh   # build images (compiles the jar in a container)
 bash deploy/scripts/compose-up.sh     # start the single-host stack
 ```
+
+Tokyo/Singapore pricing, on-demand versus always-on billing, and an interactive calculator:
+[`cloud cost report`](CLOUD-DEPLOYMENT-ANALYSIS.html). Prices and assumptions were checked on
+2026-09-19; the report distinguishes complete scenario totals from compute-only prices.
 
 ## Configuration policy
 

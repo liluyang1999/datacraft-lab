@@ -1,349 +1,68 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="zh-CN">
 <head>
-<meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>datacraft-lab 云部署选型分析报告</title>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>DataCraft Lab · 云部署与费用决策</title>
 <style>
-  :root {
-    --bg: #ffffff; --bg-soft: #f6f7f9; --bg-code: #f1f2f4;
-    --text: #1b1c1e; --text-muted: #5f6368; --border: rgba(0,0,0,.12);
-    --accent: #185fa5;
-    --ok-bg: #eaf3de; --ok-fg: #3b6d11;
-    --warn-bg: #faeeda; --warn-fg: #854f0b;
-    --info-bg: #e6f1fb; --info-fg: #0c447c;
-    --bad-bg: #fcebeb; --bad-fg: #a32d2d;
-  }
-  @media (prefers-color-scheme: dark) {
-    :root {
-      --bg: #16171a; --bg-soft: #1e2024; --bg-code: #24262b;
-      --text: #e8e9ea; --text-muted: #a1a4a9; --border: rgba(255,255,255,.14);
-      --accent: #85b7eb;
-      --ok-bg: #27500a; --ok-fg: #c0dd97;
-      --warn-bg: #633806; --warn-fg: #fac775;
-      --info-bg: #0c447c; --info-fg: #b5d4f4;
-      --bad-bg: #791f1f; --bad-fg: #f7c1c1;
-    }
-  }
-  * { box-sizing: border-box; }
-  body {
-    margin: 0; padding: 2.5rem 1.25rem 4rem;
-    background: var(--bg); color: var(--text);
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
-    font-size: 15px; line-height: 1.75;
-  }
-  main { max-width: 1000px; margin: 0 auto; }
-  h1 { font-size: 26px; font-weight: 600; margin: 0 0 .3rem; letter-spacing: -.01em; }
-  h2 {
-    font-size: 19px; font-weight: 600; margin: 2.6rem 0 .9rem;
-    padding-bottom: .45rem; border-bottom: 1px solid var(--border);
-  }
-  h3 { font-size: 16px; font-weight: 600; margin: 1.6rem 0 .5rem; }
-  .sub { color: var(--text-muted); font-size: 14px; margin: 0 0 .2rem; }
-  code {
-    font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
-    font-size: 13px; background: var(--bg-code); padding: 1px 5px; border-radius: 4px;
-  }
-  pre {
-    background: var(--bg-code); border: 1px solid var(--border);
-    border-radius: 8px; padding: .9rem 1rem; overflow-x: auto; font-size: 13px;
-  }
-  pre code { background: none; padding: 0; }
-  .table-wrap { overflow-x: auto; }
-  table { width: 100%; border-collapse: collapse; margin: .6rem 0 1rem; font-size: 14px; }
-  th, td { text-align: left; padding: .55rem .7rem; border-bottom: 1px solid var(--border); vertical-align: top; }
-  th { background: var(--bg-soft); font-weight: 600; white-space: nowrap; }
-  .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px,1fr)); gap: .8rem; margin: 1rem 0; }
-  .card { background: var(--bg-soft); border: 1px solid var(--border); border-radius: 10px; padding: .85rem 1rem; }
-  .card .k { font-size: 12px; color: var(--text-muted); margin-bottom: .2rem; }
-  .card .v { font-size: 20px; font-weight: 600; }
-  .badge { display: inline-block; font-size: 12px; font-weight: 600; padding: 2px 9px; border-radius: 999px; white-space: nowrap; }
-  .b-ok { background: var(--ok-bg); color: var(--ok-fg); }
-  .b-warn { background: var(--warn-bg); color: var(--warn-fg); }
-  .b-info { background: var(--info-bg); color: var(--info-fg); }
-  .b-bad { background: var(--bad-bg); color: var(--bad-fg); }
-  .note {
-    background: var(--bg-soft); border: 1px solid var(--border);
-    border-left: 3px solid var(--accent); border-radius: 0 8px 8px 0;
-    padding: .8rem 1rem; margin: 1rem 0;
-  }
-  .warn { border-left-color: #ba7517; }
-  .meta { color: var(--text-muted); font-size: 13px; margin-top: 3rem; padding-top: 1rem; border-top: 1px solid var(--border); }
-  a { color: var(--accent); }
+:root{color-scheme:light dark;--bg:#f4f6f9;--card:#fff;--ink:#172434;--muted:#536476;--line:#d8e1ea;--accent:#12655d;--soft:#e6f3ef}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.75 system-ui,"Microsoft YaHei",sans-serif}main{max-width:1120px;margin:auto;padding:48px 24px 72px}header{border-top:5px solid var(--accent);padding:28px 0}h1{font-size:clamp(28px,5vw,42px);line-height:1.3;margin:10px 0}h2{font-size:24px;margin:0 0 16px}h3{font-size:18px}p{margin:10px 0}a{color:var(--accent);text-underline-offset:3px}section{background:var(--card);padding:28px;border:1px solid var(--line);border-radius:16px;margin:22px 0}.muted,small{color:var(--muted)}.eyebrow{letter-spacing:.12em;font-size:13px;font-weight:700}.lead{max-width:880px;font-size:18px}.grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px}.decision,.cost-card{padding:20px;background:var(--soft);border-radius:10px}.decision strong,.cost-card strong{font-size:26px;display:block}.pill{border:1px solid var(--line);border-radius:30px;padding:4px 12px;display:inline-block;font-size:13px;margin:6px 6px 0 0}.table-scroll{overflow-x:auto}table{width:100%;border-collapse:collapse;font-size:14px}caption{text-align:left;color:var(--muted);padding:0 0 12px}th,td{padding:12px 10px;border-bottom:1px solid var(--line);text-align:left;vertical-align:top}th{background:var(--soft)}td.money{white-space:nowrap;font-variant-numeric:tabular-nums}code{font-size:.9em;background:var(--soft);padding:2px 5px;border-radius:4px}pre{padding:16px;overflow:auto;background:var(--bg);border-radius:8px}pre code{padding:0;background:none}.controls{display:flex;gap:20px;flex-wrap:wrap;align-items:end;margin:20px 0}label{display:block;font-weight:600}input,button{font:inherit;border:1px solid var(--line);border-radius:8px;padding:8px 12px;color:var(--ink);background:var(--card)}input{width:160px}button{cursor:pointer}button:hover{background:var(--soft)}:focus-visible{outline:3px solid #d48806;outline-offset:3px}#cost-error{color:#b42318;min-height:1.75em}.note{border-left:4px solid var(--accent);padding-left:16px}li{margin:7px 0}footer{font-size:14px;color:var(--muted)}
+@media(max-width:720px){main{padding:20px 14px 40px}section{padding:20px}.grid{grid-template-columns:1fr}.controls{gap:12px}th,td{min-width:110px}}
+@media(prefers-color-scheme:dark){:root{--bg:#101923;--card:#182430;--ink:#edf3fa;--muted:#afbfcc;--line:#334656;--accent:#7ed7c4;--soft:#203c3d}#cost-error{color:#ffaaa3}}
+@media print{body{background:white;color:#172434}main{padding:0;max-width:none}section{break-inside:avoid;border-radius:0}.controls{display:none}a{color:inherit}.table-scroll{overflow:visible}}
 </style>
+<script defer src="docs/deployment/cloud-costs.js"></script>
 </head>
-<body>
-<main>
-
-  <h1>datacraft-lab 云部署选型分析报告</h1>
-  <p class="sub">报告版本 v2.0　|　评估日期 2026-08-24　|　对应技术栈：JDK 25 · Spark 4.2.0 · Scala 2.13.18 · Airflow 3.3.1 · Postgres 18 · Redis 8</p>
-  <p class="sub">本报告替代上一版（v1.0）的厂商选型结论，重新做了完整评估。</p>
-
-  <h2>零、本次为何要重新评估</h2>
-  <p>上一版分析有三处前提已经改变，其中两处会直接改变结论：</p>
-  <div class="table-wrap">
-  <table>
-    <thead><tr><th>变化</th><th>说明</th><th>对结论的影响</th></tr></thead>
-    <tbody>
-      <tr>
-        <td>技术栈整体升级</td>
-        <td>JDK 21→25、Spark 4.1.2→4.2.0、Airflow 3.0.2→3.3.1、Postgres 16→18、Redis 7→8</td>
-        <td>需重新核算内存与镜像架构支持</td>
-      </tr>
-      <tr>
-        <td><strong>地理位置修正</strong></td>
-        <td>从本项目 git 提交时区 <code>+0900</code> 判断，您位于 <strong>日本（JST）</strong>。上一版按 us-east-1 估价，实际应按 <strong>ap-northeast-1（东京）</strong></td>
-        <td>东京区通常比弗吉尼亚贵约 10–20%，上一版成本估算偏低</td>
-      </tr>
-      <tr>
-        <td><strong>Oracle 免费额度腰斩</strong></td>
-        <td>2026-06-15 起 Always Free 的 Ampere A1 从 4 OCPU/24GB 降为 <strong>2 OCPU/12GB</strong>，且自 2026-08-18 起终止超限实例。Oracle 未发公告，仅静默改了文档</td>
-        <td>免费方案仍可行（12GB 远超本项目需求），但需重新审视其可靠性</td>
-      </tr>
-    </tbody>
-  </table>
-  </div>
-
-  <h2>一、工作负载画像（选型的硬约束）</h2>
-  <p>选型的第一性问题不是「哪家便宜」，而是「这套负载到底是什么形状」。</p>
-  <div class="table-wrap">
-  <table>
-    <thead><tr><th>组件</th><th>形态</th><th>常驻内存估算</th></tr></thead>
-    <tbody>
-      <tr><td>Airflow api-server</td><td>常驻 HTTP 服务</td><td>~400–600 MB</td></tr>
-      <tr><td>Airflow scheduler</td><td>常驻循环</td><td>~400–600 MB</td></tr>
-      <tr><td>Airflow dag-processor</td><td>常驻解析进程</td><td>~300–500 MB</td></tr>
-      <tr><td>Airflow triggerer</td><td>常驻异步事件循环</td><td>~250–400 MB</td></tr>
-      <tr><td>Postgres 18（元数据库）</td><td>常驻有状态数据库</td><td>~200–400 MB</td></tr>
-      <tr><td>datacraft-api（JVM）</td><td>常驻 HTTP 服务</td><td>~150–300 MB</td></tr>
-      <tr><td>Spark 作业（<code>local[*]</code>）</td><td><strong>突发</strong>，driver+executor 同进程</td><td>作业期间 +1–2 GB</td></tr>
-      <tr><td>Redis 8（仅多机 Swarm 需要）</td><td>常驻 broker</td><td>~50–100 MB</td></tr>
-    </tbody>
-  </table>
-  </div>
-  <p>
-    合计：<strong>空闲约 1.8–2.8 GB；跑 Spark 作业时约 3.5–5 GB</strong>。
-    因此 <strong>4 GB 是可用下限，8 GB 及以上才算宽裕</strong>；2 GB 会在作业期 OOM。
-  </p>
-  <div class="note">
-    <strong>由此得出的第一条硬结论：</strong>本项目需要的是<strong>常驻的、有状态的虚拟机或容器主机</strong>——
-    有长生命周期进程、有关系型数据库、有需要真实 CPU 与内存的批处理。
-    这条约束直接排除了所有「短时、事件驱动」的边缘/无服务器计算产品。
-  </div>
-
-  <h2>二、Cloudflare 的正确定位：不做计算，但值得用</h2>
-  <p>
-    Cloudflare 的计算产品（Workers、Pages、Durable Objects、Workers Containers）面向<em>短时、事件驱动的边缘执行</em>，
-    不是为「常驻 Airflow 调度器 + 关系型数据库 + JVM/Spark 批处理」设计的。
-    <strong>所以 Cloudflare 不能作为本平台的计算宿主</strong>——这不是价格问题，是产品形态不匹配。
-  </p>
-  <p>但 Cloudflare 在<strong>免费层</strong>上能承担三个真实且有价值的角色：</p>
-  <div class="table-wrap">
-  <table>
-    <thead><tr><th>能力</th><th>在本项目中的作用</th><th>价值</th></tr></thead>
-    <tbody>
-      <tr><td>DNS + 反向代理</td><td>域名指向主机并隐藏源站 IP</td><td><span class="badge b-ok">推荐</span></td></tr>
-      <tr><td>Universal SSL</td><td>免费 TLS 终结，免维护证书</td><td><span class="badge b-ok">推荐</span></td></tr>
-      <tr><td><strong>Cloudflare Tunnel</strong></td><td><strong>不开放任何入站端口</strong>即可暴露 Airflow UI；主机可无公网 IP</td><td><span class="badge b-ok">强烈推荐</span></td></tr>
-      <tr><td><strong>Cloudflare Access</strong>（Zero Trust）</td><td>在 Airflow UI 前加一层邮箱/SSO 鉴权（50 用户内免费）</td><td><span class="badge b-ok">强烈推荐</span></td></tr>
-      <tr><td><strong>R2 对象存储</strong></td><td>存放 Parquet 产出与 Postgres 备份。S3 兼容、<strong>零出流量费</strong>，免费额度 10 GB</td><td><span class="badge b-info">按需，很划算</span></td></tr>
-      <tr><td>Workers / Pages</td><td>承载本项目的计算</td><td><span class="badge b-bad">不适用</span></td></tr>
-    </tbody>
-  </table>
-  </div>
-  <p>
-    R2 值得单独强调：数据湖类产出（Parquet）与数据库备份放在 R2，比放 AWS S3 更省——
-    <strong>S3 的跨区/公网出流量要收费，R2 的出流量为零</strong>。而 <code>datacraft-io</code> 的
-    <code>StorageService</code> 端口设计本就便于后续接入 S3 兼容后端。
-  </p>
-
-  <h2>三、候选厂商横向评估</h2>
-  <div class="table-wrap">
-  <table>
-    <thead><tr><th>方案</th><th>规格</th><th>东京可用</th><th>评估</th></tr></thead>
-    <tbody>
-      <tr>
-        <td><strong>Oracle Cloud Always Free</strong><br>（Ampere A1，ARM）</td>
-        <td>2 OCPU / 12 GB / 200 GB 块存储</td>
-        <td>✅ Tokyo &amp; Osaka</td>
-        <td><span class="badge b-ok">成本最优</span> 免费且内存远超需求。<strong>但</strong>：额度刚被静默腰斩、A1 容量长期紧张常报 out-of-capacity、无 SLA、闲置实例可能被回收</td>
-      </tr>
-      <tr>
-        <td><strong>AWS Lightsail</strong></td>
-        <td>2 vCPU / 4 GB / 80 GB SSD</td>
-        <td>✅ Tokyo</td>
-        <td><span class="badge b-ok">最省心</span> 固定月价、含流量额度、一键 Ubuntu；不易被账单意外</td>
-      </tr>
-      <tr>
-        <td><strong>AWS EC2 <code>t4g.medium</code></strong><br>（Graviton，ARM）</td>
-        <td>2 vCPU / 4 GB + EBS gp3</td>
-        <td>✅ Tokyo</td>
-        <td><span class="badge b-ok">弹性最好</span> 可用 Savings Plan 显著降价；能随时纵向扩容、挂快照、接 IAM/S3 生态</td>
-      </tr>
-      <tr>
-        <td>Vultr / Linode(Akamai)</td>
-        <td>2 vCPU / 4 GB</td>
-        <td>✅ Tokyo</td>
-        <td><span class="badge b-info">可选</span> 价格与 Lightsail 相当，界面简单；生态与备份能力弱于 AWS</td>
-      </tr>
-      <tr>
-        <td>Hetzner</td>
-        <td>2–4 vCPU / 4–8 GB</td>
-        <td>❌ 仅欧美</td>
-        <td><span class="badge b-warn">谨慎</span> 单价全场最低（约为东京方案的 1/4），但从日本访问约 200–250 ms。批处理可接受，交互式 UI 体感差</td>
-      </tr>
-      <tr>
-        <td>GCP / Azure 通用 VM</td>
-        <td>e2-medium 等</td>
-        <td>✅ Tokyo</td>
-        <td><span class="badge b-info">可选</span> 与 EC2 同档，无特别优势；若已有该生态可考虑</td>
-      </tr>
-      <tr>
-        <td>AWS MWAA（托管 Airflow）</td>
-        <td>最小环境</td>
-        <td>✅</td>
-        <td><span class="badge b-bad">排除</span> 约 US$350+/月起，对个人项目严重过度</td>
-      </tr>
-      <tr>
-        <td>AWS EMR / Glue（托管 Spark）</td>
-        <td>—</td>
-        <td>✅</td>
-        <td><span class="badge b-bad">排除</span> 当前数据量用 <code>local[*]</code> 足够，托管 Spark 是纯浪费</td>
-      </tr>
-      <tr>
-        <td>Kubernetes / EKS / GKE</td>
-        <td>—</td>
-        <td>✅</td>
-        <td><span class="badge b-bad">排除</span> 此规模下运维复杂度与控制面成本都不划算；Swarm 已能覆盖多机需求</td>
-      </tr>
-      <tr>
-        <td>Cloudflare Workers 系</td>
-        <td>—</td>
-        <td>—</td>
-        <td><span class="badge b-bad">不适用</span> 见第二节</td>
-      </tr>
-    </tbody>
-  </table>
-  </div>
-
-  <h2>四、成本估算（东京区）</h2>
-  <div class="note warn">
-    <strong>关于这些数字的诚实说明：</strong>下表为<strong>估算区间</strong>，不是报价。
-    云厂商的区域定价、汇率与促销经常变动，而我在检索中<strong>未能取到东京区的逐项精确单价</strong>
-    （公开比价站多只给最低区或基准价）。请在下单前用官方计算器按 <code>ap-northeast-1</code> 实际核对：
-    <a href="https://calculator.aws/">AWS 计算器</a>、
-    <a href="https://aws.amazon.com/lightsail/pricing/">Lightsail 定价</a>、
-    <a href="https://www.oracle.com/cloud/free/">Oracle 免费层</a>。
-  </div>
-  <div class="table-wrap">
-  <table>
-    <thead><tr><th>方案</th><th>规格</th><th>月成本估算（东京）</th><th>说明</th></tr></thead>
-    <tbody>
-      <tr><td>Oracle Always Free</td><td>2 OCPU / 12 GB ARM</td><td><strong>US$0</strong></td><td>额度内永久免费</td></tr>
-      <tr><td>Lightsail 4 GB</td><td>2 vCPU / 4 GB / 80 GB</td><td>约 US$20–26</td><td>固定价，含流量额度</td></tr>
-      <tr><td>EC2 <code>t4g.medium</code> 按需</td><td>2 vCPU / 4 GB + 30 GB gp3</td><td>约 US$28–32</td><td>基准价约 $0.034/h，东京上浮</td></tr>
-      <tr><td>EC2 <code>t4g.medium</code> + 1 年 Savings Plan</td><td>同上</td><td>约 US$19–23</td><td>基准约 $0.021/h，降幅约 38%</td></tr>
-      <tr><td>Vultr / Linode 4 GB（东京）</td><td>2 vCPU / 4 GB</td><td>约 US$20–24</td><td>—</td></tr>
-      <tr><td>Hetzner 4–8 GB（欧美）</td><td>2–4 vCPU</td><td>约 US$5–8</td><td>延迟代价见上表</td></tr>
-      <tr><td>Cloudflare（DNS/Tunnel/Access）</td><td>免费层</td><td>US$0</td><td>—</td></tr>
-      <tr><td>Cloudflare R2</td><td>10 GB 内</td><td>US$0</td><td>超出后按量，出流量仍为 0</td></tr>
-      <tr><td colspan="2"><strong>单机推荐组合（Lightsail/EC2 + Cloudflare）</strong></td><td><strong>约 US$20–32</strong></td><td>—</td></tr>
-      <tr><td colspan="2">Swarm 双节点</td><td>约 US$45–65</td><td>仅在单机不够时</td></tr>
-    </tbody>
-  </table>
-  </div>
-
-  <h2>五、ARM 架构可行性核验（本次实测）</h2>
-  <p>
-    成本最优的两个方案（AWS <code>t4g</code> Graviton、Oracle Ampere A1）<strong>都是 ARM64</strong>。
-    这意味着一个常被忽略、但会直接让方案失效的前提：<strong>所有容器镜像必须有 arm64 变体</strong>。
-    我逐个查询了镜像清单，结果如下：
-  </p>
-  <div class="table-wrap">
-  <table>
-    <thead><tr><th>镜像</th><th>支持架构</th><th>ARM 可用</th></tr></thead>
-    <tbody>
-      <tr><td><code>apache/spark:4.2.0-scala2.13-java25-python3-ubuntu</code></td><td>amd64, arm64</td><td><span class="badge b-ok">✅</span></td></tr>
-      <tr><td><code>apache/airflow:3.3.1</code></td><td>amd64, arm64</td><td><span class="badge b-ok">✅</span></td></tr>
-      <tr><td><code>eclipse-temurin:25-jre</code></td><td>amd64, arm64/v8, ppc64le, s390x</td><td><span class="badge b-ok">✅</span></td></tr>
-      <tr><td><code>maven:3.9-eclipse-temurin-25</code></td><td>amd64, arm64/v8, …</td><td><span class="badge b-ok">✅</span></td></tr>
-      <tr><td><code>postgres:18</code></td><td>amd64, arm64/v8, …</td><td><span class="badge b-ok">✅</span></td></tr>
-      <tr><td><code>redis:8</code></td><td>amd64, arm64/v8, …</td><td><span class="badge b-ok">✅</span></td></tr>
-    </tbody>
-  </table>
-  </div>
-  <p>
-    <strong>结论：ARM 方案技术上完全成立</strong>，六个镜像全部具备 arm64。
-    加上本项目的 JVM 制品是<strong>架构无关的字节码</strong>（Spark 为 <code>provided</code>，不打包任何本地库），
-    因此在 x86 与 ARM 之间迁移无需重新适配代码。这使「用 ARM 省 20–40% 成本」成为可安全采纳的选项。
-  </p>
-
-  <h2>六、推荐方案</h2>
-  <h3>方案 A：零成本起步 <span class="badge b-info">先试这个</span></h3>
-  <p>
-    <strong>Oracle Cloud Always Free（Ampere A1，2 OCPU / 12 GB，东京或大阪）+ Cloudflare 免费层。</strong>
-    月成本 US$0，内存是需求的 3 倍，跑单机 Compose 栈非常宽裕。
-  </p>
-  <p>
-    <strong>代价要说清楚：</strong>A1 容量长期紧张，创建实例常遇 out-of-capacity 需反复重试；
-    免费层无 SLA；而且 Oracle 刚刚在<strong>没有任何公告</strong>的情况下把额度砍半、并终止超限实例——
-    这说明该层级的条款可能再次单方面变更。<strong>因此：适合做实验与自用，不适合承载你不能丢的东西</strong>，
-    且务必把 Postgres 备份放到 R2 或本地。
-  </p>
-
-  <h3>方案 B：稳健低成本 <span class="badge b-ok">长期主力推荐</span></h3>
-  <p>
-    <strong>AWS Lightsail 4 GB（东京）+ Cloudflare 免费层</strong>，约 US$20–26/月。
-    固定月价、账单可预测、含流量额度、快照备份简单。适合「希望它稳定跑着、不想操心」的场景。
-  </p>
-
-  <h3>方案 C：需要弹性时</h3>
-  <p>
-    <strong>EC2 <code>t4g.medium</code>（ARM）+ 1 年 Savings Plan + Cloudflare</strong>，约 US$19–23/月。
-    比 Lightsail 略便宜且能随时改机型、挂 EBS 快照、接 IAM/S3。代价是需要自己管安全组、EBS 与账单。
-  </p>
-
-  <h3>决策树</h3>
-<pre><code>能接受「可能需要反复重试才能开到机器、且条款可能再变」吗？
-├─ 是 → 方案 A：Oracle Always Free（$0）
-│         └─ 之后若被回收或不够用 → 平移到方案 B（脚本云无关，迁移成本很低）
-└─ 否 → 想要账单可预测、少操心吗？
-         ├─ 是 → 方案 B：Lightsail 4 GB（约 $20–26）
-         └─ 否，想要弹性与 AWS 生态 → 方案 C：EC2 t4g.medium + Savings Plan（约 $19–23）
-
-延迟不敏感、只跑批处理、想把成本压到极限？
-└─ 方案 D：Hetzner 欧美节点（约 $5–8），接受 200–250 ms 交互延迟</code></pre>
-
-  <div class="note">
-    <strong>统一前提：</strong>无论选哪家，都<strong>先用单机 Docker Compose（LocalExecutor）</strong>，
-    仅当任务并发或高可用需求超出单机时再切 Swarm。本项目的部署脚本与编排文件是<strong>云无关</strong>的，
-    在任意 Linux 主机上都能跑，所以上述选择<strong>不构成厂商锁定</strong>，换家的成本主要只是重建主机与迁移 Postgres 数据。
-  </div>
-
-  <h2>七、安全与运维要点</h2>
-  <ul>
-    <li><strong>不开放入站端口</strong>：用 Cloudflare Tunnel 由主机向外拨出，Airflow UI 不暴露在公网，配合 Access 做鉴权。</li>
-    <li><strong>密钥管理</strong>：<code>.env</code> 仅适合单机起步；生产应改用 <code>docker secret</code>（Swarm）或云端密钥服务。<code>.env</code> 已在 <code>.gitignore</code> 中，切勿提交。</li>
-    <li><strong>备份</strong>：定期 <code>pg_dump</code> Airflow 元数据库并上传到 R2/S3。Postgres 大版本升级需 dump/restore，不能只换镜像标签。</li>
-    <li><strong>JDK 补丁版本</strong>：Spark 4.2.0 将「早于 25.0.3 的 Java 25」标记为 deprecated。部署前确认镜像内 JRE ≥ 25.0.3（<code>docker run --rm eclipse-temurin:25-jre java -version</code>）。</li>
-    <li><strong>可观测性</strong>：单机阶段用 <code>docker compose logs</code> + Airflow 自带 UI 足够；上量后再考虑接入外部日志/指标。</li>
-  </ul>
-
-  <h2>八、待您核实与决策的事项</h2>
-  <ol>
-    <li><strong>成本数字</strong>：本报告的月费为估算区间，请用官方计算器按东京区核对后再决策。</li>
-    <li><strong>Oracle 免费层容量</strong>：能否在东京/大阪成功开出 A1 实例，只能实际尝试才知道。</li>
-    <li><strong>镜像构建验证</strong>：本机未安装 Docker，因此镜像标签虽已确认存在、架构已确认支持，但<strong>尚未实际构建过</strong>。首次执行 <code>deploy/scripts/build-images.sh</code> 时会真正验证。</li>
-    <li><strong>Airflow 3.3.1 运行时行为</strong>：CI 仅校验编排文件语法，不启动容器。3.0.2 → 3.3.1 跨了三个次版本，首次启动时请留意组件参数是否有变更（已修正 FAB 用户表迁移缺失的问题）。</li>
-  </ol>
-
-  <p class="meta">
-    评估依据：Spark 4.2.0 与 Airflow 3.3.1 官方文档、Docker Hub 镜像清单实测（架构支持）、
-    Maven Central 版本元数据，以及公开定价资料。
-    部署操作步骤见 <code>docs/deployment/cloud-and-deployment.md</code>；
-    项目整体复盘见 <code>PROJECT-REVIEW.html</code>。
-  </p>
-
-</main>
-</body>
-</html>
+<body><main>
+<header><p class="eyebrow">DATACRAFT LAB / DEPLOYMENT DECISION</p><h1>东京与新加坡，如何运行更划算</h1>
+<p class="lead">以单机 Airflow + PostgreSQL + Spark 为起点。偶尔运行优先按需计费；持续在线优先小型包月主机。先完成真实负载验收，再决定升级或长期承诺。</p>
+<span class="pill">官方资料核验：2026-09-19</span><span class="pill">USD · 税前公开价</span><span class="pill">准备阶段 · 未购买云资源</span>
+<p class="muted">本次按用户指定的东京、新加坡比较，不从时区推断所在地。新用户赠金、限时促销和长期合约折扣均不计入基础预算。</p></header>
+<section aria-labelledby="recommendation"><h2 id="recommendation">建议这样选</h2><div class="grid">
+<div class="decision"><p>常开 · 优先评估</p><strong>$10.15 / 月</strong><h3>腾讯云 Lighthouse 入门型</h3><p>2 核 / 8 GB / 80 GB SSD，套餐 $10；另计示例 20 GB 月均备份 $0.15。东京与新加坡同档公开价。</p><p><a href="https://www-sg.tencentcloud.com/zh/document/product/1103/47794">官方套餐与流量价格</a></p></div>
+<div class="decision"><p>按需 · 每月运行 60 小时</p><strong>$4.79 / 月</strong><h3>Oracle OCI A1</h3><p>2 OCPU / 8 GB，算力 $1.92；64 GB Balanced 磁盘保留整月 $2.72；备份 $0.15。此金额按无免费额度计算。</p><p><a href="https://www.oracle.com/cloud/compute/arm/">官方算力价格</a> · <a href="https://www.oracle.com/cloud/price-list/">存储价目</a></p></div>
+<div class="decision"><p>已有 AWS 使用习惯 · 备选</p><strong>$44.15 / 月</strong><h3>AWS Lightsail 8 GB</h3><p>IPv4 套餐 $44，含 160 GB SSD、5 TB 流量；加示例备份 $0.15。预算清楚，但本场景费用高于腾讯云。</p><p><a href="https://aws.amazon.com/lightsail/pricing/">官方套餐价格</a></p></div></div>
+<p class="note">这些是小规模、低并发的预算候选，不是已完成的云端性能排名。相同内存或“2 核”不等于相同吞吐量；共享 CPU、突发积分、存储延迟和源数据位置都会影响运行时长。优先在数据源附近部署，东京和新加坡均未实测网络延迟。</p>
+<p>Oracle 免费额度若适用，可进一步降低费用；但容量、主区域、账户剩余额度和 ARM 实机验证必须先满足。若希望减少维护与等待成本，先评估 x86 的腾讯云月付套餐；80 GB 不够时，其 120 GB 通用型公开价为 $14.50/月。</p></section>
+<section aria-labelledby="calculator"><h2 id="calculator">改变运行时长，看保留数据后的月费用</h2>
+<p>保持同一主机与磁盘整月，公网总出站假设不超过 100 GB/月（含备份上传）；不购买额外快照、监控、域名、负载均衡或 NAT。R2 Standard 免费额度尚未被其他项目占用，读写请求在免费量内。实际 24 小时在线按当月天数计算，730 小时是年度平均估算。</p>
+<div class="controls"><div><label for="hours">运行小时 / 月</label><input id="hours" type="number" min="0" max="744" step="1" value="60"></div><div><label for="backup-gb">月均备份容量 / GB</label><input id="backup-gb" type="number" min="0" max="1000000" step="0.1" value="20"></div><button type="button" data-hours="60">按需 60 小时</button><button type="button" data-hours="730">常开 730 小时</button></div>
+<p id="cost-error" role="alert"></p><div class="grid" id="cost-results" aria-live="polite"></div><noscript><p>请启用 JavaScript 使用计算器。默认场景结果已在上方列出。</p></noscript>
+<p class="muted">在上述假设下，OCI 无免费额度时约 227.5 小时/月与腾讯云 $10 套餐持平；若实际任务在某平台运行更慢，应使用实测总时长重新计算。关机不会降低腾讯云或 Lightsail 的整月保留费用。</p></section>
+<section aria-labelledby="market"><h2 id="market">各平台的可复核价格</h2><div class="table-scroll"><table>
+<caption>同为约 8 GB 内存档。下表两列仅为主机套餐费或算力费，不包含备份；按需场景保留资源整月。带 * 的行必须再加右列项目，不能当作完整总价。</caption>
+<thead><tr><th>平台 / 机型</th><th>地域</th><th>60 小时运行</th><th>730 小时运行</th><th>已含资源 / 还需计费</th></tr></thead><tbody>
+<tr><td><a href="https://www-sg.tencentcloud.com/zh/document/product/1103/47794">腾讯云入门型 2 核 8 GB</a></td><td>东京 / 新加坡</td><td class="money" data-plan="tencent" data-hours="60">$10.00</td><td class="money" data-plan="tencent" data-hours="730">$10.00</td><td>80 GB SSD、2,560 GB/月、30 Mbps。关机仍付套餐费；库存及账户可买规格以下单页为准。</td></tr>
+<tr><td><a href="https://www.oracle.com/cloud/compute/arm/">OCI A1 2 OCPU 8 GB *</a></td><td>东京 / 新加坡</td><td class="money" data-plan="oracle" data-hours="60">$1.92</td><td class="money" data-plan="oracle" data-hours="730">$23.36</td><td>$0.032/小时；加 64 GB Balanced 磁盘 $2.72/月。未扣免费额度。ARM 尚待实机验收。</td></tr>
+<tr><td><a href="https://aws.amazon.com/lightsail/pricing/">AWS Lightsail 2 vCPU 8 GB</a></td><td>东京 / 新加坡</td><td class="money" data-plan="lightsail" data-hours="60">$44.00</td><td class="money" data-plan="lightsail" data-hours="730">$44.00</td><td>IPv4、160 GB SSD、5 TB/月。IPv6-only $40，但需先验证镜像仓库、依赖和 SFTP 可达性。</td></tr>
+<tr><td><a href="https://api.vultr.com/v2/plans">Vultr vc2-4c-8gb</a></td><td>东京 / 新加坡</td><td class="money" data-plan="vultr" data-hours="60">$40.00</td><td class="money" data-plan="vultr" data-hours="730">$40.00</td><td>4 vCPU、160 GB SSD、4,096 GB 流量。公开 API 为 $0.055/小时、$40/月封顶；关机仍收费。</td></tr>
+<tr><td><a href="https://www.digitalocean.com/pricing/droplets">DigitalOcean Basic 8 GiB</a></td><td>新加坡</td><td class="money" data-plan="digitalocean" data-hours="60">$48.00</td><td class="money" data-plan="digitalocean" data-hours="730">$48.00</td><td>4 vCPU、160 GiB SSD、5,000 GiB；$0.07143/小时、$48/月封顶。东京未在官方地区表中列出。</td></tr>
+<tr><td><a href="https://www.akamai.com/cloud/pricing">Akamai Linode 8 GB</a></td><td>东京 / 新加坡</td><td class="money" data-plan="linode" data-hours="60">$48.00</td><td class="money" data-plan="linode" data-hours="730">$48.00</td><td>4 vCPU、160 GB、5 TB。$0.072/小时、$48/月封顶；保留实例继续计费。</td></tr>
+<tr><td><a href="https://docs.hetzner.com/general/infrastructure-and-availability/price-adjustment/">Hetzner CPX32 *</a></td><td>新加坡</td><td class="money" data-plan="hetzner" data-hours="60">$57.99</td><td class="money" data-plan="hetzner" data-hours="730">$57.99</td><td>2026-06-15 调价后公开美元月上限，IPv4、备份、超额流量另计。欧洲低价不可套用到新加坡。</td></tr>
+<tr><td><a href="https://aws.amazon.com/ec2/pricing/on-demand/">EC2 t4g.large *</a></td><td>东京<br>新加坡</td><td class="money"><span data-plan="awsTokyo" data-hours="60">$5.18</span><br><span data-plan="awsSingapore" data-hours="60">$5.09</span></td><td class="money"><span data-plan="awsTokyo" data-hours="730">$63.07</span><br><span data-plan="awsSingapore" data-hours="730">$61.90</span></td><td>$0.0864 / $0.0848 每小时；另加 EBS、IPv4、备份、流量及可能的 Unlimited CPU 积分费用。</td></tr>
+<tr><td><a href="https://cloud.google.com/products/compute/pricing/general-purpose">GCP e2-standard-2 *</a></td><td>东京<br>新加坡</td><td class="money"><span data-plan="gcpTokyo" data-hours="60">$5.16</span><br><span data-plan="gcpSingapore" data-hours="60">$4.96</span></td><td class="money"><span data-plan="gcpTokyo" data-hours="730">$62.75</span><br><span data-plan="gcpSingapore" data-hours="730">$60.35</span></td><td>$0.08596572 / $0.08266614 每小时；另加持久磁盘、外部 IP、流量、备份。未使用默认美国区域价格。</td></tr>
+<tr><td><a href="https://learn.microsoft.com/en-us/rest/api/cost-management/retail-prices/azure-retail-prices">Azure B2as v2 *</a></td><td>Japan East<br>Southeast Asia</td><td class="money"><span data-plan="azureTokyo" data-hours="60">$5.88</span><br><span data-plan="azureSingapore" data-hours="60">$5.66</span></td><td class="money"><span data-plan="azureTokyo" data-hours="730">$71.54</span><br><span data-plan="azureSingapore" data-hours="730">$68.91</span></td><td>Linux 按需；64 GiB E6 LRS 磁盘基础费另加 $4.80/月，两地相同；磁盘操作、公网 IP、流量、备份另计。</td></tr>
+<tr><td><a href="https://www.alibabacloud.com/en/product/swas/pricing?_p_lc=1">阿里云轻量 / ECS</a></td><td>东京 / 新加坡</td><td colspan="2">待当前可售 SKU 报价</td><td>公开轻量页有 8 GB $35/月参考，但 2026-04-20 有一批旧套餐停售，不能将旧展示价视作当前可买价。</td></tr>
+<tr><td><a href="https://www.huaweicloud.com/intl/en-us/product/flexus/pricing.html">华为云 Flexus L / X</a></td><td>优先查新加坡</td><td colspan="2">待控制台地域与规格报价</td><td>L 为套餐，X 可按需；没有取得可复核的当前 8 GB 完整报价，不将历史截图或促销价列入排名。</td></tr>
+</tbody></table></div>
+<p>EC2、GCP、Azure 附加费取决于磁盘性能、出站目的地及 IP 保留方式；本表明确保留缺项，采购前导出各官方计算器明细。腾讯云国际站与中国站、阿里云国际站与国内站的账户、币种和套餐不能混用。未核实的报价不会在计算器中按零处理。</p></section>
+<section><h2>免费、停机与流量：必须正确计算的部分</h2>
+<ul>
+<li><strong>Oracle 免费额度：</strong><a href="https://docs.oracle.com/en-us/iaas/Content/FreeTier/freetier_topic-Always_Free_Resources.htm">Always Free 官方文档</a>列出每月 1,500 OCPU 小时、9,000 GB 内存小时，以及主区域 200 GB 块存储。<a href="https://www.oracle.com/cloud/price-list/">付费租户价目说明</a>另列 3,000 / 18,000。按账户类型和控制台剩余额度核对；不要一律承诺 4 OCPU / 24 GB 免费。低利用率实例可能被回收，容量也可能不足。</li>
+<li><strong>停机：</strong>OCI Standard 停止后暂停算力计费；EC2 stop、GCP stop、Azure deallocate 可停止对应按需算力费，但磁盘等资源继续收费。Azure 仅在系统内关机不等于解除分配。腾讯轻量、Lightsail、Vultr、DigitalOcean、Linode、Hetzner 保留实例会继续收费。删除重建可以改变后几者的计费时长，但需要另算镜像、磁盘、恢复时间和被重建后的数据一致性；本报告未把它冒充成普通关机。</li>
+<li><strong>R2 备份：</strong><a href="https://developers.cloudflare.com/r2/pricing/">Standard 价格</a>为 $0.015/GB-month，账户免费 10 GB-month；写入类请求免费 100 万、读取类免费 1,000 万，超出后按整计费单位向上取整。20 GB 是所有保留备份版本的月均总量，不是“每次备份 20 GB”。每天保留一份完整 20 GB、共 30 份可能需要约 600 GB，不能仍预算 $0.15。</li>
+<li><strong>出站：</strong>R2 自身免出站不代表来源云免费。腾讯套餐外东京 $0.13/GB、新加坡 $0.081/GB；Lightsail 超额东京 $0.14、新加坡 $0.12。OCI 亚太前 10 TB/月免费。所有免费量须考虑同账户其他资源占用，上传备份也计入来源云流量。</li>
+<li><strong>持久数据：</strong>OCI 磁盘容量 $0.0255/GB-month，Balanced 10 VPU 另加 $0.017，总计 $0.0425；64 GB 保留整月为 $2.72。快照不自动免费，也不等于一致性数据库备份。预算还应列出监控日志、域名、税、汇率和人工维护时间。</li>
+<li><strong>网络架构：</strong>低成本起步不加付费 NAT、负载均衡和跨区数据库。保留公网地址用于出站与受限 SSH，应用端口绑定回环。可用 SSH 转发；使用 Cloudflare Tunnel 仍须有可用出站网络，私网主机可能因此产生 NAT 费用。</li>
+</ul></section>
+<section><h2>为什么先保留当前单机架构</h2><p>8 GB 内存、至少 64 GB SSD 是本次预算的规划起点，尚不是经过用户实际数据量测试得出的最低配置。默认同时运行 1 个 Airflow 任务，Spark 用 <code>local[2]</code>，DAG 解析进程为 1，API worker 为 1。先检查峰值内存、磁盘使用、任务耗时和源数据网络，再调大并发。</p>
+<p>Cloudflare Workers/Pages 不能直接运行当前 JVM + PostgreSQL + Airflow Compose；Cloudflare Containers 能运行 Linux 容器，但其生命周期与存储架构仍需重新适配，不能当作现有有状态栈的直接低价替换。R2 可以存备份；本项目尚未配置 S3A，不把 <code>s3://</code> 路径当作已支持的 Spark 数据路径。</p>
+<p>AWS MWAA 的传统常驻环境、Google 托管 Airflow 要计入控制面、工作节点、数据库和网络费用。MWAA Serverless 另有按任务计费模式，不能用传统环境最低月费概括所有托管选项；现有本地 JVM/Spark 命令也不是直接兼容其托管任务模型。参见 <a href="https://aws.amazon.com/managed-workflows-for-apache-airflow/pricing/">MWAA 定价</a>与 <a href="https://cloud.google.com/products/managed-service-for-apache-airflow/pricing">Google 托管 Airflow 定价</a>。当前小规模场景没有证明迁移与维护成本值得。</p>
+<p>不先购买 Savings Plans、Reserved Instances 或 CUD。先观察稳定利用率；承诺费不会因为偶尔关机自动消失。默认 Swarm 使用本地卷并固定数据节点，仍不是多主机高可用。</p></section>
+<section><h2>部署准备与验收边界</h2><p>源码、CSV/Parquet 数据契约、Airflow DAG、镜像构建与运行已完成项目级验证；完整结果见 <a href="docs/engineering-report/2026-09-19-review.md">工程复盘记录</a>。本轮额外补齐安全初始化、部署前检查、资源并发、日志轮转和费用计算测试。</p>
+<pre><code>python3 deploy/scripts/deployment_env.py init
+bash deploy/scripts/build-images.sh
+bash deploy/scripts/compose-up.sh</code></pre>
+<p><a href="docs/deployment/cloud-and-deployment.md">完整部署、备份、恢复与停机教程</a> · <a href="docs/deployment/pricing-evidence.md">价格来源、SKU、计算式和核验范围</a></p>
+<p class="note">已准备部署脚本，不代表已经购买或上线。真实云账号权限、库存、网络、用户数据性能与 ARM 主机运行尚未验证；当前容器运行证据来自 Linux amd64。镜像提供 arm64 清单也不能替代 ARM 实机测试。</p></section>
+<footer>资料版本：2026-09-19。价格快照用于方案比较，不是锁价订单；执行前按所选账户、地域、SKU 和税费复核。所有计算仅保留最终显示时的分币四舍五入。</footer>
+</main></body></html>

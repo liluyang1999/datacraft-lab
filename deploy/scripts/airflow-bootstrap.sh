@@ -13,7 +13,7 @@ users_file=$(mktemp)
 trap 'rm -f -- "$users_file"' EXIT
 airflow users list --output json > "$users_file"
 # Distinguish a known existing account from a broken lookup or failed creation.
-exists=$(python - "$users_file" "$AIRFLOW_ADMIN_USERNAME" <<'PY'
+exists=$(python3 - "$users_file" "$AIRFLOW_ADMIN_USERNAME" <<'PY'
 import json
 import sys
 with open(sys.argv[1], encoding="utf-8") as source:

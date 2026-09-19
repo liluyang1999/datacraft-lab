@@ -1,0 +1,65 @@
+#!/usr/bin/env bash
+# Disposable CI only: exercise the real scheduler -> Execution API -> LocalExecutor path.
+set -euo pipefail
+cd "$(dirname "${BASH_SOURCE[0]}")/../.."
+[[ "${CI:-}" == true ]] || { echo "Run only on an isolated CI runner." >&2; exit 1; }
+env_file="$PWD/deploy/compose/.env"
+[[ ! -e "$env_file" && ! -L "$env_file" ]] || { echo "Preserving existing .env; refusing smoke test." >&2; exit 1; }
+export COMPOSE_PROJECT_NAME="datacraft-smoke-${GITHUB_RUN_ID:-$$}"
+compose=(docker compose -f deploy/compose/docker-compose.yml)
+created_env=false
+backup_file=""
+cleanup() {
+  local status=$?
+  trap - EXIT
+  if [[ "$created_env" == true ]]; then
+    if ((status != 0)); then
+      "${compose[@]}" ps -a || true
+      "${compose[@]}" logs --tail 80 || true
+    fi
+    "${compose[@]}" down -v --remove-orphans || status=1
+    rm -f -- "$env_file"
+  fi
+  [[ -z "$backup_file" ]] || rm -f -- "$backup_file"
+  exit "$status"
+}
+trap cleanup EXIT
+python3 -B deploy/scripts/deployment_env.py init
+created_env=true
+bash deploy/scripts/compose-up.sh
+
+# The DAG processor serializes newly discovered DAGs asynchronously.
+ready=false
+for ((attempt=0; attempt<36; attempt++)); do
+  if "${compose[@]}" exec -T airflow-scheduler airflow dags unpause datacraft_engine_jobs >/dev/null 2>&1; then
+    ready=true
+    break
+  fi
+  sleep 5
+done
+[[ "$ready" == true ]] || { echo "Engine DAG was not registered." >&2; exit 1; }
+"${compose[@]}" exec -T airflow-scheduler airflow dags trigger --run-id cloud-smoke datacraft_engine_jobs
+success=false
+for ((attempt=0; attempt<60; attempt++)); do
+  state=$("${compose[@]}" exec -T airflow-scheduler airflow dags state datacraft_engine_jobs cloud-smoke)
+  if grep -qx success <<< "$state"; then
+    success=true
+    break
+  fi
+  if grep -qx failed <<< "$state"; then
+    echo "Scheduled engine DAG failed." >&2
+    exit 1
+  fi
+  sleep 5
+done
+[[ "$success" == true ]] || { echo "Scheduled engine DAG timed out." >&2; exit 1; }
+
+# Prove the documented metadata backup format is restorable into a separate database.
+backup_file=$(mktemp)
+"${compose[@]}" exec -T postgres sh -c 'pg_dump -U "$POSTGRES_USER" -d "$POSTGRES_DB" -Fc' > "$backup_file"
+"${compose[@]}" exec -T postgres sh -c 'createdb -U "$POSTGRES_USER" datacraft_restore_check'
+"${compose[@]}" exec -T postgres sh -c 'pg_restore -U "$POSTGRES_USER" -d datacraft_restore_check --exit-on-error' < "$backup_file"
+restored=$("${compose[@]}" exec -T postgres sh -c 'psql -U "$POSTGRES_USER" -d datacraft_restore_check -Atc "SELECT count(*) FROM dag_run WHERE dag_id = '\''datacraft_engine_jobs'\'' AND state = '\''success'\''"')
+[[ "$restored" == 1 ]] || { echo "Restored metadata does not contain the successful run." >&2; exit 1; }
+"${compose[@]}" exec -T postgres sh -c 'dropdb -U "$POSTGRES_USER" datacraft_restore_check'
+echo "Verified real Compose scheduler, Execution API, LocalExecutor and metadata restore."

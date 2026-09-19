@@ -30,11 +30,16 @@ EOF
   fi
 }
 
-# Creates deploy/compose/.env from the example on first use.
+# Never start with copied example passwords or silently rotate existing secrets.
 ensure_env_file() {
   local env_file="${REPO_ROOT}/deploy/compose/.env"
   if [[ ! -f "${env_file}" ]]; then
-    warn "deploy/compose/.env missing; creating from .env.example — edit the secrets before production use."
-    cp "${REPO_ROOT}/deploy/compose/.env.example" "${env_file}"
+    die "Run python3 deploy/scripts/deployment_env.py init to create private deployment secrets."
   fi
+}
+
+validate_compose_env() {
+  require_cmd python3 || die "Python 3 is required to validate deployment secrets."
+  docker compose -f "${REPO_ROOT}/deploy/compose/docker-compose.yml" config --format json |
+    python3 -B "${DEPLOY_SCRIPTS_DIR}/deployment_env.py" check
 }

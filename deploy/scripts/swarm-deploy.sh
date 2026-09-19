@@ -13,6 +13,7 @@ set -a
 # shellcheck disable=SC1091
 source deploy/compose/.env
 set +a
+validate_compose_env
 
 : "${DATACRAFT_REGISTRY:?Set DATACRAFT_REGISTRY (e.g. registry.example.com:5000) in deploy/compose/.env}"
 

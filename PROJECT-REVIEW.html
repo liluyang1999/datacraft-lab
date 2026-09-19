@@ -209,46 +209,13 @@
     <strong>未以削弱或跳过测试的方式掩盖该问题。</strong>
   </div>
 
-  <h2>六、云服务决策：Cloudflare vs AWS</h2>
-  <p><strong>结论：由单台 AWS 小型虚拟机承载计算，前置 Cloudflare 免费层做 DNS、TLS 与安全访问。二者互补，而非二选一。</strong></p>
-  <p>
-    <strong>为何不能“纯 Cloudflare”：</strong>本项目需要常驻的有状态进程——Airflow 调度器 / API Server / DAG Processor / Triggerer、
-    PostgreSQL 元数据库，以及需要真实 CPU 与内存的 Spark 作业。而 Cloudflare 的 Workers、Pages、Durable Objects 面向
-    <em>短时、事件驱动的边缘计算</em>，并非为“常驻调度器 + 关系型数据库 + JVM 批处理”设计。因此 Cloudflare 不能充当本平台的计算宿主。
-  </p>
-  <h3>Cloudflare 的恰当用途（均在免费层）</h3>
-  <div class="table-wrap">
-  <table>
-    <thead><tr><th>能力</th><th>用途</th></tr></thead>
-    <tbody>
-      <tr><td>DNS + 代理</td><td>将域名指向虚拟机并隐藏源站 IP</td></tr>
-      <tr><td>Universal SSL</td><td>免费 TLS 终结，无需自行维护证书</td></tr>
-      <tr><td>Cloudflare Tunnel</td><td><strong>无需开放任何入站端口</strong>即可暴露 Airflow UI</td></tr>
-      <tr><td>Cloudflare Access</td><td>为 Airflow UI 提供免费 SSO / 邮箱鉴权（50 用户内）</td></tr>
-      <tr><td>DDoS / WAF</td><td>边缘侧基础防护</td></tr>
-    </tbody>
-  </table>
-  </div>
-  <h3>成本估算</h3>
-  <p>Airflow 3（LocalExecutor）+ Postgres + 本地 Spark 实际需要约 4 GB 内存；2 GB 在跑 Spark 作业时会吃紧。</p>
-  <div class="table-wrap">
-  <table>
-    <thead><tr><th>方案</th><th>规格</th><th>月度估算</th></tr></thead>
-    <tbody>
-      <tr><td>Lightsail</td><td>2 vCPU / 4 GB / 80 GB</td><td>约 US$24</td></tr>
-      <tr><td>EC2 <code>t4g.medium</code>（按需）</td><td>2 vCPU / 4 GB + 30 GB gp3</td><td>约 US$26</td></tr>
-      <tr><td>EC2 <code>t4g.medium</code> + 1 年节省计划</td><td>同上</td><td>约 US$17</td></tr>
-      <tr><td>Cloudflare（DNS / Tunnel / Access）</td><td>免费层</td><td>US$0</td></tr>
-      <tr><td><strong>单机合计</strong></td><td></td><td><strong>约 US$20–30</strong></td></tr>
-      <tr><td>Swarm 双节点</td><td>2 × <code>t4g.medium</code></td><td>约 US$45–60</td></tr>
-    </tbody>
-  </table>
-  </div>
-  <p class="sub">
-    以上为粗略估算而非报价，请以 AWS 与 Cloudflare 实时定价页为准。已排除的方案：
-    AWS MWAA（托管 Airflow，约 US$350+/月起，对个人严重过度）、AWS EMR（当前规模无需托管 Spark）、
-    Kubernetes / EKS（此规模下过度复杂）。部署脚本设计为<strong>云无关</strong>，任意 Linux 主机均可运行，不产生厂商锁定。
-  </p>
+  <h2>六、云服务决策（已更新）</h2>
+  <p>2026-09-19 已按东京、新加坡及按需/常开两种方式重新核对官方价格。
+  最新方案、计费条件、计算器与来源统一见
+  <a href="CLOUD-DEPLOYMENT-ANALYSIS.html">云部署与费用报告</a>。
+  本页旧估价和未经实测的内存下限已移除，不能再据此购买长期承诺套餐。</p>
+  <p>单机 Compose 是当前起点。Cloudflare 可提供访问与备份配套，Containers 并非当前持久化栈的直接替换。
+  镜像架构清单不等于 ARM 运行验收，当前完整容器运行证据为 Linux amd64。</p>
 
   <h2>七、部署拓扑</h2>
   <h3>单机起步（Docker Compose，推荐先行）</h3>
@@ -269,7 +236,7 @@
     作业规模增大后将 <code>DATACRAFT_SPARK_MASTER</code> 指向真实 Spark 集群。
   </p>
   <h3>快速开始</h3>
-<pre><code>cp deploy/compose/.env.example deploy/compose/.env   # 填入密钥后使用
+<pre><code>python3 deploy/scripts/deployment_env.py init   # 创建独立密钥，已有文件不会被覆盖
 bash deploy/scripts/build-images.sh                  # 构建镜像（容器内编译 jar）
 bash deploy/scripts/compose-up.sh                    # 启动单机栈
 # Airflow UI: http://&lt;host&gt;:8080    datacraft-api: http://&lt;host&gt;:8088/health</code></pre>
