@@ -31,13 +31,14 @@ bash deploy/scripts/compose-up.sh
 # The DAG processor serializes newly discovered DAGs asynchronously.
 ready=false
 for ((attempt=0; attempt<36; attempt++)); do
-  if "${compose[@]}" exec -T airflow-scheduler airflow dags unpause datacraft_engine_jobs >/dev/null 2>&1; then
+  if "${compose[@]}" exec -T airflow-scheduler airflow dags details --output json datacraft_engine_jobs >/dev/null 2>&1; then
     ready=true
     break
   fi
   sleep 5
 done
 [[ "$ready" == true ]] || { echo "Engine DAG was not registered." >&2; exit 1; }
+"${compose[@]}" exec -T airflow-scheduler airflow dags unpause datacraft_engine_jobs
 "${compose[@]}" exec -T airflow-scheduler airflow dags trigger --run-id cloud-smoke datacraft_engine_jobs
 success=false
 for ((attempt=0; attempt<60; attempt++)); do
