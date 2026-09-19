@@ -77,7 +77,7 @@ datacraft Airflow image, plus the datacraft JVM API**, with Airflow on **LocalEx
 # 0) Clone and enter the repo on the VM, then:
 cp deploy/compose/.env.example deploy/compose/.env
 # Edit deploy/compose/.env — set POSTGRES_PASSWORD, AIRFLOW_FERNET_KEY, AIRFLOW_API_SECRET_KEY,
-# AIRFLOW_ADMIN_PASSWORD. Generate secrets:
+# AIRFLOW_JWT_SECRET, AIRFLOW_ADMIN_PASSWORD. Generate separate secrets:
 python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"  # FERNET
 openssl rand -hex 32                                                                       # API secret
 
@@ -123,7 +123,9 @@ ports need to be open on the VM — the tunnel dials out to Cloudflare.
 
 Move to Swarm when task concurrency outgrows one VM, you want HA, or you want dedicated Spark
 capacity. Swarm adds **Redis** as the Celery broker and an **airflow-worker** service whose replicas
-spread across nodes (CeleryExecutor). State services (Postgres, Redis) are pinned to the manager.
+can scale with CeleryExecutor. The supplied local-volume stack pins stateful services and workers to
+`DATACRAFT_DATA_NODE` so file handoffs and database restarts stay on the same host. This default is
+not multi-host high availability. Configure shared data/log storage before spreading workers.
 
 ```bash
 # On the manager node:
@@ -133,6 +135,7 @@ docker swarm init                               # then `docker swarm join` on wo
 #   DATACRAFT_REGISTRY=registry.example.com:5000
 #   DATACRAFT_TAG=latest
 #   AIRFLOW_WORKER_REPLICAS=2
+#   DATACRAFT_DATA_NODE=<exact persistent node hostname>
 bash deploy/scripts/build-images.sh
 # Tag + push (example):
 docker tag datacraft/airflow:latest "$DATACRAFT_REGISTRY/datacraft-airflow:latest" && docker push "$_"
@@ -143,8 +146,8 @@ bash deploy/scripts/swarm-deploy.sh
 bash deploy/scripts/airflow-init.sh
 ```
 
-Production hardening for Swarm: replace node-local volumes with networked storage (NFS / AWS EBS
-multi-attach / EFS), use `docker secret` instead of `.env` for credentials, and run a real Spark
+Production hardening for Swarm: replace node-local volumes with shared file/object storage suitable
+for concurrent readers/writers (for example NFS/EFS), use `docker secret` instead of `.env` for credentials, and run a real Spark
 cluster (point `DATACRAFT_SPARK_MASTER` at it) instead of local Spark if jobs grow large.
 
 > Kubernetes/EKS is intentionally **not** used — it is overkill at this scale. Swarm is the right
@@ -164,16 +167,28 @@ the Spark runtime) for **local** mode. For a real cluster, set `DATACRAFT_SPARK_
 
 ## 6. Notes & known limitations
 
-- **Local JDK-25 on Windows**: `java.nio.channels.Selector.open()` fails on this machine, so the JDK
+- **Local JDK-25 on Windows**: `java.nio.channels.Selector.open()` fails on this machine's JDK 25.0.2, so the JDK
   HTTP-server tests and `serve-api` cannot run locally here. This is a JDK/OS issue, not a code
-  defect — it works on Linux (containers, CI). Build/test the rest with
-  `mvn -B -ntp verify`; the API is validated in CI and inside containers.
+  defect. Use Linux/WSL with JDK 25.0.3+ for the full `./mvnw verify` gate, including HTTP and Spark.
 - **Image tags**: `Dockerfile.airflow` pins `apache/airflow:3.3.1` and `Dockerfile.spark` pins
   `apache/spark:4.2.0-scala2.13-java25-python3-ubuntu`. Both tags were verified to exist, but
   re-check before building if you change versions.
 - **Metadata database**: Postgres 18 (Airflow 3.3.1 supports 14-18). A future Postgres major
   bump needs a `pg_dump`/restore, not just an image tag change.
-- **`docker compose config`**: CI validates both the Compose and the Swarm file on every push, so
+- **Postgres 18 volume layout**: fresh stacks mount `/var/lib/postgresql`; the image writes under
+  `/var/lib/postgresql/18/docker`. Existing volumes from the old `/var/lib/postgresql/data` mapping
+  require inspection and backup/restore before applying this change. Do not delete a volume or
+  assume changing the mount migrates data; this repository change does not migrate deployed data.
+- **Execution API**: set a nonempty independent `AIRFLOW_JWT_SECRET` in `.env`; all Airflow components
+  share it and use `http://airflow-apiserver:8080/execution/`. This is separate from the UI secret
+  `AIRFLOW_API_SECRET_KEY` and connection encryption key `AIRFLOW_FERNET_KEY`.
+- **Initialization**: `airflow-bootstrap.sh` performs both metadata/FAB migrations and checks whether
+  the admin user exists. Migration, lookup, or creation failures stop startup. Re-running preserves
+  an existing password; changing `.env` does not rotate it. In Swarm run `airflow-init.sh` on the data
+  host where the scheduler container runs.
+- **Engine API**: it has no authentication. Compose exposes port 8088 only on `127.0.0.1`; Swarm keeps
+  the service on its overlay network. Use an authenticated gateway for remote access.
+- **Configuration gates**: CI runs `docker compose config` and `docker stack config` on every push, so
   syntax and interpolation errors are caught automatically. Still re-run it locally after editing
   them, since Airflow occasionally renames components/flags between minors.
 - **Secrets**: `.env` is gitignored. Never commit real keys. For Swarm/production prefer

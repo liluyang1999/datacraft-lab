@@ -1,5 +1,6 @@
 package com.example.datacraft.io;
 
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
 
@@ -89,6 +90,17 @@ public final class LocalStorageService implements StorageService {
     Path resolved = root.resolve(path).normalize();
     if (!resolved.startsWith(root)) {
       throw new IllegalArgumentException("Storage path escapes root: " + path);
+    }
+    Path current = root;
+    if (Files.isSymbolicLink(current)) {
+      throw new IllegalArgumentException("Storage root must not be a symbolic link.");
+    }
+    for (Path segment : root.relativize(resolved)) {
+      current = current.resolve(segment);
+      if (Files.isSymbolicLink(current)) {
+        throw new IllegalArgumentException(
+            "Storage path must not traverse symbolic links: " + path);
+      }
     }
     return resolved;
   }

@@ -29,6 +29,7 @@ class CliParserSpec extends AnyFunSuite {
           command = "inspect",
           lifecycle = Lifecycle.PROD,
           master = "local[2]",
+          masterExplicit = true,
           port = 9090,
           parameters = Map("input" -> "data/raw", "format" -> "csv")
         )
@@ -38,5 +39,14 @@ class CliParserSpec extends AnyFunSuite {
 
   test("rejects parameters that are not key value pairs") {
     assert(CliParser.parseQuietly(Seq("--command", "inspect", "--param", "broken")).isEmpty)
+  }
+
+  test("invalid lifecycle is a parse error rather than an uncaught exception") {
+    assert(CliParser.parseQuietly(Seq("--command", "noop", "--lifecycle", "typo")).isEmpty)
+  }
+
+  test("rejects blank commands and masters") {
+    assert(CliParser.parseQuietly(Seq("--command", " ")).isEmpty)
+    assert(CliParser.parseQuietly(Seq("--command", "noop", "--master", " ")).isEmpty)
   }
 }

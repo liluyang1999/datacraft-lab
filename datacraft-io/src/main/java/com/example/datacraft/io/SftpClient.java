@@ -26,24 +26,46 @@ public final class SftpClient implements RemoteFileTransfer {
   }
 
   public static SftpClient connect(SftpConfig config) {
+    return connect(config, Path.of(System.getProperty("user.home"), ".ssh", "known_hosts"));
+  }
+
+  /** Uses an explicit trusted-hosts file; strict verification stays enabled by default. */
+  public static SftpClient connect(SftpConfig config, Path knownHosts) {
+    Session session = null;
+    ChannelSftp channel = null;
+    boolean connected = false;
     try {
       JSch jsch = new JSch();
+      if (config.strictHostKeyChecking()) {
+        jsch.setKnownHosts(knownHosts.toString());
+      }
       if (config.hasPrivateKey()) {
         jsch.addIdentity(config.privateKey().toString());
       }
 
-      Session session = jsch.getSession(config.username(), config.host(), config.port());
+      session = jsch.getSession(config.username(), config.host(), config.port());
       if (config.password() != null && !config.password().isBlank()) {
         session.setPassword(config.password());
       }
       session.setConfig(sessionConfig(config));
+      session.setTimeout(Math.toIntExact(config.timeout().toMillis()));
       session.connect(Math.toIntExact(config.timeout().toMillis()));
 
-      ChannelSftp channel = (ChannelSftp) session.openChannel("sftp");
+      channel = (ChannelSftp) session.openChannel("sftp");
       channel.connect(Math.toIntExact(config.timeout().toMillis()));
+      connected = true;
       return new SftpClient(session, channel);
     } catch (JSchException exception) {
       throw new DataCraftException("Failed to connect to SFTP host: " + config.host(), exception);
+    } finally {
+      if (!connected) {
+        if (channel != null) {
+          channel.disconnect();
+        }
+        if (session != null) {
+          session.disconnect();
+        }
+      }
     }
   }
 

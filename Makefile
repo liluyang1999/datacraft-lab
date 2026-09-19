@@ -33,8 +33,8 @@ down: ## Stop the single-host stack
 swarm: ## Deploy the multi-host stack (Docker Swarm)
 	bash deploy/scripts/swarm-deploy.sh
 
-dags: ## Syntax-check the Airflow DAGs
-	python -m py_compile orchestration/airflow/dags/*.py
+dags: ## Verify DAGs with real Airflow and providers installed
+	python -B -m unittest discover -s orchestration/airflow/tests -v
 
 clean: ## Remove build output
 	$(MVN) -B -ntp clean

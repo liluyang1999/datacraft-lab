@@ -24,7 +24,13 @@ object SparkSessions {
     }
 
   /** Opens a session for the duration of {@code f}, deterministically stopping it afterwards. */
-  def withSession[A](config: SparkRuntimeConfig)(f: SparkSession => A): A = {
+  def withSession[A](config: SparkRuntimeConfig)(f: SparkSession => A): A = synchronized {
+    // A process has one SparkContext. Concurrent HTTP jobs must not stop each other's context.
+    val existing = SparkSession.getActiveSession.orElse(SparkSession.getDefaultSession)
+    require(
+      existing.forall(_.sparkContext.isStopped),
+      "A managed Spark job requires exclusive session ownership"
+    )
     val session = create(config)
     try f(session)
     finally stop(session)

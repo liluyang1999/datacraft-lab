@@ -16,6 +16,85 @@ import org.junit.jupiter.api.Test;
 class EngineHttpServerTest {
 
   @Test
+  void rejectsInvalidRequestsWithoutDroppingTheConnection() throws Exception {
+    JobRegistry registry = new JobRegistry();
+    registry.register(new EchoJob());
+    try (EngineHttpServer server =
+            EngineHttpServer.start(EngineHttpServerConfig.localEphemeral(), registry);
+        HttpClient client = HttpClient.newHttpClient()) {
+      for (String path :
+          new String[] {
+            "/jobs/echo/runs?lifecycle=invalid",
+            "/jobs//runs",
+            "/jobs/runs",
+            "/jobs/echo/runs?message=%FF"
+          }) {
+        HttpResponse<String> response =
+            client.send(
+                HttpRequest.newBuilder(server.uri(path))
+                    .POST(HttpRequest.BodyPublishers.noBody())
+                    .build(),
+                HttpResponse.BodyHandlers.ofString());
+        assertEquals(400, response.statusCode(), path);
+      }
+      assertEquals(
+          404,
+          client
+              .send(
+                  HttpRequest.newBuilder(server.uri("/health/extra")).GET().build(),
+                  HttpResponse.BodyHandlers.ofString())
+              .statusCode());
+      assertEquals(
+          405,
+          client
+              .send(
+                  HttpRequest.newBuilder(server.uri("/jobs/echo/runs")).GET().build(),
+                  HttpResponse.BodyHandlers.ofString())
+              .statusCode());
+      assertEquals(
+          404,
+          client
+              .send(
+                  HttpRequest.newBuilder(server.uri("/jobs/missing/runs"))
+                      .POST(HttpRequest.BodyPublishers.noBody())
+                      .build(),
+                  HttpResponse.BodyHandlers.ofString())
+              .statusCode());
+    }
+  }
+
+  @Test
+  void decodesJobPathExactlyOnceAndKeepsPlusCharacters() throws Exception {
+    JobRegistry registry = new JobRegistry();
+    registry.register(
+        new DataJob() {
+          public String name() {
+            return "literal+%20";
+          }
+
+          public String description() {
+            return "path decoding regression";
+          }
+
+          public JobExecutionResult run(JobExecutionRequest request) {
+            return JobExecutionResult.success(
+                name(), "ok", request.startedAt(), request.startedAt());
+          }
+        });
+    try (EngineHttpServer server =
+            EngineHttpServer.start(EngineHttpServerConfig.localEphemeral(), registry);
+        HttpClient client = HttpClient.newHttpClient()) {
+      HttpResponse<String> response =
+          client.send(
+              HttpRequest.newBuilder(server.uri("/jobs/literal+%2520/runs"))
+                  .POST(HttpRequest.BodyPublishers.noBody())
+                  .build(),
+              HttpResponse.BodyHandlers.ofString());
+      assertEquals(200, response.statusCode());
+    }
+  }
+
+  @Test
   void exposesHealthJobsAndRunEndpoints() throws Exception {
     JobRegistry registry = new JobRegistry();
     registry.register(new EchoJob());

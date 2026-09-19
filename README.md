@@ -32,7 +32,7 @@ The cloud vendor evaluation, cost estimates and decision tree are in [`CLOUD-DEP
   `D:\Java`. Use **25.0.3 or newer**: Spark 4.2.0 deprecates Java 25 releases older than 25.0.3.
 - **Maven 3.9+** (or the bundled `mvnw`/`mvnw.cmd`).
 - **Docker Engine + Compose v2** — only for the container deployment (not required to build/test).
-- **Python 3.10+** — only to syntax-check the Airflow DAGs locally.
+- **Python 3.12 on Linux/WSL** — for Airflow contract and full pipeline tests.
 
 On Windows, set `JAVA_HOME` before invoking Maven if it is not already configured:
 
@@ -70,6 +70,12 @@ java -jar $jar --command serve-api --host 0.0.0.0 --port 8080
 
 `--param key=value` is repeatable; `--config path.properties` merges a properties file into the job
 parameters (CLI params win). Exit codes: `0` success, `1` job failed, `2` unknown command / bad args.
+An explicit `--master` overrides the config file; `--param spark.master=…` overrides both. `--json`
+prints the result and metrics as JSON; `--result-file path` writes that same result to a caller-owned
+file for orchestration. Empty parameter values are allowed.
+
+Data contracts and verification commands: [`docs/data-processing.md`](docs/data-processing.md).
+Latest review evidence: [`2026-09-19 review`](docs/engineering-report/2026-09-19-review.md).
 
 ### Spark jobs run via `spark-submit`
 

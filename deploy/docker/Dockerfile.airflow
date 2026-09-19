@@ -32,13 +32,17 @@ USER airflow
 
 # --- Python deps: providers + pyspark (spark-submit lives under the pyspark package) ---
 COPY orchestration/airflow/requirements.txt /tmp/requirements.txt
-RUN pip install --no-cache-dir "pyspark==${SPARK_VERSION}" -r /tmp/requirements.txt
+RUN pip install --no-cache-dir "apache-airflow==${AIRFLOW_VERSION}" -r /tmp/requirements.txt \
+      --constraint "https://raw.githubusercontent.com/apache/airflow/constraints-${AIRFLOW_VERSION}/constraints-$(python -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")').txt" \
+    && pip install --no-cache-dir "apache-airflow==${AIRFLOW_VERSION}" "pyspark==${SPARK_VERSION}" \
+    && pip check
 
 # pyspark ships spark-submit under its package bin/. Resolve that path instead of hardcoding a
 # Python minor version, so the image keeps working when the Airflow base image bumps Python.
 RUN python -c 'import pathlib, pyspark; print(pathlib.Path(pyspark.__file__).parent)' > /tmp/pyspark_home
 USER root
 RUN ln -sfn "$(cat /tmp/pyspark_home)" /opt/pyspark && rm /tmp/pyspark_home
+COPY --chmod=755 deploy/scripts/airflow-bootstrap.sh /opt/datacraft/airflow-bootstrap.sh
 USER airflow
 ENV SPARK_HOME=/opt/pyspark
 ENV PATH="${SPARK_HOME}/bin:${PATH}"

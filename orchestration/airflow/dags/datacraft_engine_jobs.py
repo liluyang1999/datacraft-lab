@@ -5,7 +5,7 @@ Use this to verify a fresh deployment: it runs ``noop`` then ``echo`` and should
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timezone
 
 try:  # Airflow 3.x
     from airflow.sdk import DAG
@@ -17,7 +17,8 @@ from datacraft_common import DEFAULT_ARGS, cli_task
 with DAG(
     dag_id="datacraft_engine_jobs",
     description="Runs the built-in echo and noop engine jobs to verify the platform.",
-    start_date=datetime(2026, 1, 1),
+    start_date=datetime(2026, 1, 1, tzinfo=timezone.utc),
+    max_active_runs=1,
     schedule=None,
     catchup=False,
     default_args=DEFAULT_ARGS,

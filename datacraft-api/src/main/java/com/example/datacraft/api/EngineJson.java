@@ -9,7 +9,7 @@ import java.util.List;
 import java.util.Map;
 
 /** Serialises engine domain objects into the JSON responses exposed by the HTTP API. */
-final class EngineJson {
+public final class EngineJson {
 
   private static final ObjectMapper MAPPER = new ObjectMapper();
 
@@ -33,7 +33,7 @@ final class EngineJson {
     return write(new JobsView(views));
   }
 
-  static String result(JobExecutionResult result) {
+  public static String result(JobExecutionResult result) {
     return write(
         new ResultView(
             result.jobName(), result.status().name(), result.message(), result.metrics()));

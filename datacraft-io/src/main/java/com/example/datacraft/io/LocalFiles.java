@@ -2,6 +2,7 @@ package com.example.datacraft.io;
 
 import com.example.datacraft.common.DataCraftException;
 import java.io.IOException;
+import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -89,9 +90,16 @@ public final class LocalFiles {
   }
 
   public static String sha256Hex(Path file) {
-    try {
+    try (InputStream input = Files.newInputStream(file)) {
       MessageDigest digest = MessageDigest.getInstance("SHA-256");
-      return HexFormat.of().formatHex(digest.digest(readBytes(file)));
+      byte[] buffer = new byte[64 * 1024];
+      int size;
+      while ((size = input.read(buffer)) != -1) {
+        digest.update(buffer, 0, size);
+      }
+      return HexFormat.of().formatHex(digest.digest());
+    } catch (IOException exception) {
+      throw new DataCraftException("Failed to hash file: " + file, exception);
     } catch (NoSuchAlgorithmException exception) {
       throw new DataCraftException("SHA-256 digest algorithm is unavailable.", exception);
     }
@@ -165,7 +173,7 @@ public final class LocalFiles {
 
   /** Recursively deletes a file or directory tree; a no-op when the path does not exist. */
   public static void deleteRecursively(Path path) {
-    if (!Files.exists(path)) {
+    if (!Files.exists(path, java.nio.file.LinkOption.NOFOLLOW_LINKS)) {
       return;
     }
     try (Stream<Path> paths = Files.walk(path)) {

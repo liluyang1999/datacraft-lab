@@ -72,7 +72,9 @@ The API is intentionally thin (JDK HTTP server, virtual-thread executor, Jackson
 ## Deployment topology
 
 Single host (Compose, LocalExecutor) first; multi-host (Swarm, CeleryExecutor + Redis) when one host
-is no longer enough. Full reasoning, cost, and steps:
+is no longer enough. The supplied Swarm stack pins stateful services and workers to one explicit
+data node because its volumes are local. Configure shared storage before spreading workers.
+Full reasoning, cost, and steps:
 [`deployment/cloud-and-deployment.md`](deployment/cloud-and-deployment.md).
 
 ## Package convention
@@ -85,5 +87,7 @@ All JVM code uses base package `com.example.datacraft` plus the module name (`.c
 The parent POM centralizes compiler, formatter (Spotless: google-java-format + scalafmt),
 Checkstyle, Enforcer, and test plugin configuration. Module POMs declare only their dependencies and
 packaging needs. CI runs `mvn verify` on JDK 25 (including a Spark suite that boots a real
-SparkSession), a runnable-jar smoke test, a DAG syntax check, deployment-script linting, and
-Compose/Swarm validation.
+SparkSession), a runnable-jar smoke test, real Airflow parsing and operator contract tests,
+full DAG execution including SFTP and repeat ETL runs, deployment-script linting and initializer
+failure tests, native Compose/Swarm validation, and actual runtime image builds and smoke tests.
+See [data contracts](data-processing.md) and the [review record](engineering-report/2026-09-19-review.md).

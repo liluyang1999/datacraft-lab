@@ -11,7 +11,10 @@ final case class CommandLineArgs(
     host: String = "127.0.0.1",
     port: Int = 8080,
     configFile: Option[Path] = None,
-    parameters: Map[String, String] = Map.empty
+    parameters: Map[String, String] = Map.empty,
+    masterExplicit: Boolean = false,
+    jsonOutput: Boolean = false,
+    resultFile: Option[Path] = None
 ) {
 
   def appName: String = s"${AppInfo.DEFAULT_APP_NAME}-$command"

@@ -8,6 +8,51 @@ import org.scalatest.funsuite.AnyFunSuite
 
 class RunnerSpec extends AnyFunSuite {
 
+  test("explicit CLI master overrides config while explicit job parameters take precedence") {
+    val file = java.nio.file.Files.createTempFile("datacraft-config-", ".properties")
+    try {
+      java.nio.file.Files.writeString(file, "spark.master=local[3]\n")
+      val defaults = CommandLineArgs(configFile = Some(file))
+      assert(Runner.buildRequest(defaults, "noop").parameters().get("spark.master") == "local[3]")
+      assert(
+        Runner
+          .buildRequest(defaults.copy(master = "local[*]", masterExplicit = true), "noop")
+          .parameters()
+          .get("spark.master") == "local[*]"
+      )
+      assert(
+        Runner
+          .buildRequest(
+            defaults.copy(master = "local[2]", parameters = Map("spark.master" -> "local[4]")),
+            "noop"
+          )
+          .parameters()
+          .get("spark.master") == "local[4]"
+      )
+    } finally java.nio.file.Files.deleteIfExists(file)
+  }
+
+  test("structured output and result file contain the same job metrics") {
+    val file   = java.nio.file.Files.createTempFile("datacraft-result-", ".json")
+    val output = new ByteArrayOutputStream()
+    try {
+      Console.withOut(output) {
+        Runner.run(
+          CommandLineArgs(
+            command = "echo",
+            jsonOutput = true,
+            resultFile = Some(file),
+            parameters = Map("message" -> "a\"b\n中文")
+          )
+        )
+      }
+      val json = output.toString(StandardCharsets.UTF_8)
+      assert(json == java.nio.file.Files.readString(file))
+      assert(json.contains("\"status\":\"SUCCEEDED\""))
+      assert(json.contains("durationMillis"))
+    } finally java.nio.file.Files.deleteIfExists(file)
+  }
+
   test("runner executes built-in engine jobs by command name") {
     val output = new ByteArrayOutputStream()
 

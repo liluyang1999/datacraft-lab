@@ -11,3 +11,5 @@ apache-airflow-providers-standard
 apache-airflow-providers-sftp
 # FAB auth manager provides the username/password UI login used by the deployment compose.
 apache-airflow-providers-fab
+apache-airflow-providers-celery
+apache-airflow-providers-postgres

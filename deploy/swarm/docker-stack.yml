@@ -1,16 +1,14 @@
 # datacraft-lab — multi-host deployment (Docker Swarm, Airflow 3.x, CeleryExecutor).
 #
-# Scales out from the single-host Compose file: Redis is added as the Celery broker and an
-# airflow-worker service runs task instances across worker nodes. State services (Postgres, Redis)
-# are pinned to the manager; stateless Airflow components and workers spread across the swarm.
+# Adds Redis and Celery workers to the single-host topology. Services sharing node-local data
+# are pinned to DATACRAFT_DATA_NODE; use shared storage before distributing them across nodes.
 #
 # Swarm stacks cannot `build:` or read `.env` automatically — images must be pre-built and pushed to
-# a registry, and variables exported into the shell. Use deploy/scripts/swarm-deploy.sh, which does
-# both. Replace node-local volumes with networked storage (NFS/EBS) for real multi-node durability.
+# a registry, and variables exported into the shell. Build/push the images first, then use
+# deploy/scripts/swarm-deploy.sh to load the environment and deploy the stack.
 #
 # Deploy (from repo root, on a swarm manager):
-#   export $(grep -v '^#' deploy/compose/.env | xargs)    # or: bash deploy/scripts/swarm-deploy.sh
-#   docker stack deploy -c deploy/swarm/docker-stack.yml datacraft
+#   bash deploy/scripts/swarm-deploy.sh
 
 x-airflow-common: &airflow-common
   image: ${DATACRAFT_REGISTRY:-localhost:5000}/datacraft-airflow:${DATACRAFT_TAG:-latest}
@@ -25,6 +23,10 @@ x-airflow-common: &airflow-common
     AIRFLOW__CORE__FERNET_KEY: ${AIRFLOW_FERNET_KEY:-}
     AIRFLOW__CORE__LOAD_EXAMPLES: "false"
     AIRFLOW__API__SECRET_KEY: ${AIRFLOW_API_SECRET_KEY:-please-change-me}
+    AIRFLOW__API_AUTH__JWT_SECRET: ${AIRFLOW_JWT_SECRET:?Set AIRFLOW_JWT_SECRET in .env}
+    AIRFLOW__CORE__EXECUTION_API_SERVER_URL: http://airflow-apiserver:8080/execution/
+    AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION: "true"
+    AIRFLOW__CELERY__WORKER_CONCURRENCY: ${AIRFLOW_WORKER_CONCURRENCY:-1}
     DATACRAFT_HOME: /opt/datacraft
     DATACRAFT_CLI_JAR: /opt/datacraft/datacraft-cli.jar
     DATACRAFT_SPARK_MASTER: ${DATACRAFT_SPARK_MASTER:-local[*]}
@@ -42,13 +44,13 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-airflow}
       POSTGRES_DB: ${POSTGRES_DB:-airflow}
     volumes:
-      - postgres-db:/var/lib/postgresql/data
+      - postgres-db:/var/lib/postgresql
     networks:
       - datacraft-net
     deploy:
       replicas: 1
       placement:
-        constraints: [node.role == manager]
+        constraints: ["node.hostname == ${DATACRAFT_DATA_NODE:?Set the persistent data hostname}"]
 
   redis:
     image: redis:8
@@ -57,7 +59,7 @@ services:
     deploy:
       replicas: 1
       placement:
-        constraints: [node.role == manager]
+        constraints: ["node.hostname == ${DATACRAFT_DATA_NODE:?Set the persistent data hostname}"]
 
   airflow-apiserver:
     <<: *airflow-common
@@ -67,37 +69,44 @@ services:
     deploy:
       replicas: 1
       placement:
-        constraints: [node.role == manager]
+        constraints: ["node.hostname == ${DATACRAFT_DATA_NODE:?Set the persistent data hostname}"]
 
   airflow-scheduler:
     <<: *airflow-common
     command: scheduler
     deploy:
       replicas: 1
+      placement:
+        constraints: ["node.hostname == ${DATACRAFT_DATA_NODE:?Set the persistent data hostname}"]
 
   airflow-dag-processor:
     <<: *airflow-common
     command: dag-processor
     deploy:
       replicas: 1
+      placement:
+        constraints: ["node.hostname == ${DATACRAFT_DATA_NODE:?Set the persistent data hostname}"]
 
   airflow-triggerer:
     <<: *airflow-common
     command: triggerer
     deploy:
       replicas: 1
+      placement:
+        constraints: ["node.hostname == ${DATACRAFT_DATA_NODE:?Set the persistent data hostname}"]
 
-  # Celery workers execute task instances; scale across nodes by raising replicas.
+  # Local-volume handoffs require the same host. Use shared storage before spreading workers.
   airflow-worker:
     <<: *airflow-common
     command: celery worker
     deploy:
       replicas: ${AIRFLOW_WORKER_REPLICAS:-2}
+      placement:
+        constraints: ["node.hostname == ${DATACRAFT_DATA_NODE:?Set the persistent data hostname}"]
 
   datacraft-api:
     image: ${DATACRAFT_REGISTRY:-localhost:5000}/datacraft-jvm:${DATACRAFT_TAG:-latest}
-    ports:
-      - "${DATACRAFT_API_PORT:-8088}:8080"
+    # The unauthenticated engine API is overlay-only; expose it through an authenticated gateway.
     networks:
       - datacraft-net
     deploy:

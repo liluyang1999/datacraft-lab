@@ -27,6 +27,8 @@ x-airflow-common: &airflow-common
     AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION: "true"
     AIRFLOW__CORE__LOAD_EXAMPLES: "false"
     AIRFLOW__API__SECRET_KEY: ${AIRFLOW_API_SECRET_KEY:-please-change-me}
+    AIRFLOW__API_AUTH__JWT_SECRET: ${AIRFLOW_JWT_SECRET:?Set AIRFLOW_JWT_SECRET in .env}
+    AIRFLOW__CORE__EXECUTION_API_SERVER_URL: http://airflow-apiserver:8080/execution/
     DATACRAFT_HOME: /opt/datacraft
     DATACRAFT_CLI_JAR: /opt/datacraft/datacraft-cli.jar
     DATACRAFT_SPARK_MASTER: ${DATACRAFT_SPARK_MASTER:-local[*]}
@@ -48,9 +50,9 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-airflow}
       POSTGRES_DB: ${POSTGRES_DB:-airflow}
     volumes:
-      - postgres-db:/var/lib/postgresql/data
+      - postgres-db:/var/lib/postgresql
     healthcheck:
-      test: ["CMD", "pg_isready", "-U", "${POSTGRES_USER:-airflow}"]
+      test: ["CMD", "pg_isready", "-U", "${POSTGRES_USER:-airflow}", "-d", "${POSTGRES_DB:-airflow}"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -59,21 +61,9 @@ services:
   # One-shot: migrate the metadata DB and create the admin user, then exit.
   airflow-init:
     <<: *airflow-common
-    entrypoint: /bin/bash
-    command:
-      - -c
-      - |
-        set -e
-        airflow db migrate
-        # The FAB auth manager keeps its user/role tables in a separate schema, so this second
-        # migration is required before `airflow users create` can work.
-        airflow fab-db migrate
-        airflow users create \
-          --username "${AIRFLOW_ADMIN_USERNAME:-admin}" \
-          --password "${AIRFLOW_ADMIN_PASSWORD:-admin}" \
-          --firstname Data --lastname Craft --role Admin \
-          --email "${AIRFLOW_ADMIN_EMAIL:-admin@example.com}" || true
-    restart: on-failure
+    entrypoint: /opt/datacraft/airflow-bootstrap.sh
+    command: []
+    restart: "no"
 
   airflow-apiserver:
     <<: *airflow-common
@@ -81,7 +71,7 @@ services:
     ports:
       - "${AIRFLOW_WEB_PORT:-8080}:8080"
     healthcheck:
-      test: ["CMD", "curl", "--fail", "http://localhost:8080/api/v2/version"]
+      test: ["CMD", "curl", "--fail", "http://localhost:8080/api/v2/monitor/health"]
       interval: 30s
       timeout: 10s
       retries: 5
@@ -125,7 +115,7 @@ services:
       context: ../..
       dockerfile: deploy/docker/Dockerfile.jvm
     ports:
-      - "${DATACRAFT_API_PORT:-8088}:8080"
+      - "127.0.0.1:${DATACRAFT_API_PORT:-8088}:8080"
     restart: unless-stopped
 
 volumes:

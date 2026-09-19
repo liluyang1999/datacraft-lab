@@ -12,6 +12,24 @@ import org.junit.jupiter.api.Test;
 class SftpConfigTest {
 
   @Test
+  void validatesTheMillisecondTimeoutRangeAndRedactsPasswords() {
+    assertThrows(
+        IllegalArgumentException.class,
+        () ->
+            new SftpConfig(
+                "host", 22, "user", "sensitive-test-value", null, true, Duration.ofNanos(1)));
+    assertThrows(
+        IllegalArgumentException.class,
+        () ->
+            new SftpConfig(
+                "host", 22, "user", "sensitive-test-value", null, true, Duration.ofDays(100)));
+    assertFalse(
+        SftpConfig.passwordAuth("host", "user", "sensitive-test-value")
+            .toString()
+            .contains("sensitive-test-value"));
+  }
+
+  @Test
   void buildsPasswordConfigurationWithSafeDefaults() {
     SftpConfig config = SftpConfig.passwordAuth("example.com", "data-user", "secret");
 

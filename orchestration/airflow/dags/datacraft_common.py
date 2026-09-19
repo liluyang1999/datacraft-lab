@@ -1,22 +1,15 @@
-"""Reusable building blocks for datacraft-lab Airflow DAGs.
-
-Targets Apache Airflow 3.x (the ``airflow.sdk`` / standard-provider API) and degrades gracefully to
-Airflow 2.x imports so the DAGs still parse in an older local install.
-
-Design intent: DAGs orchestrate *built artifacts* (the ``datacraft-cli`` jar) and environment, never
-duplicating JVM business logic. All wiring is driven from environment variables (12-factor) so the
-same DAGs run unchanged on a laptop, a single Compose host, or a Swarm cluster.
-"""
+"""Airflow launches JVM artifacts; templated values travel as literal argv via env."""
 
 from __future__ import annotations
 
+import json
 import os
+import re
+import shlex
+from collections.abc import Mapping, Sequence
 from datetime import timedelta
 
-try:  # Airflow 3.x
-    from airflow.providers.standard.operators.bash import BashOperator
-except ImportError:  # Airflow 2.x fallback
-    from airflow.operators.bash import BashOperator
+from airflow.providers.standard.operators.bash import BashOperator
 
 
 # --- Configuration resolved from the environment, with laptop-friendly defaults ---------------
@@ -27,48 +20,81 @@ SPARK_SUBMIT = os.environ.get("DATACRAFT_SPARK_SUBMIT", "spark-submit")
 SPARK_MASTER = os.environ.get("DATACRAFT_SPARK_MASTER", "local[*]")
 MAIN_CLASS = "com.example.datacraft.cli.Runner"
 
+def _env_int(name: str, default: int, minimum: int) -> int:
+    value = int(os.environ.get(name, str(default)))
+    if value < minimum:
+        raise ValueError(f"{name} must be at least {minimum}")
+    return value
+
+
 DEFAULT_ARGS = {
     "owner": "datacraft",
-    "retries": int(os.environ.get("DATACRAFT_TASK_RETRIES", "1")),
+    "retries": _env_int("DATACRAFT_TASK_RETRIES", 1, 0),
     "retry_delay": timedelta(minutes=2),
+    "retry_exponential_backoff": True,
+    "max_retry_delay": timedelta(minutes=10),
+    "execution_timeout": timedelta(minutes=_env_int("DATACRAFT_TASK_TIMEOUT_MINUTES", 60, 1)),
 }
 
 
-def _shell_quote(value) -> str:
-    """POSIX single-quote escaping for a value interpolated into a bash command."""
-    text = str(value)
-    quote = "'"
-    escaped = text.replace(quote, quote + chr(92) + quote + quote)
-    return quote + escaped + quote
+def _extra_tokens(value: str | Sequence[str]) -> list[str]:
+    # Legacy strings are tokenized once, never evaluated as shell code.
+    return shlex.split(value) if isinstance(value, str) else list(value)
 
 
-def _params_to_args(params) -> str:
-    if not params:
-        return ""
-    return " ".join(f"--param {key}={_shell_quote(value)}" for key, value in params.items())
+def _param_tokens(params: Mapping[str, str] | None) -> list[str]:
+    result = []
+    for key, value in (params or {}).items():
+        if not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_.-]*", key):
+            raise ValueError(f"Invalid job parameter key: {key!r}")
+        result.extend(("--param", f"{key}={value}"))
+    return result
 
 
-def cli_task(task_id, command, *, params=None, lifecycle="dev", extra_args="", **kwargs):
-    """BashOperator running a non-Spark engine command through the plain CLI jar."""
-    bash_command = (
-        f'"{JAVA_BIN}" -jar "{CLI_JAR}" '
-        f"--command {command} --lifecycle {lifecycle} "
-        f"{_params_to_args(params)} {extra_args}"
-    ).strip()
-    return BashOperator(task_id=task_id, bash_command=bash_command, **kwargs)
+def _task(task_id: str, argv: list[str], *, structured=False, **kwargs) -> BashOperator:
+    env = dict(kwargs.pop("env", None) or {})
+    if any(key.startswith("_DATACRAFT_ARG_") for key in env):
+        raise ValueError("_DATACRAFT_ARG_ environment names are reserved")
+    references = []
+    for index, value in enumerate(argv):
+        if "\0" in str(value):
+            raise ValueError("Command arguments must not contain NUL")
+        key = f"_DATACRAFT_ARG_{index}"
+        env[key] = str(value)
+        references.append(f'"${{{key}}}"')
+    kwargs.setdefault("append_env", True)
+    kwargs.setdefault("do_xcom_push", False)
+    kwargs.setdefault("skip_on_exit_code", None)
+    command = " ".join(references)
+    if structured:
+        # Spark shutdown hooks write logs after Runner returns. A dedicated result file prevents
+        # those lines from replacing the JSON value that BashOperator pushes to XCom.
+        command = (
+            "set -euo pipefail\n"
+            "result_file=$(mktemp)\n"
+            "trap 'rm -f -- \"$result_file\"' EXIT\n"
+            + command + ' --result-file "$result_file"\n'
+            + 'cat -- "$result_file"'
+        )
+    else:
+        command = "exec " + command
+    return BashOperator(task_id=task_id, bash_command=command, env=env, **kwargs)
 
 
-def spark_task(task_id, command, *, params=None, lifecycle="dev", master=None, extra_conf="", **kwargs):
-    """BashOperator running a Spark engine job through ``spark-submit``.
+def cli_task(task_id, command, *, params=None, lifecycle="dev", extra_args=(), **kwargs):
+    """Run a non-Spark job. Extra args are argv tokens (legacy strings use shlex.split)."""
+    return _task(task_id, [JAVA_BIN, "-jar", CLI_JAR, "--command", command, "--lifecycle", lifecycle]
+                 + _param_tokens(params) + _extra_tokens(extra_args), **kwargs)
 
-    The same master is passed to both ``spark-submit`` and the CLI so the session the job opens
-    matches the cluster spark-submit targets.
-    """
-    effective_master = master or SPARK_MASTER
-    bash_command = (
-        f'"{SPARK_SUBMIT}" --master {effective_master} --class {MAIN_CLASS} {extra_conf} '
-        f'"{CLI_JAR}" '
-        f"--command {command} --lifecycle {lifecycle} --master {effective_master} "
-        f"{_params_to_args(params)}"
-    ).strip()
-    return BashOperator(task_id=task_id, bash_command=bash_command, **kwargs)
+
+def spark_task(task_id, command, *, params=None, lifecycle="dev", master=None, extra_conf=(), **kwargs):
+    """Run Spark with identical launcher/session masters and structured result XCom."""
+    effective_master = SPARK_MASTER if master is None else master
+    if params and "spark.master" in params and params["spark.master"] != effective_master:
+        raise ValueError("spark.master must match the spark-submit master")
+    kwargs.setdefault("do_xcom_push", True)
+    kwargs.setdefault("output_processor", json.loads)
+    return _task(task_id, [SPARK_SUBMIT, "--master", effective_master, "--class", MAIN_CLASS]
+                 + _extra_tokens(extra_conf)
+                 + [CLI_JAR, "--command", command, "--lifecycle", lifecycle, "--master", effective_master, "--json"]
+                 + _param_tokens(params), structured=True, **kwargs)

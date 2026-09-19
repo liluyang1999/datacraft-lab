@@ -29,8 +29,11 @@ public record SftpConfig(
     if ((password == null || password.isBlank()) && privateKey == null) {
       throw new IllegalArgumentException("SFTP password or private key must be provided.");
     }
-    if (timeout == null || timeout.isNegative() || timeout.isZero()) {
-      throw new IllegalArgumentException("SFTP timeout must be positive.");
+    if (timeout == null
+        || timeout.compareTo(Duration.ofMillis(1)) < 0
+        || timeout.compareTo(Duration.ofMillis(Integer.MAX_VALUE)) > 0) {
+      throw new IllegalArgumentException(
+          "SFTP timeout must be between 1 and 2147483647 milliseconds.");
     }
   }
 
@@ -71,6 +74,23 @@ public record SftpConfig(
 
   public boolean hasPrivateKey() {
     return privateKey != null;
+  }
+
+  @Override
+  public String toString() {
+    return "SftpConfig[host="
+        + host
+        + ", port="
+        + port
+        + ", username="
+        + username
+        + ", password=<redacted>, hasPrivateKey="
+        + hasPrivateKey()
+        + ", strictHostKeyChecking="
+        + strictHostKeyChecking
+        + ", timeout="
+        + timeout
+        + "]";
   }
 
   private static int parseInt(String value, int defaultValue) {

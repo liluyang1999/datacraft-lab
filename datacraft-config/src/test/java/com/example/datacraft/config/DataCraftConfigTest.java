@@ -13,6 +13,12 @@ import org.junit.jupiter.api.io.TempDir;
 
 class DataCraftConfigTest {
 
+  @Test
+  void rejectsMistypedBooleans() {
+    DataCraftConfig config = DataCraftConfig.fromMap(Map.of("enabled", "treu"));
+    assertThrows(DataCraftException.class, () -> config.getBoolean("enabled", false));
+  }
+
   @TempDir Path tempDir;
 
   @Test

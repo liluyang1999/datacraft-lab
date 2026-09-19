@@ -6,6 +6,25 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Data processing and orchestration review (2026-09-19)
+- CSV parsing now preserves quoted empty records and UTF-8 BOM input and rejects malformed quoting.
+- Spark CSV conversion supports explicit DDL schemas, strict parsing, RFC quoting and multiline
+  records. It validates/cache-materializes input before writing, rejects overlapping paths, and
+  reports accurate ignore/append metrics. Row counting supports `expectedRows` as a failing quality
+  gate. Managed sessions cannot stop another owner, and checked Scala exceptions become failed jobs.
+- Airflow uses literal argument environments, task deadlines, bounded retries and one active DAG
+  run; missing SFTP providers fail visibly. Structured CLI result files carry counts through XCom
+  and are cleaned after tasks. Added real provider, shell, initializer and full DAG smoke coverage.
+- HTTP invalid requests return JSON errors rather than disconnecting; job paths decode once. CLI
+  validates arguments, honors explicit master precedence and exports JSON results.
+- Local storage rejects symlink traversal, hashing uses bounded memory, and SFTP validates timeout
+  limits, supports known-hosts files, closes failed connections and redacts config passwords.
+- Deployment shares the Airflow execution API/JWT configuration, uses constrained providers, fails
+  visibly on initialization errors and uses the PostgreSQL 18 volume layout. Local-volume Swarm
+  services require a fixed data node; the unauthenticated engine API is no longer published remotely.
+- Existing deployments must review the volume-layout and network-access notes before applying the
+  updated definitions. No automatic database migration or production deployment is performed.
+
 ### Added
 - **IO ports & helpers**: `RemoteFileTransfer` port with a full-featured `SftpClient`
   (streams, `list`/`exists`/`size`/`mkdirs`/`delete`/`rename`), `SftpConfig.fromProperties`,

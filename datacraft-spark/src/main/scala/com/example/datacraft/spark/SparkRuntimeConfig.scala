@@ -52,6 +52,6 @@ object SparkRuntimeConfig {
         .map(_.trim.toInt)
         .getOrElse(DefaultShufflePartitions),
       enableHiveSupport =
-        parameters.get(ParameterKeys.SPARK_ENABLE_HIVE).exists(_.trim.equalsIgnoreCase("true"))
+        CsvReadOptions.boolean(parameters, ParameterKeys.SPARK_ENABLE_HIVE, default = false)
     )
 }

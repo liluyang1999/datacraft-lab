@@ -2,6 +2,8 @@
 .git/
 .github/
 **/target/
+.venv/
+**/__pycache__/
 .idea/
 *.iml
 *.ipr

@@ -79,6 +79,9 @@ public final class DataCraftConfig {
 
   public boolean getBoolean(String key, boolean defaultValue) {
     String value = getOrDefault(key, Boolean.toString(defaultValue));
+    if (!value.equalsIgnoreCase("true") && !value.equalsIgnoreCase("false")) {
+      throw new DataCraftException("Configuration key must be true or false: " + key);
+    }
     return Boolean.parseBoolean(value);
   }
 

@@ -1,6 +1,6 @@
 package com.example.datacraft.cli
 
-import com.example.datacraft.api.{EngineHttpServer, EngineHttpServerConfig}
+import com.example.datacraft.api.{EngineHttpServer, EngineHttpServerConfig, EngineJson}
 import com.example.datacraft.config.DataCraftConfig
 import com.example.datacraft.engine.{
   BuiltInJobs,
@@ -11,6 +11,7 @@ import com.example.datacraft.engine.{
   ParameterKeys
 }
 import com.example.datacraft.spark.SparkJobs
+import com.example.datacraft.io.LocalFiles
 
 import scala.jdk.CollectionConverters._
 
@@ -43,7 +44,11 @@ object Runner {
           sys.exit(2)
         }
         val result = new JobExecutionEngine(catalog).execute(buildRequest(args, jobName))
-        println(s"${result.jobName()} ${result.status()} ${result.message()}")
+        args.resultFile.foreach(path =>
+          LocalFiles.writeUtf8String(path, EngineJson.result(result) + "\n")
+        )
+        if (args.jsonOutput) println(EngineJson.result(result))
+        else println(s"${result.jobName()} ${result.status()} ${result.message()}")
         if (result.status() != JobStatus.SUCCEEDED) {
           sys.exit(1)
         }
@@ -58,13 +63,18 @@ object Runner {
     SparkJobs.register(BuiltInJobs.registry())
 
   /** Merges config-file entries (lowest precedence) with CLI parameters and the Spark master. */
-  private def buildRequest(args: CommandLineArgs, jobName: String): JobExecutionRequest = {
+  private[cli] def buildRequest(args: CommandLineArgs, jobName: String): JobExecutionRequest = {
     val configParameters: Map[String, String] =
       args.configFile.fold(Map.empty[String, String])(path =>
         DataCraftConfig.load(path).asMap().asScala.toMap
       )
-    val merged =
-      Map(ParameterKeys.SPARK_MASTER -> args.master) ++ configParameters ++ args.parameters
+    val explicitMaster =
+      if (args.masterExplicit || args.master != "local[*]")
+        Map(ParameterKeys.SPARK_MASTER -> args.master)
+      else Map.empty[String, String]
+    val merged = Map(
+      ParameterKeys.SPARK_MASTER -> args.master
+    ) ++ configParameters ++ explicitMaster ++ args.parameters
     JobExecutionRequest.of(jobName, args.lifecycle, merged.asJava)
   }
 }

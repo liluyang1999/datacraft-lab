@@ -45,6 +45,16 @@ public final class ParameterKeys {
   /** Single-character field delimiter for delimited formats. */
   public static final String DELIMITER = "delimiter";
 
+  /** Optional Spark DDL schema, e.g. {@code id STRING, amount DECIMAL(22,4)}. */
+  public static final String SCHEMA = "schema";
+
+  public static final String INFER_SCHEMA = "inferSchema";
+  public static final String MULTI_LINE = "multiLine";
+  public static final String CSV_ESCAPE = "escape";
+
+  /** Optional nonnegative expected row count, used as a data quality gate. */
+  public static final String EXPECTED_ROWS = "expectedRows";
+
   /** Free-form message echoed by the {@code echo} job. */
   public static final String MESSAGE = "message";
 }

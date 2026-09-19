@@ -16,6 +16,20 @@ class StorageServiceTest {
   @TempDir Path tempDir;
 
   @Test
+  void refusesSymlinkTraversalOutsideTheStorageRoot() throws Exception {
+    Path outside = Files.createDirectory(tempDir.resolve("outside"));
+    Files.writeString(outside.resolve("secret.txt"), "preserve");
+    Path root = Files.createDirectory(tempDir.resolve("root"));
+    Files.createSymbolicLink(root.resolve("escape"), outside);
+    StorageService storage = LocalStorageService.at(root);
+    assertThrows(
+        IllegalArgumentException.class, () -> storage.readUtf8(Path.of("escape/secret.txt")));
+    assertThrows(
+        IllegalArgumentException.class, () -> storage.writeUtf8(Path.of("escape/new.txt"), "bad"));
+    assertFalse(Files.exists(outside.resolve("new.txt")));
+  }
+
+  @Test
   void localStorageServiceAnchorsOperationsUnderRootDirectory() {
     StorageService storage = LocalStorageService.at(tempDir);
 

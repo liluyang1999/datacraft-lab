@@ -9,9 +9,13 @@ object DataFrames {
       spark: SparkSession,
       format: String,
       path: String,
-      options: Map[String, String] = Map.empty
-  ): DataFrame =
-    spark.read.format(format).options(options).load(path)
+      options: Map[String, String] = Map.empty,
+      schema: Option[String] = None
+  ): DataFrame = {
+    val reader = spark.read.format(format).options(options)
+    schema.foreach(reader.schema)
+    reader.load(path)
+  }
 
   def write(
       dataFrame: DataFrame,

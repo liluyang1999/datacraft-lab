@@ -9,6 +9,9 @@ ARG JRE_IMAGE=eclipse-temurin:25-jre
 FROM ${JAR_IMAGE} AS jar
 
 FROM ${JRE_IMAGE}
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends curl \
+    && rm -rf /var/lib/apt/lists/*
 WORKDIR /opt/datacraft
 COPY --from=jar /dist/datacraft-cli.jar ./datacraft-cli.jar
 
@@ -17,7 +20,7 @@ EXPOSE 8080
 
 # Basic container healthcheck against the API.
 HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
-    CMD ["sh", "-c", "wget -qO- http://127.0.0.1:8080/health || exit 1"]
+    CMD ["curl", "--fail", "--silent", "http://127.0.0.1:8080/health"]
 
 ENTRYPOINT ["java", "-jar", "/opt/datacraft/datacraft-cli.jar"]
 CMD ["--command", "serve-api", "--host", "0.0.0.0", "--port", "8080"]

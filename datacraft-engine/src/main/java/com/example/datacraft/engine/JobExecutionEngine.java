@@ -23,9 +23,17 @@ public final class JobExecutionEngine {
             request.jobName(), "Job returned null result.", startedAt, Instant.now());
       }
       return result;
-    } catch (RuntimeException exception) {
+    } catch (Exception exception) {
+      // Scala jobs may throw checked exceptions despite the Java interface's signature.
+      if (exception instanceof InterruptedException) {
+        Thread.currentThread().interrupt();
+      }
+      String message = exception.getMessage();
       return JobExecutionResult.failure(
-          request.jobName(), exception.getMessage(), startedAt, Instant.now());
+          request.jobName(),
+          message == null ? exception.getClass().getSimpleName() : message,
+          startedAt,
+          Instant.now());
     }
   }
 }
