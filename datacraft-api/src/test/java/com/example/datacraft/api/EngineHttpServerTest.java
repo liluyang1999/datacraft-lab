@@ -2,6 +2,8 @@ package com.example.datacraft.api;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -27,9 +29,11 @@ import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Function;
@@ -236,7 +240,8 @@ class EngineHttpServerTest {
             request -> {
               throw new StackOverflowError();
             }));
-    try (HttpClient client = HttpClient.newHttpClient();
+    try (UncaughtErrors uncaught = new UncaughtErrors();
+        HttpClient client = HttpClient.newHttpClient();
         EngineHttpServer server =
             EngineHttpServer.start(EngineHttpServerConfig.localEphemeral(), registry)) {
       HttpResponse<String> response = send(client, post(server, "/jobs/deep/runs"));
@@ -246,6 +251,8 @@ class EngineHttpServerTest {
       assertEquals(Optional.of(JSON), response.headers().firstValue("Content-Type"));
       assertEquals("{\"error\":\"internal_error\"}", response.body());
       assertEquals(200, health.statusCode());
+      // After answering, the handler rethrows the Error so it is never silently swallowed.
+      assertInstanceOf(StackOverflowError.class, uncaught.next());
     }
   }
 
@@ -274,7 +281,8 @@ class EngineHttpServerTest {
     List<LogRecord> records = new CopyOnWriteArrayList<>();
     Handler capture = new CapturingHandler(records, Level.SEVERE);
     serverLogger.addHandler(capture);
-    try (HttpClient client = HttpClient.newHttpClient();
+    try (UncaughtErrors uncaught = new UncaughtErrors();
+        HttpClient client = HttpClient.newHttpClient();
         EngineHttpServer server =
             EngineHttpServer.start(EngineHttpServerConfig.localEphemeral(), brokenCatalog)) {
       HttpResponse<String> run = send(client, post(server, "/jobs/any/runs"));
@@ -288,6 +296,7 @@ class EngineHttpServerTest {
       assertEquals(200, health.statusCode());
       assertEquals(1, records.size(), () -> "records: " + records);
       assertSame(catalogFailure, records.get(0).getThrown());
+      assertEquals("broken catalog", uncaught.next().getMessage());
     } finally {
       serverLogger.removeHandler(capture);
     }
@@ -527,6 +536,31 @@ class EngineHttpServerTest {
     @Override
     public JobExecutionResult run(JobExecutionRequest request) {
       return body.apply(request);
+    }
+  }
+
+  /**
+   * Collects the Errors that handler threads rethrow after answering, so the tests assert them
+   * instead of letting the default handler print them. Restores the previous handler on close.
+   */
+  private static final class UncaughtErrors implements AutoCloseable {
+    private final Thread.UncaughtExceptionHandler previous =
+        Thread.getDefaultUncaughtExceptionHandler();
+    private final BlockingQueue<Throwable> errors = new LinkedBlockingQueue<>();
+
+    UncaughtErrors() {
+      Thread.setDefaultUncaughtExceptionHandler((thread, error) -> errors.add(error));
+    }
+
+    Throwable next() throws InterruptedException {
+      Throwable error = errors.poll(10, TimeUnit.SECONDS);
+      assertNotNull(error, "the handler thread did not rethrow the Error");
+      return error;
+    }
+
+    @Override
+    public void close() {
+      Thread.setDefaultUncaughtExceptionHandler(previous);
     }
   }
 
