@@ -46,8 +46,10 @@ class RunnerSpec extends AnyFunSuite {
           )
         )
       }
-      val json = output.toString(StandardCharsets.UTF_8)
-      assert(json == java.nio.file.Files.readString(file))
+      val bytes = output.toByteArray
+      assert(bytes.sameElements(java.nio.file.Files.readAllBytes(file)))
+      val json = new String(bytes, StandardCharsets.UTF_8)
+      assert(json.endsWith("}\n") && !json.contains("\r"))
       assert(json.contains("\"status\":\"SUCCEEDED\""))
       assert(json.contains("durationMillis"))
     } finally java.nio.file.Files.deleteIfExists(file)

@@ -31,9 +31,10 @@ class SparkPipelineSpec extends AnyFunSuite {
   )
 
   /**
-   * Spark's Netty transport cannot start without working NIO selectors. Some hosts (notably this
-   * project's Windows workstation, where `Selector.open()` fails outright) cannot provide them, so
-   * cancel there instead of reporting a project defect. On Linux and in CI the suite runs for real.
+   * Spark's Netty transport cannot start without working NIO selectors. On Windows the selector
+   * wakeup pipe is an AF_UNIX socket, which some profile TEMP trees cannot host; the build points
+   * `jdk.net.unixdomain.tmpdir` at the module target directory to avoid that. Any host that still
+   * cannot open a selector cancels instead of reporting a project defect. CI fails on a cancel.
    */
   private def requireNioSelectors(): Unit =
     try {
@@ -47,6 +48,21 @@ class SparkPipelineSpec extends AnyFunSuite {
             "Environment limitation, not a project defect - this suite runs on Linux and in CI."
         )
     }
+
+  /**
+   * Hadoop's local file system needs `winutils.exe` (HADOOP_HOME or hadoop.home.dir) to write files
+   * on Windows. Writing tests cancel on a Windows host without it; other hosts always run them.
+   */
+  private def requireLocalHadoopWrites(): Unit =
+    if (
+      System.getProperty("os.name", "").startsWith("Windows") &&
+      sys.env.get("HADOOP_HOME").forall(_.isBlank) &&
+      sys.props.get("hadoop.home.dir").forall(_.isBlank)
+    )
+      cancel(
+        "Hadoop needs winutils (HADOOP_HOME or hadoop.home.dir) to write local files on Windows. " +
+          "Environment limitation, not a project defect - this test runs on Linux and in CI."
+      )
 
   private def execute(
       engine: JobExecutionEngine,
@@ -66,6 +82,7 @@ class SparkPipelineSpec extends AnyFunSuite {
 
   test("CSV options preserve identifiers decimals and multiline records") {
     requireNioSelectors()
+    requireLocalHadoopWrites()
     val workDir = Files.createTempDirectory("datacraft-spark-precision")
     try {
       val input  = workDir.resolve("input.csv")
@@ -155,6 +172,7 @@ class SparkPipelineSpec extends AnyFunSuite {
 
   test("spark converts csv to parquet and counts the result through the engine") {
     requireNioSelectors()
+    requireLocalHadoopWrites()
     val workDir = Files.createTempDirectory("datacraft-spark-pipeline")
     try {
       val input  = workDir.resolve("input.csv")
@@ -197,6 +215,7 @@ class SparkPipelineSpec extends AnyFunSuite {
 
   test("ignore preserves existing data and append reports only newly written rows") {
     requireNioSelectors()
+    requireLocalHadoopWrites()
     val workDir = Files.createTempDirectory("datacraft-spark-modes")
     try {
       val input  = workDir.resolve("input.csv")

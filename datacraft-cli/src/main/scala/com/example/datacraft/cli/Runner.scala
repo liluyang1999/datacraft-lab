@@ -13,6 +13,8 @@ import com.example.datacraft.engine.{
 import com.example.datacraft.spark.SparkJobs
 import com.example.datacraft.io.LocalFiles
 
+import java.nio.charset.StandardCharsets
+
 import scala.jdk.CollectionConverters._
 
 /**
@@ -44,11 +46,14 @@ object Runner {
           sys.exit(2)
         }
         val result = new JobExecutionEngine(catalog).execute(buildRequest(args, jobName))
-        args.resultFile.foreach(path =>
-          LocalFiles.writeUtf8String(path, EngineJson.result(result) + "\n")
-        )
-        if (args.jsonOutput) println(EngineJson.result(result))
-        else println(s"${result.jobName()} ${result.status()} ${result.message()}")
+        // One UTF-8 line ending in LF on every platform, so stdout and the file are byte-identical.
+        val json = EngineJson.result(result) + "\n"
+        args.resultFile.foreach(path => LocalFiles.writeUtf8String(path, json))
+        if (args.jsonOutput) {
+          val bytes = json.getBytes(StandardCharsets.UTF_8)
+          Console.out.write(bytes, 0, bytes.length)
+          Console.out.flush()
+        } else println(s"${result.jobName()} ${result.status()} ${result.message()}")
         if (result.status() != JobStatus.SUCCEEDED) {
           sys.exit(1)
         }

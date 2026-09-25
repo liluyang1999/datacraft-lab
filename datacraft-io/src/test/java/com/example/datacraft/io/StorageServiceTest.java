@@ -5,9 +5,12 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import java.io.IOException;
+import java.nio.file.FileSystemException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
+import org.junit.jupiter.api.Assumptions;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -20,13 +23,28 @@ class StorageServiceTest {
     Path outside = Files.createDirectory(tempDir.resolve("outside"));
     Files.writeString(outside.resolve("secret.txt"), "preserve");
     Path root = Files.createDirectory(tempDir.resolve("root"));
-    Files.createSymbolicLink(root.resolve("escape"), outside);
+    createSymbolicLinkOrAbortOnWindows(root.resolve("escape"), outside);
     StorageService storage = LocalStorageService.at(root);
     assertThrows(
         IllegalArgumentException.class, () -> storage.readUtf8(Path.of("escape/secret.txt")));
     assertThrows(
         IllegalArgumentException.class, () -> storage.writeUtf8(Path.of("escape/new.txt"), "bad"));
     assertFalse(Files.exists(outside.resolve("new.txt")));
+  }
+
+  /**
+   * Windows creates symbolic links only with Developer Mode or elevation. That missing precondition
+   * aborts the test there; on every other OS a failure still fails, so Linux CI always runs it.
+   */
+  static void createSymbolicLinkOrAbortOnWindows(Path link, Path target) throws IOException {
+    try {
+      Files.createSymbolicLink(link, target);
+    } catch (FileSystemException | UnsupportedOperationException exception) {
+      if (!System.getProperty("os.name", "").startsWith("Windows")) {
+        throw exception;
+      }
+      Assumptions.abort("Symbolic links need Developer Mode or elevation on Windows: " + exception);
+    }
   }
 
   @Test

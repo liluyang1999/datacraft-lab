@@ -56,7 +56,7 @@
                 <groupId>org.scalatest</groupId>
                 <artifactId>scalatest-maven-plugin</artifactId>
                 <configuration>
-                    <argLine>${spark.test.jvm.args}</argLine>
+                    <argLine>${spark.test.jvm.args} ${test.nio.jvm.args}</argLine>
                 </configuration>
             </plugin>
         </plugins>
