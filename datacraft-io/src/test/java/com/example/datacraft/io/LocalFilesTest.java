@@ -6,9 +6,12 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.nio.file.Files;
+import java.nio.file.LinkOption;
 import java.nio.file.Path;
 import java.util.List;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.condition.EnabledOnOs;
+import org.junit.jupiter.api.condition.OS;
 import org.junit.jupiter.api.io.TempDir;
 
 class LocalFilesTest {
@@ -105,5 +108,89 @@ class LocalFilesTest {
     LocalFiles.deleteRecursively(tempDir.resolve("tree"));
 
     assertFalse(LocalFiles.exists(tempDir.resolve("tree")));
+  }
+
+  @Test
+  void deleteRecursivelyRemovesSymbolicLinksWithoutFollowingThem() throws Exception {
+    Path outside = tempDir.resolve("outside");
+    LocalFiles.writeUtf8String(outside.resolve("keep.txt"), "keep");
+    Path tree = tempDir.resolve("tree");
+    LocalFiles.writeUtf8String(tree.resolve("a.txt"), "a");
+    TestLinks.createSymbolicLinkOrAbortOnWindows(tree.resolve("dir-link"), outside);
+    TestLinks.createSymbolicLinkOrAbortOnWindows(
+        tree.resolve("file-link"), outside.resolve("keep.txt"));
+    Path startLink =
+        TestLinks.createSymbolicLinkOrAbortOnWindows(tempDir.resolve("start"), outside);
+
+    LocalFiles.deleteRecursively(tree);
+    LocalFiles.deleteRecursively(startLink);
+
+    assertFalse(Files.exists(tree, LinkOption.NOFOLLOW_LINKS));
+    assertFalse(Files.exists(startLink, LinkOption.NOFOLLOW_LINKS));
+    assertEquals("keep", Files.readString(outside.resolve("keep.txt")));
+  }
+
+  @Test
+  @EnabledOnOs(OS.WINDOWS)
+  void deleteRecursivelyRemovesJunctionsWithoutDeletingTheirTargets() throws Exception {
+    Path outside = tempDir.resolve("outside");
+    LocalFiles.writeUtf8String(outside.resolve("keep.txt"), "keep");
+    LocalFiles.writeUtf8String(outside.resolve("nested").resolve("deep.txt"), "deep");
+    Path tree = tempDir.resolve("tree");
+    LocalFiles.writeUtf8String(tree.resolve("a.txt"), "a");
+    LocalFiles.ensureDirectory(tree.resolve("sub"));
+    Path nested = TestLinks.createJunction(tree.resolve("sub").resolve("junction"), outside);
+    Path start = TestLinks.createJunction(tempDir.resolve("start"), outside);
+    try {
+      LocalFiles.deleteRecursively(tree);
+      LocalFiles.deleteRecursively(start);
+
+      assertFalse(Files.exists(tree, LinkOption.NOFOLLOW_LINKS));
+      assertFalse(Files.exists(start, LinkOption.NOFOLLOW_LINKS));
+      assertEquals("keep", Files.readString(outside.resolve("keep.txt")));
+      assertEquals("deep", Files.readString(outside.resolve("nested").resolve("deep.txt")));
+    } finally {
+      Files.deleteIfExists(nested);
+      Files.deleteIfExists(start);
+    }
+  }
+
+  @Test
+  @EnabledOnOs(OS.WINDOWS)
+  void deleteRecursivelyRemovesAJunctionToAnAncestor() throws Exception {
+    Path tree = tempDir.resolve("tree");
+    LocalFiles.writeUtf8String(tree.resolve("a.txt"), "a");
+    Path loop = TestLinks.createJunction(tree.resolve("loop"), tree);
+    try {
+      LocalFiles.deleteRecursively(tree);
+
+      assertFalse(Files.exists(tree, LinkOption.NOFOLLOW_LINKS));
+    } finally {
+      Files.deleteIfExists(loop);
+    }
+  }
+
+  @Test
+  @EnabledOnOs(OS.WINDOWS)
+  void deleteRecursivelyRemovesJunctionsWhoseTargetIsGone() throws Exception {
+    Path gone = Files.createDirectory(tempDir.resolve("gone"));
+    Path tree = tempDir.resolve("tree");
+    LocalFiles.writeUtf8String(tree.resolve("a.txt"), "a");
+    LocalFiles.writeUtf8String(tree.resolve("z").resolve("b.txt"), "b");
+    Path nested = TestLinks.createJunction(tree.resolve("dangling"), gone);
+    Path start = TestLinks.createJunction(tempDir.resolve("start"), gone);
+    Files.delete(gone);
+    try {
+      assertTrue(Files.exists(start, LinkOption.NOFOLLOW_LINKS));
+
+      LocalFiles.deleteRecursively(tree);
+      LocalFiles.deleteRecursively(start);
+
+      assertFalse(Files.exists(tree, LinkOption.NOFOLLOW_LINKS));
+      assertFalse(Files.exists(start, LinkOption.NOFOLLOW_LINKS));
+    } finally {
+      Files.deleteIfExists(nested);
+      Files.deleteIfExists(start);
+    }
   }
 }

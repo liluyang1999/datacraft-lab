@@ -4,10 +4,14 @@ import com.example.datacraft.common.DataCraftException;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.FileVisitResult;
 import java.nio.file.Files;
+import java.nio.file.LinkOption;
 import java.nio.file.Path;
+import java.nio.file.SimpleFileVisitor;
 import java.nio.file.StandardCopyOption;
 import java.nio.file.StandardOpenOption;
+import java.nio.file.attribute.BasicFileAttributes;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.Comparator;
@@ -171,24 +175,79 @@ public final class LocalFiles {
     }
   }
 
-  /** Recursively deletes a file or directory tree; a no-op when the path does not exist. */
+  /**
+   * Recursively deletes a file or directory tree; a no-op when the path does not exist. Links
+   * (symbolic links and Windows junctions, including dangling ones), including the start path, are
+   * removed without deleting their targets. Any other Windows reparse-point directory is removed
+   * only when it is empty; otherwise the call fails without descending into it.
+   */
   public static void deleteRecursively(Path path) {
-    if (!Files.exists(path, java.nio.file.LinkOption.NOFOLLOW_LINKS)) {
+    if (!Files.exists(path, LinkOption.NOFOLLOW_LINKS)) {
       return;
     }
-    try (Stream<Path> paths = Files.walk(path)) {
-      paths
-          .sorted(Comparator.reverseOrder())
-          .forEach(
-              entry -> {
-                try {
-                  Files.delete(entry);
-                } catch (IOException exception) {
-                  throw new DataCraftException("Failed to delete path: " + entry, exception);
-                }
-              });
+    try {
+      Files.walkFileTree(
+          path,
+          new SimpleFileVisitor<>() {
+            @Override
+            public FileVisitResult preVisitDirectory(Path directory, BasicFileAttributes attributes)
+                throws IOException {
+              // A Windows junction or mount point reports isDirectory() and isOther(), never
+              // isSymbolicLink(): remove the link itself and never descend into its target.
+              if (attributes.isOther()) {
+                Files.delete(directory);
+                return FileVisitResult.SKIP_SUBTREE;
+              }
+              return FileVisitResult.CONTINUE;
+            }
+
+            @Override
+            public FileVisitResult visitFile(Path file, BasicFileAttributes attributes)
+                throws IOException {
+              // Symbolic links arrive here unfollowed, so only the link is removed.
+              Files.delete(file);
+              return FileVisitResult.CONTINUE;
+            }
+
+            @Override
+            public FileVisitResult visitFileFailed(Path file, IOException failure)
+                throws IOException {
+              // A junction whose target is gone cannot be opened as a directory, so the walker
+              // reports it here instead of in preVisitDirectory; the link itself is removable.
+              if (!isReparsePoint(file)) {
+                throw failure;
+              }
+              Files.delete(file);
+              return FileVisitResult.CONTINUE;
+            }
+
+            @Override
+            public FileVisitResult postVisitDirectory(Path directory, IOException failure)
+                throws IOException {
+              if (failure != null) {
+                throw failure;
+              }
+              Files.delete(directory);
+              return FileVisitResult.CONTINUE;
+            }
+          });
     } catch (IOException exception) {
       throw new DataCraftException("Failed to recursively delete path: " + path, exception);
+    }
+  }
+
+  /**
+   * Whether the entry itself, read without following links, reports {@link
+   * BasicFileAttributes#isOther()}: on Windows a reparse point such as a junction or mount point,
+   * on POSIX a special file. Returns {@code false} when the attributes cannot be read, so that
+   * callers report their original failure.
+   */
+  static boolean isReparsePoint(Path path) {
+    try {
+      return Files.readAttributes(path, BasicFileAttributes.class, LinkOption.NOFOLLOW_LINKS)
+          .isOther();
+    } catch (IOException exception) {
+      return false;
     }
   }
 

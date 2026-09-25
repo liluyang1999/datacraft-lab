@@ -4,12 +4,31 @@ import base64
 import importlib.util
 import json
 from pathlib import Path
+import re
 import subprocess
 import sys
 import tempfile
 import unittest
 
-SCRIPT = Path(__file__).resolve().parents[1] / "scripts" / "deployment_env.py"
+DEPLOY = Path(__file__).resolve().parents[1]
+SCRIPT = DEPLOY / "scripts" / "deployment_env.py"
+STACK_FILES = (DEPLOY / "compose" / "docker-compose.yml", DEPLOY / "swarm" / "docker-stack.yml")
+SECRET_VARIABLES = ("POSTGRES_PASSWORD", "AIRFLOW_FERNET_KEY", "AIRFLOW_API_SECRET_KEY", "AIRFLOW_JWT_SECRET")
+
+
+def load_module():
+    spec = importlib.util.spec_from_file_location("deployment_env", SCRIPT)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def valid_services():
+    env = {"POSTGRES_PASSWORD": "a" * 40, "AIRFLOW_ADMIN_PASSWORD": "b" * 40,
+           "AIRFLOW__API__SECRET_KEY": "c" * 40, "AIRFLOW__API_AUTH__JWT_SECRET": "d" * 40,
+           "AIRFLOW__CORE__FERNET_KEY": base64.urlsafe_b64encode(b"e" * 32).decode()}
+    return {"postgres": {"environment": {"POSTGRES_PASSWORD": env["POSTGRES_PASSWORD"]}},
+            "airflow-scheduler": {"environment": env}, "airflow-init": {"environment": env}}
 
 
 class DeploymentEnvironmentTests(unittest.TestCase):
@@ -58,6 +77,43 @@ class DeploymentEnvironmentTests(unittest.TestCase):
         services["postgres"]["environment"]["POSTGRES_PASSWORD"] = "has@reserved:chars"
         with self.assertRaises(ValueError):
             module.validate({"services": services})
+
+    def test_preflight_rejects_publishing_the_unauthenticated_api_beyond_loopback(self):
+        module = load_module()
+        services = valid_services()
+        port = {"mode": "ingress", "target": 8080, "published": "8088", "protocol": "tcp"}
+        for ports in ([{**port, "host_ip": "127.0.0.1"}], [{**port, "host_ip": "::1"}], []):
+            services["datacraft-api"] = {"ports": ports}
+            module.validate({"services": services})
+        for ports in ([port], [{**port, "host_ip": "0.0.0.0"}], [{**port, "host_ip": ""}],
+                      [{**port, "host_ip": "127.0.0.1"}, port], ["127.0.0.1:8088:8080"], "8088:8080"):
+            services["datacraft-api"] = {"ports": ports}
+            with self.subTest(ports=ports), self.assertRaisesRegex(ValueError, "loopback"):
+                module.validate({"services": services})
+
+    def test_preflight_only_accepts_read_only_api_mounts(self):
+        module = load_module()
+        services = valid_services()
+        data = {"type": "volume", "source": "datacraft-data", "target": "/opt/datacraft/data", "volume": {}}
+        for volumes in ([{**data, "read_only": True}], [{"type": "tmpfs", "target": "/tmp"}], []):
+            services["datacraft-api"] = {"volumes": volumes}
+            module.validate({"services": services})
+        for volumes in ([data], [{**data, "read_only": False}], [{**data, "type": "bind"}],
+                        ["datacraft-data:/opt/datacraft/data:ro"], {"data": data}):
+            services["datacraft-api"] = {"volumes": volumes}
+            with self.subTest(volumes=volumes), self.assertRaisesRegex(ValueError, "read-only"):
+                module.validate({"services": services})
+
+    def test_stack_files_refuse_to_start_without_every_secret(self):
+        reference = re.compile(r"\$\{(" + "|".join(SECRET_VARIABLES) + r")([^}]*)\}")
+        for path in STACK_FILES:
+            text = path.read_text(encoding="utf-8")
+            found = set()
+            for match in reference.finditer(text):
+                found.add(match.group(1))
+                with self.subTest(file=path.name, reference=match.group(0)):
+                    self.assertTrue(match.group(2).startswith(":?"), "secrets must use ${NAME:?message}")
+            self.assertEqual(set(SECRET_VARIABLES), found, path.name)
 
     def test_preflight_errors_never_echo_secret_or_raw_configuration(self):
         payload = {"services": {"postgres": {"environment": {"POSTGRES_PASSWORD": "PRIVATE@VALUE"}}}}

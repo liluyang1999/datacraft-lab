@@ -14,24 +14,60 @@ concurrency:
 permissions:
   contents: read
 
+# Actions are pinned to full commit SHAs (the comment names the release) and runners to an explicit
+# image, so neither a moved tag nor an ubuntu-latest migration changes CI without a commit here.
 jobs:
   build:
     name: Build & verify (JDK 25)
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Set up JDK 25
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
         with:
           distribution: temurin
           java-version: "25"
           cache: maven
 
+      # The script-only wrapper (no committed jar) must refuse a Maven distribution whose SHA-256
+      # does not match. It verifies only fresh downloads and reuses an existing wrapper/dists
+      # directory unchecked, so the negative run gets its own empty MAVEN_USER_HOME.
+      - name: Maven Wrapper verifies the Maven distribution
+        run: |
+          PROPS=.mvn/wrapper/maven-wrapper.properties
+          if ! grep -Eq '^distributionSha256Sum=[0-9a-f]{64}$' "$PROPS"; then
+            echo "::error::$PROPS must pin distributionSha256Sum"; exit 1
+          fi
+          if [ -e .mvn/wrapper/maven-wrapper.jar ]; then
+            echo "::error::.mvn/wrapper/maven-wrapper.jar must not be committed"; exit 1
+          fi
+          WORK="$RUNNER_TEMP/mvnw-wrong-checksum"
+          mkdir -p "$WORK"
+          cp -p mvnw "$WORK/"
+          cp -R .mvn "$WORK/"
+          sed -i 's/^distributionSha256Sum=.*/distributionSha256Sum=0000000000000000000000000000000000000000000000000000000000000000/' \
+            "$WORK/.mvn/wrapper/maven-wrapper.properties"
+          rc=0
+          (cd "$WORK" && MAVEN_USER_HOME="$WORK/m2" ./mvnw -v) > "$WORK/output.txt" 2>&1 || rc=$?
+          cat "$WORK/output.txt"
+          if [ "$rc" -eq 0 ]; then
+            echo "::error::mvnw ran a Maven distribution with the wrong SHA-256"; exit 1
+          fi
+          if ! grep -q 'Failed to validate Maven distribution SHA-256' "$WORK/output.txt"; then
+            echo "::error::mvnw failed, but not on the SHA-256 check"; exit 1
+          fi
+
       # Full gate: Spotless format check, Checkstyle, Enforcer, unit tests, shaded package.
       - name: Verify
         run: ./mvnw -B -ntp verify
+
+      # failIfNoTests only catches a module with zero tests, and the ScalaTest plugin passes with
+      # none, so a renamed class, a provider mismatch or a misfiring cancel could silently shrink a
+      # suite. Skipped, aborted and canceled tests do not count; floors are minimums.
+      - name: Assert every module executed its tests
+        run: python3 -B .github/scripts/check_test_counts.py .
 
       # SparkPipelineSpec boots a real SparkSession, so it is what proves Spark 4.2.0 actually
       # runs on JDK 25. It self-cancels on hosts that cannot open NIO selectors, and a canceled
@@ -58,60 +94,152 @@ jobs:
           java -jar "$JAR" --command list-jobs
           java -jar "$JAR" --command echo --param message=ci
           java -jar "$JAR" --command noop --lifecycle prod
+          # The plain-JVM data jobs run without Spark and enforce their quality gates.
+          SAMPLE="$RUNNER_TEMP/sample.csv"
+          printf 'id,note\n1,"a, b"\n2,c\n' > "$SAMPLE"
+          java -jar "$JAR" --command csv-profile --param input="$SAMPLE" --param expectedRows=2 --json
+          java -jar "$JAR" --command file-checksum --param input="$SAMPLE" \
+            --param expectedSha256="$(sha256sum "$SAMPLE" | cut -d' ' -f1)" --json
+          rc=0
+          java -jar "$JAR" --command csv-profile --param input="$SAMPLE" --param expectedRows=3 || rc=$?
+          test "$rc" -eq 1 || { echo "::error::csv-profile row gate exited $rc, expected 1"; exit 1; }
+
+      # JSch keeps its Ed25519/X25519/ML-KEM classes under META-INF/versions, and the JVM loads
+      # them only from a Multi-Release jar. A bundled dependency's module-info.class must not pose
+      # as the fat jar's module descriptor. The probe exercises the algorithms from the jar itself.
+      - name: Check the shaded jar is Multi-Release and exposes JSch's modern algorithms
+        run: |
+          JAR=datacraft-cli/target/datacraft-cli.jar
+          manifest=$(unzip -p "$JAR" META-INF/MANIFEST.MF | tr -d '\r')
+          echo "$manifest"
+          if ! grep -qx 'Multi-Release: true' <<<"$manifest"; then
+            echo "::error::$JAR manifest lacks 'Multi-Release: true'"; exit 1
+          fi
+          entries=$(unzip -Z1 "$JAR")
+          if grep -E '(^|/)module-info\.class$' <<<"$entries"; then
+            echo "::error::$JAR must not contain module-info.class entries"; exit 1
+          fi
+          java -cp "$JAR" .github/scripts/JschAlgorithmsProbe.java
+
+      # pom.xml's jackson.version drives the Jackson BOM; the fat jar must bundle exactly that
+      # jackson-core and jackson-databind, not an older copy shaded in from another dependency.
+      - name: Check the shaded jar bundles the managed Jackson version
+        run: |
+          JAR=datacraft-cli/target/datacraft-cli.jar
+          expected=$(sed -n 's:^[[:space:]]*<jackson\.version>\([^<]*\)</jackson\.version>[[:space:]]*$:\1:p' pom.xml)
+          if [ -z "$expected" ] || [ "$(wc -l <<<"$expected")" -ne 1 ]; then
+            echo "::error::pom.xml must define exactly one jackson.version property"; exit 1
+          fi
+          for artifact in jackson-core jackson-databind; do
+            actual=$(unzip -p "$JAR" "META-INF/maven/com.fasterxml.jackson.core/$artifact/pom.properties" \
+              | tr -d '\r' | sed -n 's/^version=//p')
+            echo "$artifact ${actual:-<missing>} (pom.xml jackson.version $expected)"
+            if [ "$actual" != "$expected" ]; then
+              echo "::error::$JAR bundles $artifact ${actual:-<missing>}, expected $expected"; exit 1
+            fi
+          done
+
+      # Callers branch on the documented exit codes: 1 = the job failed and its FAILED result was
+      # still written, 2 = unknown command or bad arguments. Neither may be an uncaught exception.
+      - name: Check CLI exit codes and failure results
+        run: |
+          JAR=datacraft-cli/target/datacraft-cli.jar
+          OUT="$RUNNER_TEMP/cli-exit-codes"
+          mkdir -p "$OUT"
+          expect_exit() {
+            local expected=$1 rc=0
+            shift
+            java -jar "$JAR" "$@" 2> "$OUT/stderr.txt" || rc=$?
+            cat "$OUT/stderr.txt"
+            if [ "$rc" -ne "$expected" ]; then
+              echo "::error::'$*' exited $rc, expected $expected"; exit 1
+            fi
+            if grep -q 'Exception in thread' "$OUT/stderr.txt"; then
+              echo "::error::'$*' ended with an uncaught exception"; exit 1
+            fi
+          }
+          # Spark is provided, so on a plain JVM a Spark job must fail as a structured result.
+          expect_exit 1 --command spark-version --json --result-file "$OUT/spark.json"
+          test -f "$OUT/spark.json" || { echo "::error::spark-version wrote no --result-file"; exit 1; }
+          cat "$OUT/spark.json"
+          if ! grep -q '"jobName":"spark-version"' "$OUT/spark.json" \
+            || ! grep -q '"status":"FAILED"' "$OUT/spark.json"; then
+            echo "::error::spark-version did not write a FAILED result"; exit 1
+          fi
+          expect_exit 2 --command does-not-exist
+          expect_exit 2 --command echo --param broken
+          expect_exit 2 --command echo --config /nonexistent.properties
 
       - name: Upload test reports
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: surefire-reports-jdk25
           path: "**/target/surefire-reports/**"
           if-no-files-found: ignore
 
       - name: Share the verified CLI with runtime tests
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: verified-cli
           path: datacraft-cli/target/datacraft-cli.jar
           retention-days: 1
 
   dags:
-    name: Airflow contracts and real pipelines (3.3.1)
+    name: Airflow contracts and real pipelines (3.3.2)
     needs: build
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 20
     env:
       AIRFLOW_HOME: ${{ github.workspace }}/target/airflow-test
       AIRFLOW__CORE__LOAD_EXAMPLES: "false"
       PYTHONDONTWRITEBYTECODE: "1"
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: "3.12"
 
       - name: Install constrained Airflow and providers
         run: |
-          python -m pip install 'apache-airflow==3.3.1' -r orchestration/airflow/requirements.txt \
-            --constraint https://raw.githubusercontent.com/apache/airflow/constraints-3.3.1/constraints-3.12.txt
+          python -m pip install 'apache-airflow==3.3.2' -r orchestration/airflow/requirements.txt \
+            --constraint https://raw.githubusercontent.com/apache/airflow/constraints-3.3.2/constraints-3.12.txt
           python -m pip check
 
       - name: Set up the packaged job runtime
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
         with:
           distribution: temurin
           java-version: "25"
 
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           name: verified-cli
           path: target/runtime
 
       - name: Install matching Spark runtime
         run: |
-          python -m pip install 'apache-airflow==3.3.1' 'pyspark==4.2.0'
+          python -m pip install 'apache-airflow==3.3.2' 'pyspark==4.2.0'
           python -m pip check
+
+      # Airflow 3.3.2 and FAB provider 3.9.0 fix published session, logout and token CVEs; the
+      # tests must never run against an older resolution than the image ships.
+      - name: Enforce the Airflow security floor
+        run: |
+          python - <<'EOF'
+          from importlib.metadata import version
+          from packaging.version import Version
+
+          floors = {"apache-airflow": "3.3.2", "apache-airflow-providers-fab": "3.9.0"}
+          for name, floor in floors.items():
+              installed = version(name)
+              print(f"{name} {installed} (floor {floor})")
+              if Version(installed) < Version(floor):
+                  print(f"::error::{name} {installed} is below the security floor {floor}")
+                  raise SystemExit(1)
+          EOF
 
       - name: Verify real DAG parsing and task execution boundaries
         run: python -B -m unittest discover -s orchestration/airflow/tests -v
@@ -125,10 +253,31 @@ jobs:
 
   scripts:
     name: Deployment script lint
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      # A tag can be re-pointed; a commit SHA cannot. Local ./ actions are exempt.
+      - name: Actions are pinned to full commit SHAs
+        run: |
+          unpinned=$(grep -rnE --include='*.yml' --include='*.yaml' '^[[:space:]]*(-[[:space:]]+)?uses:' .github/workflows \
+            | grep -vE 'uses:[[:space:]]+(\./|[^@[:space:]]+@[0-9a-f]{40}([[:space:]]|$))' || true)
+          if [ -n "$unpinned" ]; then
+            echo "::error::Pin every action to a full commit SHA with a '# vX.Y.Z' comment"
+            echo "$unpinned"
+            exit 1
+          fi
+
+      - name: Set up Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+
+      - name: Set up Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: "22"
 
       - name: Bash syntax check
         run: |
@@ -144,6 +293,12 @@ jobs:
           fi
           shellcheck --severity=error deploy/scripts/*.sh deploy/tests/*.sh
 
+      - name: Record toolchain versions
+        run: |
+          python3 --version
+          node --version
+          shellcheck --version
+
       - name: Verify initialization failure and retry behavior
         run: python3 -B -m unittest discover -s deploy/tests -v
 
@@ -153,13 +308,18 @@ jobs:
   compose:
     # Validates the deployment topology definitions only. Nothing is built or deployed.
     name: Compose / Swarm file validation
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 10
     env:
+      # Public test-only values: the stack files require every secret, and nothing here is deployed.
+      POSTGRES_PASSWORD: test-only-not-for-deployment
+      AIRFLOW_API_SECRET_KEY: test-only-not-for-deployment
       AIRFLOW_JWT_SECRET: test-only-not-for-deployment
+      # base64url of the 32 ASCII bytes "datacraft-ci-test-only-fernetkey": a well-formed Fernet key.
+      AIRFLOW_FERNET_KEY: ZGF0YWNyYWZ0LWNpLXRlc3Qtb25seS1mZXJuZXRrZXk=
       DATACRAFT_DATA_NODE: ci-test-node
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Provide a non-secret .env for interpolation
         run: cp deploy/compose/.env.example deploy/compose/.env
@@ -170,16 +330,41 @@ jobs:
       - name: Validate multi-host swarm stack file
         run: docker stack config -c deploy/swarm/docker-stack.yml > /dev/null
 
+      # Secrets fail closed: without one, interpolation must stop instead of falling back to a
+      # public default. The copied .env leaves the Airflow secrets empty (its POSTGRES_PASSWORD is a
+      # placeholder only deployment_env.py rejects), and docker stack config reads no .env at all.
+      - name: Reject missing secrets
+        run: |
+          expect_rejected() {
+            local variable=$1 rc=0
+            shift
+            env -u "$variable" "$@" > "$RUNNER_TEMP/rejected.txt" 2>&1 || rc=$?
+            if [ "$rc" -eq 0 ]; then
+              echo "::error::'$*' accepted a missing $variable"; exit 1
+            fi
+            if ! grep -q "$variable" "$RUNNER_TEMP/rejected.txt"; then
+              cat "$RUNNER_TEMP/rejected.txt"
+              echo "::error::'$*' failed, but not because $variable is missing"; exit 1
+            fi
+            echo "without $variable: $(head -n 1 "$RUNNER_TEMP/rejected.txt")"
+          }
+          for variable in AIRFLOW_API_SECRET_KEY AIRFLOW_FERNET_KEY AIRFLOW_JWT_SECRET; do
+            expect_rejected "$variable" docker compose -f deploy/compose/docker-compose.yml config --quiet
+          done
+          for variable in POSTGRES_PASSWORD AIRFLOW_API_SECRET_KEY AIRFLOW_FERNET_KEY AIRFLOW_JWT_SECRET; do
+            expect_rejected "$variable" docker stack config -c deploy/swarm/docker-stack.yml
+          done
+
       - name: Remove test environment file
         if: always()
         run: rm -f -- deploy/compose/.env
 
   containers:
     name: Build and smoke-test runtime images
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 45
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Build images and run packaged API and Airflow pipelines
         run: bash deploy/tests/container_smoke.sh
       - name: Verify the complete Compose stack and metadata backup recovery

@@ -17,6 +17,10 @@ public final class JobRegistry implements JobCatalog {
     if (job.name() == null || job.name().isBlank()) {
       throw new IllegalArgumentException("Job name must not be blank.");
     }
+    // Every job name is a single URL path segment of POST /jobs/{name}/runs.
+    if (job.name().indexOf('/') >= 0) {
+      throw new IllegalArgumentException("Job name must not contain '/': " + job.name());
+    }
     if (jobs.containsKey(job.name())) {
       throw new IllegalArgumentException("Duplicate job name: " + job.name());
     }

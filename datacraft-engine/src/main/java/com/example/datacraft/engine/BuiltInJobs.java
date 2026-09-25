@@ -27,7 +27,7 @@ public final class BuiltInJobs {
     public JobExecutionResult run(JobExecutionRequest request) {
       return JobExecutionResult.success(
           request.jobName(),
-          request.parameters().getOrDefault("message", ""),
+          request.parameters().getOrDefault(ParameterKeys.MESSAGE, ""),
           request.startedAt(),
           request.startedAt());
     }

@@ -9,6 +9,10 @@
 #   bash deploy/scripts/build-images.sh
 #   bash deploy/scripts/compose-up.sh
 #
+# The DAGs and the CLI jar both come from the Airflow image, so rerun build-images.sh after updating
+# the code; a `git pull` alone does not change the running stack. Every secret must be set in .env:
+# interpolation fails instead of falling back to a default.
+#
 # Airflow occasionally adjusts component names/flags between minors. If a service fails to start,
 # run `docker compose config` and cross-check the official Airflow docker-compose for your version.
 
@@ -20,6 +24,10 @@ x-logging: &bounded-logging
 
 x-airflow-common: &airflow-common
   image: datacraft/airflow:latest
+  # Never pulled: the unqualified datacraft/* names resolve to a Docker Hub namespace this project
+  # does not own. build-images.sh creates the images (a Compose-triggered build lacks its JAR_IMAGE
+  # build-arg and fails closed).
+  pull_policy: never
   build:
     context: ../..
     dockerfile: deploy/docker/Dockerfile.airflow
@@ -31,18 +39,19 @@ x-airflow-common: &airflow-common
     AIRFLOW__DAG_PROCESSOR__PARSING_PROCESSES: ${AIRFLOW_PARSING_PROCESSES:-1}
     AIRFLOW__API__WORKERS: "1"
     AIRFLOW__CORE__AUTH_MANAGER: airflow.providers.fab.auth_manager.fab_auth_manager.FabAuthManager
-    AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://${POSTGRES_USER:-airflow}:${POSTGRES_PASSWORD:-airflow}@postgres/${POSTGRES_DB:-airflow}
-    AIRFLOW__CORE__FERNET_KEY: ${AIRFLOW_FERNET_KEY:-}
+    AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://${POSTGRES_USER:-airflow}:${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}@postgres/${POSTGRES_DB:-airflow}
+    AIRFLOW__CORE__FERNET_KEY: ${AIRFLOW_FERNET_KEY:?Set AIRFLOW_FERNET_KEY in .env}
     AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION: "true"
     AIRFLOW__CORE__LOAD_EXAMPLES: "false"
-    AIRFLOW__API__SECRET_KEY: ${AIRFLOW_API_SECRET_KEY:-please-change-me}
+    AIRFLOW__API__SECRET_KEY: ${AIRFLOW_API_SECRET_KEY:?Set AIRFLOW_API_SECRET_KEY in .env}
     AIRFLOW__API_AUTH__JWT_SECRET: ${AIRFLOW_JWT_SECRET:?Set AIRFLOW_JWT_SECRET in .env}
     AIRFLOW__CORE__EXECUTION_API_SERVER_URL: http://airflow-apiserver:8080/execution/
     DATACRAFT_HOME: /opt/datacraft
     DATACRAFT_CLI_JAR: /opt/datacraft/datacraft-cli.jar
     DATACRAFT_SPARK_MASTER: ${DATACRAFT_SPARK_MASTER:-local[2]}
+    # Job and DAG path parameters must stay inside the shared data volume.
+    DATACRAFT_DATA_ROOT: /opt/datacraft/data
   volumes:
-    - ../../orchestration/airflow/dags:/opt/airflow/dags
     - airflow-logs:/opt/airflow/logs
     - datacraft-data:/opt/datacraft/data
   user: "${AIRFLOW_UID:-50000}:0"
@@ -58,7 +67,7 @@ services:
     logging: *bounded-logging
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-airflow}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-airflow}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
       POSTGRES_DB: ${POSTGRES_DB:-airflow}
     volumes:
       - postgres-db:/var/lib/postgresql
@@ -137,13 +146,21 @@ services:
       postgres:
         condition: service_healthy
 
-  # The JVM online engine API (independent of Airflow; handy for synchronous job runs).
+  # The JVM online engine API (independent of Airflow; handy for synchronous job runs). It has no
+  # authentication, so it is published on loopback only (deployment_env.py check enforces this).
   datacraft-api:
     image: datacraft/jvm:latest
+    pull_policy: never
     logging: *bounded-logging
     build:
       context: ../..
       dockerfile: deploy/docker/Dockerfile.jvm
+    environment:
+      # Small-file jobs may only read paths under this root.
+      DATACRAFT_DATA_ROOT: /opt/datacraft/data
+    volumes:
+      # Read-only: Airflow tasks write the shared data, the API only reads it.
+      - datacraft-data:/opt/datacraft/data:ro
     ports:
       - "127.0.0.1:${DATACRAFT_API_PORT:-8088}:8080"
     restart: unless-stopped

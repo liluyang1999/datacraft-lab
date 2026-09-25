@@ -1,9 +1,16 @@
 # syntax=docker/dockerfile:1
 #
 # Runtime image for the non-Spark surface: the online HTTP API and lightweight engine jobs.
-# Small (JRE + ~9MB jar). Default command serves the API on all interfaces, port 8080.
+# Small (JRE + ~9MB jar). Default command serves the API on all interfaces, port 8080, as the
+# unprivileged uid 10001; the jar stays root-owned, so that user can read but not modify it.
+#
+# Do not create /opt/datacraft/data here. Compose and Swarm mount the shared datacraft-data volume
+# there read-only, and Docker seeds an empty volume from whichever image mounts it first: this image
+# must leave that to the Airflow image, whose copy of the directory is group-writable for tasks.
 
-ARG JAR_IMAGE=datacraft/jar-builder:latest
+# No default: build-images.sh passes the locally built builder. A bare name here would resolve to
+# docker.io/datacraft/*, a Docker Hub namespace this project does not own.
+ARG JAR_IMAGE
 ARG JRE_IMAGE=eclipse-temurin:25-jre
 
 FROM ${JAR_IMAGE} AS jar
@@ -11,16 +18,23 @@ FROM ${JAR_IMAGE} AS jar
 FROM ${JRE_IMAGE}
 RUN apt-get update \
     && apt-get install -y --no-install-recommends curl \
-    && rm -rf /var/lib/apt/lists/*
+    && rm -rf /var/lib/apt/lists/* \
+    && groupadd --system --gid 10001 datacraft \
+    && useradd --system --uid 10001 --gid datacraft --no-create-home --shell /usr/sbin/nologin datacraft
 WORKDIR /opt/datacraft
 COPY --from=jar /dist/datacraft-cli.jar ./datacraft-cli.jar
 
 ENV DATACRAFT_HOME=/opt/datacraft
+# The API is unauthenticated, so its file jobs (csv-profile, file-checksum) fail closed unless the
+# data volume is mounted here. Only an ENV: the image must not create the directory itself.
+ENV DATACRAFT_DATA_ROOT=/opt/datacraft/data
 EXPOSE 8080
 
 # Basic container healthcheck against the API.
 HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
     CMD ["curl", "--fail", "--silent", "http://127.0.0.1:8080/health"]
 
+# Numeric, so orchestrators can verify the non-root user without reading /etc/passwd.
+USER 10001:10001
 ENTRYPOINT ["java", "-jar", "/opt/datacraft/datacraft-cli.jar"]
 CMD ["--command", "serve-api", "--host", "0.0.0.0", "--port", "8080"]

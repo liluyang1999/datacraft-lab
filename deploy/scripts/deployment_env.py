@@ -14,6 +14,7 @@ import sys
 TEMPLATE = Path(__file__).resolve().parents[1] / "compose" / ".env.example"
 SECRET_KEYS = ("POSTGRES_PASSWORD", "AIRFLOW_ADMIN_PASSWORD", "AIRFLOW_API_SECRET_KEY",
                "AIRFLOW_JWT_SECRET", "AIRFLOW_FERNET_KEY")
+LOOPBACK = ("127.0.0.1", "::1")
 
 
 def initialize(path: Path) -> None:
@@ -35,7 +36,11 @@ def initialize(path: Path) -> None:
 
 
 def validate(config: dict) -> None:
-    """Validate effective values (including shell overrides), without logging any secrets."""
+    """Validate effective values (including shell overrides), without logging any secrets.
+
+    The unauthenticated datacraft-api, when present, may only be published on loopback and may only
+    mount persistent storage read-only. The Airflow UI binding stays configurable (AIRFLOW_WEB_BIND).
+    """
     services = config.get("services", {})
     if not isinstance(services, dict):
         raise ValueError("Compose services must be an object")
@@ -77,6 +82,19 @@ def validate(config: dict) -> None:
             raise ValueError("Database, admin, API, JWT and Fernet secrets must be independent")
     if "airflow-scheduler" not in services or "airflow-init" not in services:
         raise ValueError("Expected the datacraft Compose scheduler and initializer")
+
+    api = services.get("datacraft-api", {})
+    if not isinstance(api, dict):
+        raise ValueError("Compose datacraft-api must be an object")
+    ports = api.get("ports", [])
+    if not isinstance(ports, list) or any(
+            not isinstance(port, dict) or port.get("host_ip") not in LOOPBACK for port in ports):
+        raise ValueError("The unauthenticated datacraft-api may only be published on loopback")
+    mounts = api.get("volumes", [])
+    if not isinstance(mounts, list) or any(
+            not isinstance(mount, dict) or (mount.get("type") != "tmpfs" and mount.get("read_only") is not True)
+            for mount in mounts):
+        raise ValueError("The unauthenticated datacraft-api may only mount volumes read-only")
 
 
 def main() -> int:

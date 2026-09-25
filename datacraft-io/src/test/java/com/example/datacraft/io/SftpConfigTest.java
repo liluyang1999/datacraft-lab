@@ -73,6 +73,25 @@ class SftpConfigTest {
   }
 
   @Test
+  void fromPropertiesKeepsPasswordWhitespaceVerbatim() {
+    SftpConfig config =
+        SftpConfig.fromProperties(Map.of("host", "h", "username", "u", "password", " pa ss "));
+
+    assertEquals(" pa ss ", config.password());
+  }
+
+  @Test
+  void fromPropertiesTrimsHostAndUsernameButNotThePassword() {
+    SftpConfig config =
+        SftpConfig.fromProperties(
+            Map.of("host", "sftp.example.com ", "username", " etl ", "password", " pa ss "));
+
+    assertEquals("sftp.example.com", config.host());
+    assertEquals("etl", config.username());
+    assertEquals(" pa ss ", config.password());
+  }
+
+  @Test
   void appliesSafeDefaultsForMissingOptionalProperties() {
     SftpConfig config =
         SftpConfig.fromProperties(Map.of("host", "host", "username", "user", "password", "secret"));

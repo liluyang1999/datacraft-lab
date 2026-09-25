@@ -3,19 +3,18 @@
 Trigger with config to override the input/output paths, e.g.::
 
     {"input": "/opt/datacraft/data/sales.csv", "output": "/opt/datacraft/data/sales.parquet"}
+
+Both paths must be absolute and inside ``DATACRAFT_DATA_ROOT`` (default ``/opt/datacraft/data``),
+without ``.``/``..`` segments or Hadoop glob characters.
 """
 
 from __future__ import annotations
 
 from datetime import datetime, timezone
 
-try:  # Airflow 3.x
-    from airflow.sdk import DAG, Param
-except ImportError:  # Airflow 2.x fallback
-    from airflow import DAG
-    from airflow.models.param import Param
+from airflow.sdk import DAG, Param
 
-from datacraft_common import DEFAULT_ARGS, spark_task
+from datacraft_common import DEFAULT_ARGS, data_path_param, spark_task
 
 with DAG(
     dag_id="datacraft_spark_etl",
@@ -26,8 +25,8 @@ with DAG(
     catchup=False,
     default_args=DEFAULT_ARGS,
     params={
-        "input": Param("/opt/datacraft/data/input.csv", type="string", minLength=1),
-        "output": Param("/opt/datacraft/data/output.parquet", type="string", minLength=1),
+        "input": data_path_param("input.csv", "CSV file to convert"),
+        "output": data_path_param("output.parquet", "Parquet dataset to overwrite"),
         "header": Param("true", enum=["true", "false"]),
         "delimiter": Param(",", type="string", minLength=1),
         "schema": Param("", type="string"),

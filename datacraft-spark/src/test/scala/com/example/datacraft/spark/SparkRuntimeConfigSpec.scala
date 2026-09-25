@@ -32,13 +32,73 @@ class SparkRuntimeConfigSpec extends AnyFunSuite {
   }
 
   test("fromParameters falls back to local defaults") {
-    val config = SparkRuntimeConfig.fromParameters("demo", Map.empty)
+    val config = SparkRuntimeConfig.fromParameters("demo", Map.empty, launcherConf = Map.empty)
 
     assert(config.appName == "datacraft-lab-demo")
     assert(config.master == "local[*]")
     assert(config.shufflePartitions == 8)
     assert(config.warehouseDir.isEmpty)
     assert(!config.enableHiveSupport)
+  }
+
+  private val launcher = Map(
+    "spark.master"                 -> "spark://c:7077",
+    "spark.sql.shuffle.partitions" -> " 400 ",
+    "spark.app.name"               -> "com.example.datacraft.cli.Main"
+  )
+
+  test("fromParameters inherits the spark-submit master and shuffle partitions") {
+    val config = SparkRuntimeConfig.fromParameters("demo", Map.empty, launcher)
+
+    assert(config.master == "spark://c:7077")
+    assert(config.shufflePartitions == 400)
+    assert(config.appName == "datacraft-lab-demo")
+  }
+
+  test("explicit job parameters win over the launcher") {
+    val config = SparkRuntimeConfig.fromParameters(
+      "demo",
+      Map(
+        ParameterKeys.SPARK_MASTER             -> "local[2] ",
+        ParameterKeys.SPARK_SHUFFLE_PARTITIONS -> " 4",
+        ParameterKeys.SPARK_APP_NAME           -> " nightly ",
+        ParameterKeys.SPARK_WAREHOUSE_DIR      -> " /data/warehouse "
+      ),
+      launcher
+    )
+
+    assert(config.master == "local[2]")
+    assert(config.shufflePartitions == 4)
+    assert(config.appName == "nightly")
+    assert(config.warehouseDir.contains("/data/warehouse"))
+  }
+
+  test("a blank master parameter defers to the launcher") {
+    val config =
+      SparkRuntimeConfig.fromParameters("demo", Map(ParameterKeys.SPARK_MASTER -> " "), launcher)
+
+    assert(config.master == "spark://c:7077")
+  }
+
+  test("malformed shuffle partitions fail and name the parameter") {
+    for (value <- Seq("auto", "", "1,000", "99999999999", "0")) {
+      val error = intercept[IllegalArgumentException](
+        SparkRuntimeConfig.fromParameters(
+          "demo",
+          Map(ParameterKeys.SPARK_SHUFFLE_PARTITIONS -> value),
+          launcher
+        )
+      )
+      assert(error.getMessage == "spark.shufflePartitions must be a 32-bit integer >= 1")
+    }
+    val launcherError = intercept[IllegalArgumentException](
+      SparkRuntimeConfig.fromParameters(
+        "demo",
+        Map.empty,
+        Map("spark.sql.shuffle.partitions" -> "auto")
+      )
+    )
+    assert(launcherError.getMessage.contains("spark.sql.shuffle.partitions"))
   }
 
   test("fromParameters reads overrides from job parameters") {

@@ -62,9 +62,9 @@ public record SftpConfig(
     boolean strict =
         !"false".equalsIgnoreCase(properties.getOrDefault("strictHostKeyChecking", "true").trim());
     return new SftpConfig(
-        properties.get("host"),
+        trimmed(properties.get("host")),
         parseInt(properties.get("port"), DEFAULT_PORT),
-        properties.get("username"),
+        trimmed(properties.get("username")),
         properties.get("password"),
         privateKey,
         strict,
@@ -91,6 +91,11 @@ public record SftpConfig(
         + ", timeout="
         + timeout
         + "]";
+  }
+
+  /** Config values arrive verbatim; host and user names never carry meaningful outer spaces. */
+  private static String trimmed(String value) {
+    return value == null ? null : value.trim();
   }
 
   private static int parseInt(String value, int defaultValue) {

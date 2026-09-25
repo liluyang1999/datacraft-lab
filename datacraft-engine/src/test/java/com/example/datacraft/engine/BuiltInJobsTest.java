@@ -18,6 +18,8 @@ class BuiltInJobsTest {
 
   @Test
   void echoJobReturnsMessageParameter() {
+    // The literal "message" key is the public CLI/HTTP contract; the shared constant must match it.
+    assertEquals("message", ParameterKeys.MESSAGE);
     JobExecutionEngine engine = new JobExecutionEngine(BuiltInJobs.registry());
 
     JobExecutionResult result =

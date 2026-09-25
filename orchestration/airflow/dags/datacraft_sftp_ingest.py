@@ -2,23 +2,24 @@
 
 Prerequisites:
   * The SFTP provider (``apache-airflow-providers-sftp``) is installed (see requirements.txt).
-  * An Airflow connection named ``datacraft_sftp`` exists (Admin -> Connections, type SSH/SFTP).
+  * An Airflow connection named ``datacraft_sftp`` exists (Admin -> Connections, type SSH/SFTP)
+    and verifies the server key, e.g. extra ``{"host_key": "ssh-ed25519 AAAA..."}``. The download
+    task fails without retrying when the connection would accept any host key.
+
+``local_path`` and ``output`` must be absolute paths inside ``DATACRAFT_DATA_ROOT``, without
+``.``/``..`` segments or Hadoop glob characters; the SFTP account bounds ``remote_path``.
 
 The download step uses Airflow's native SFTP provider (connection + secret management handled by
-Airflow); the JVM ``SftpClient`` remains available for programmatic transfers inside JVM jobs.
+Airflow). The JVM ``SftpClient`` is a library for future JVM jobs; no shipped job uses it.
 """
 
 from __future__ import annotations
 
 from datetime import datetime, timezone
 
-try:  # Airflow 3.x
-    from airflow.sdk import DAG, Param
-except ImportError:  # Airflow 2.x fallback
-    from airflow import DAG
-    from airflow.models.param import Param
+from airflow.sdk import DAG, Param
 
-from datacraft_common import DEFAULT_ARGS, spark_task
+from datacraft_common import DEFAULT_ARGS, data_path_param, require_verified_sftp_host, spark_task
 from airflow.providers.sftp.operators.sftp import SFTPOperator
 
 with DAG(
@@ -31,8 +32,8 @@ with DAG(
     default_args=DEFAULT_ARGS,
     params={
         "remote_path": Param("/upload/input.csv", type="string", minLength=1),
-        "local_path": Param("/opt/datacraft/data/ingest/input.csv", type="string", minLength=1),
-        "output": Param("/opt/datacraft/data/ingest/output.parquet", type="string", minLength=1),
+        "local_path": data_path_param("ingest/input.csv", "Download destination for the remote CSV"),
+        "output": data_path_param("ingest/output.parquet", "Parquet dataset to overwrite"),
         "header": Param("true", enum=["true", "false"]),
         "delimiter": Param(",", type="string", minLength=1),
         "schema": Param("", type="string"),
@@ -48,6 +49,7 @@ with DAG(
         local_filepath="{{ params.local_path }}",
         operation="get",
         create_intermediate_dirs=True,
+        pre_execute=require_verified_sftp_host("datacraft_sftp"),
     )
 
     convert = spark_task(

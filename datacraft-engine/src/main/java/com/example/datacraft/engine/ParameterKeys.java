@@ -24,25 +24,25 @@ public final class ParameterKeys {
   /** Whether to enable Hive support on the Spark session ({@code true}/{@code false}). */
   public static final String SPARK_ENABLE_HIVE = "spark.enableHive";
 
-  /** Source path or table for a data job. */
+  /** Source path (local or Hadoop-compatible URI) for a data job. */
   public static final String INPUT = "input";
 
-  /** Destination path or table for a data job. */
+  /** Destination path for a data job. */
   public static final String OUTPUT = "output";
 
   /** Source data format (csv, json, parquet, orc, ...). */
   public static final String INPUT_FORMAT = "inputFormat";
 
-  /** Destination data format (csv, json, parquet, orc, ...). */
-  public static final String OUTPUT_FORMAT = "outputFormat";
-
-  /** Spark write mode (overwrite, append, ignore, errorifexists). */
+  /** Spark write mode (overwrite, append, ignore, error, errorifexists). */
   public static final String WRITE_MODE = "mode";
 
-  /** Whether a CSV source/target carries a header row ({@code true}/{@code false}). */
+  /** Whether a CSV source carries a header row ({@code true}/{@code false}). */
   public static final String HEADER = "header";
 
-  /** Single-character field delimiter for delimited formats. */
+  /**
+   * CSV field delimiter: non-empty, may be multi-character; must not contain a double quote, CR, LF
+   * or NUL.
+   */
   public static final String DELIMITER = "delimiter";
 
   /** Optional Spark DDL schema, e.g. {@code id STRING, amount DECIMAL(22,4)}. */

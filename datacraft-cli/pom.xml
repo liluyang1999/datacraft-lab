@@ -14,6 +14,11 @@
     <artifactId>datacraft-cli</artifactId>
     <name>datacraft-cli</name>
 
+    <properties>
+        <!-- No JUnit classes here; scalatest-maven-plugin runs this module's tests. -->
+        <surefire.failIfNoTests>false</surefire.failIfNoTests>
+    </properties>
+
     <dependencies>
         <dependency>
             <groupId>com.example.datacraft</groupId>
@@ -38,6 +43,11 @@
         <dependency>
             <groupId>com.example.datacraft</groupId>
             <artifactId>datacraft-io</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>com.example.datacraft</groupId>
+            <artifactId>datacraft-jobs</artifactId>
             <version>${project.version}</version>
         </dependency>
         <dependency>
@@ -85,6 +95,11 @@
                             <transformers>
                                 <transformer implementation="org.apache.maven.plugins.shade.resource.ManifestResourceTransformer">
                                     <mainClass>com.example.datacraft.cli.Runner</mainClass>
+                                    <!-- Keeps the META-INF/versions classes of multi-release dependencies
+                                         (jsch Ed25519/X25519/ML-KEM, Jackson) active in the fat jar. -->
+                                    <manifestEntries>
+                                        <Multi-Release>true</Multi-Release>
+                                    </manifestEntries>
                                 </transformer>
                                 <transformer implementation="org.apache.maven.plugins.shade.resource.ServicesResourceTransformer" />
                                 <transformer implementation="org.apache.maven.plugins.shade.resource.AppendingTransformer">
@@ -98,6 +113,9 @@
                                         <exclude>META-INF/*.SF</exclude>
                                         <exclude>META-INF/*.DSA</exclude>
                                         <exclude>META-INF/*.RSA</exclude>
+                                        <!-- A dependency's module descriptor must not describe the fat jar. -->
+                                        <exclude>module-info.class</exclude>
+                                        <exclude>META-INF/versions/*/module-info.class</exclude>
                                     </excludes>
                                 </filter>
                             </filters>

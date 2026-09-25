@@ -8,3 +8,15 @@ indent_size = 4
 indent_style = space
 insert_final_newline = true
 trim_trailing_whitespace = true
+
+# Overrides; later sections win. Keep these in line with the enforced tools: Spotless formats Java
+# and Scala with 2-space indents, make requires tab-indented recipes, and .gitattributes checks
+# out Windows scripts with CRLF.
+[*.{java,scala}]
+indent_size = 2
+
+[Makefile]
+indent_style = tab
+
+[*.{cmd,bat}]
+end_of_line = crlf

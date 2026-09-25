@@ -1,5 +1,6 @@
-# datacraft-lab — convenience targets. JVM build uses Maven; deployment uses the deploy/ scripts.
-MVN ?= mvn
+# datacraft-lab — convenience targets. JVM build uses the pinned Maven Wrapper (override with
+# `make MVN=mvn ...`); deployment uses the deploy/ scripts.
+MVN ?= ./mvnw
 
 .PHONY: help build test verify format package images up down swarm dags clean
 

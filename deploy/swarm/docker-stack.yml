@@ -9,6 +9,13 @@
 #
 # Deploy (from repo root, on a swarm manager):
 #   bash deploy/scripts/swarm-deploy.sh
+#   bash deploy/scripts/airflow-init.sh   # waits for the one-shot airflow-init service
+
+x-logging: &bounded-logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
 
 x-airflow-common: &airflow-common
   image: ${DATACRAFT_REGISTRY:-localhost:5000}/datacraft-airflow:${DATACRAFT_TAG:-latest}
@@ -17,12 +24,12 @@ x-airflow-common: &airflow-common
   environment: &airflow-env
     AIRFLOW__CORE__EXECUTOR: CeleryExecutor
     AIRFLOW__CORE__AUTH_MANAGER: airflow.providers.fab.auth_manager.fab_auth_manager.FabAuthManager
-    AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://${POSTGRES_USER:-airflow}:${POSTGRES_PASSWORD:-airflow}@postgres/${POSTGRES_DB:-airflow}
+    AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://${POSTGRES_USER:-airflow}:${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}@postgres/${POSTGRES_DB:-airflow}
     AIRFLOW__CELERY__BROKER_URL: redis://redis:6379/0
-    AIRFLOW__CELERY__RESULT_BACKEND: db+postgresql://${POSTGRES_USER:-airflow}:${POSTGRES_PASSWORD:-airflow}@postgres/${POSTGRES_DB:-airflow}
-    AIRFLOW__CORE__FERNET_KEY: ${AIRFLOW_FERNET_KEY:-}
+    AIRFLOW__CELERY__RESULT_BACKEND: db+postgresql://${POSTGRES_USER:-airflow}:${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}@postgres/${POSTGRES_DB:-airflow}
+    AIRFLOW__CORE__FERNET_KEY: ${AIRFLOW_FERNET_KEY:?Set AIRFLOW_FERNET_KEY in .env}
     AIRFLOW__CORE__LOAD_EXAMPLES: "false"
-    AIRFLOW__API__SECRET_KEY: ${AIRFLOW_API_SECRET_KEY:-please-change-me}
+    AIRFLOW__API__SECRET_KEY: ${AIRFLOW_API_SECRET_KEY:?Set AIRFLOW_API_SECRET_KEY in .env}
     AIRFLOW__API_AUTH__JWT_SECRET: ${AIRFLOW_JWT_SECRET:?Set AIRFLOW_JWT_SECRET in .env}
     AIRFLOW__CORE__EXECUTION_API_SERVER_URL: http://airflow-apiserver:8080/execution/
     AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION: "true"
@@ -30,18 +37,22 @@ x-airflow-common: &airflow-common
     DATACRAFT_HOME: /opt/datacraft
     DATACRAFT_CLI_JAR: /opt/datacraft/datacraft-cli.jar
     DATACRAFT_SPARK_MASTER: ${DATACRAFT_SPARK_MASTER:-local[*]}
+    # Job and DAG path parameters must stay inside the shared data volume.
+    DATACRAFT_DATA_ROOT: /opt/datacraft/data
   networks:
     - datacraft-net
   volumes:
     - airflow-logs:/opt/airflow/logs
     - datacraft-data:/opt/datacraft/data
+  logging: *bounded-logging
 
 services:
   postgres:
     image: postgres:18
+    logging: *bounded-logging
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-airflow}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-airflow}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
       POSTGRES_DB: ${POSTGRES_DB:-airflow}
     volumes:
       - postgres-db:/var/lib/postgresql
@@ -54,10 +65,26 @@ services:
 
   redis:
     image: redis:8
+    logging: *bounded-logging
     networks:
       - datacraft-net
     deploy:
       replicas: 1
+      placement:
+        constraints: ["node.hostname == ${DATACRAFT_DATA_NODE:?Set the persistent data hostname}"]
+
+  # One-shot: migrate the metadata DB and create the admin user. Swarm retries it until Postgres is
+  # reachable; the other Airflow services exit ("Database migration required") and restart until it
+  # completes. A redeploy that changes the image runs it again (migrations are idempotent).
+  airflow-init:
+    <<: *airflow-common
+    entrypoint: /opt/datacraft/airflow-bootstrap.sh
+    command: []
+    deploy:
+      replicas: 1
+      restart_policy:
+        condition: on-failure
+        delay: 10s
       placement:
         constraints: ["node.hostname == ${DATACRAFT_DATA_NODE:?Set the persistent data hostname}"]
 
@@ -66,6 +93,11 @@ services:
     command: api-server
     ports:
       - "${AIRFLOW_WEB_PORT:-8080}:8080"
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "http://localhost:8080/api/v2/monitor/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
     deploy:
       replicas: 1
       placement:
@@ -74,6 +106,12 @@ services:
   airflow-scheduler:
     <<: *airflow-common
     command: scheduler
+    healthcheck:
+      test: ["CMD-SHELL", 'airflow jobs check --job-type SchedulerJob --hostname "$${HOSTNAME}"']
+      interval: 60s
+      timeout: 30s
+      retries: 3
+      start_period: 30s
     deploy:
       replicas: 1
       placement:
@@ -82,6 +120,12 @@ services:
   airflow-dag-processor:
     <<: *airflow-common
     command: dag-processor
+    healthcheck:
+      test: ["CMD-SHELL", 'airflow jobs check --job-type DagProcessorJob --hostname "$${HOSTNAME}"']
+      interval: 60s
+      timeout: 30s
+      retries: 3
+      start_period: 30s
     deploy:
       replicas: 1
       placement:
@@ -90,6 +134,12 @@ services:
   airflow-triggerer:
     <<: *airflow-common
     command: triggerer
+    healthcheck:
+      test: ["CMD-SHELL", 'airflow jobs check --job-type TriggererJob --hostname "$${HOSTNAME}"']
+      interval: 60s
+      timeout: 30s
+      retries: 3
+      start_period: 30s
     deploy:
       replicas: 1
       placement:
@@ -99,18 +149,36 @@ services:
   airflow-worker:
     <<: *airflow-common
     command: celery worker
+    environment:
+      <<: *airflow-env
+      # The official image's dumb-init must signal only the Celery main process, so the worker can
+      # shut down warm: https://airflow.apache.org/docs/docker-stack/entrypoint.html#signal-propagation
+      DUMB_INIT_SETSID: "0"
+    # A redeploy lets running tasks finish (bounded by the DAG task timeout, plus 30s to report the
+    # result) before Swarm kills the old worker.
+    stop_grace_period: ${DATACRAFT_TASK_TIMEOUT_MINUTES:-60}m30s
     deploy:
-      replicas: ${AIRFLOW_WORKER_REPLICAS:-2}
+      replicas: ${AIRFLOW_WORKER_REPLICAS:-1}
       placement:
         constraints: ["node.hostname == ${DATACRAFT_DATA_NODE:?Set the persistent data hostname}"]
 
   datacraft-api:
     image: ${DATACRAFT_REGISTRY:-localhost:5000}/datacraft-jvm:${DATACRAFT_TAG:-latest}
     # The unauthenticated engine API is overlay-only; expose it through an authenticated gateway.
+    logging: *bounded-logging
+    environment:
+      # Small-file jobs may only read paths under this root.
+      DATACRAFT_DATA_ROOT: /opt/datacraft/data
+    volumes:
+      # Read-only: Airflow tasks write the shared data, the API only reads it.
+      - datacraft-data:/opt/datacraft/data:ro
     networks:
       - datacraft-net
     deploy:
       replicas: 1
+      # The data volume is node-local, like every other stateful service's.
+      placement:
+        constraints: ["node.hostname == ${DATACRAFT_DATA_NODE:?Set the persistent data hostname}"]
 
 networks:
   datacraft-net:

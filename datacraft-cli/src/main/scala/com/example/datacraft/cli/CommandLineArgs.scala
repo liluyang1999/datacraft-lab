@@ -13,6 +13,7 @@ final case class CommandLineArgs(
     configFile: Option[Path] = None,
     parameters: Map[String, String] = Map.empty,
     masterExplicit: Boolean = false,
+    lifecycleExplicit: Boolean = false,
     jsonOutput: Boolean = false,
     resultFile: Option[Path] = None
 ) {

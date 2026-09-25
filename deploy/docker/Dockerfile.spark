@@ -1,12 +1,15 @@
 # syntax=docker/dockerfile:1
 #
-# Spark job runner: the official Apache Spark image plus the CLI jar. Used to run Spark data jobs
-# via spark-submit, either standalone or launched by Airflow's DockerOperator on a multi-host setup.
+# Optional standalone spark-submit runner (the official Apache Spark image plus the CLI jar), built
+# only with BUILD_SPARK_IMAGE=true. It is not used by the Compose/Swarm stacks, the DAGs or CI: the
+# DAGs run spark-submit inside the Airflow image.
 #
 # The java25 variant is required: the jar targets Java 25 bytecode, so the Spark runtime must be
 # Java 25 too. Spark 4.2.0 supports Java 17/21/25.
 
-ARG JAR_IMAGE=datacraft/jar-builder:latest
+# No default: build-images.sh passes the locally built builder. A bare name here would resolve to
+# docker.io/datacraft/*, a Docker Hub namespace this project does not own.
+ARG JAR_IMAGE
 ARG SPARK_IMAGE=apache/spark:4.2.0-scala2.13-java25-python3-ubuntu
 
 FROM ${JAR_IMAGE} AS jar
@@ -20,8 +23,9 @@ WORKDIR /opt/datacraft
 
 ENV DATACRAFT_HOME=/opt/datacraft
 
-# Pass spark-submit/job arguments at run time, e.g.:
-#   docker run --rm datacraft/spark --master local[*] \
-#     /opt/datacraft/datacraft-cli.jar --command spark-version
+# Pass spark-submit/job arguments at run time. Give spark-submit and the CLI the same --master,
+# e.g. after BUILD_SPARK_IMAGE=true bash deploy/scripts/build-images.sh:
+#   docker run --rm datacraft/spark:latest --master 'local[*]' \
+#     /opt/datacraft/datacraft-cli.jar --command spark-version --master 'local[*]'
 ENTRYPOINT ["/opt/spark/bin/spark-submit", "--class", "com.example.datacraft.cli.Runner"]
 CMD ["--help"]

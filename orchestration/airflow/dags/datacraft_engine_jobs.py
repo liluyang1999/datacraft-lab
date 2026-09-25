@@ -7,10 +7,7 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
-try:  # Airflow 3.x
-    from airflow.sdk import DAG
-except ImportError:  # Airflow 2.x fallback
-    from airflow import DAG
+from airflow.sdk import DAG
 
 from datacraft_common import DEFAULT_ARGS, cli_task
 

@@ -26,6 +26,7 @@
         <module>datacraft-config</module>
         <module>datacraft-io</module>
         <module>datacraft-engine</module>
+        <module>datacraft-jobs</module>
         <module>datacraft-spark</module>
         <module>datacraft-api</module>
         <module>datacraft-cli</module>
@@ -57,7 +58,14 @@
              the module build directory works on every OS. -->
         <test.nio.jvm.args>-Djdk.net.unixdomain.tmpdir=${project.build.directory}</test.nio.jvm.args>
 
-        <jackson.version>2.22.2</jackson.version>
+        <!-- A module whose JUnit tests all vanish (renamed class, provider mismatch) fails instead of
+             passing green. Wired into surefire only: failsafe reads the bare failIfNoTests property
+             and no module has *IT classes. Modules tested through scalatest set this to false. An
+             ad-hoc multi-module -Dtest=... run also needs -Dsurefire.failIfNoTests=false (with
+             -Dsurefire.failIfNoSpecifiedTests=false) for modules without a matching test. -->
+        <surefire.failIfNoTests>true</surefire.failIfNoTests>
+
+        <jackson.version>2.22.3</jackson.version>
         <jsch.version>2.28.7</jsch.version>
         <junit.jupiter.version>6.1.3</junit.jupiter.version>
         <scala.maven.plugin.version>4.9.10</scala.maven.plugin.version>
@@ -65,14 +73,19 @@
         <scalatest.maven.plugin.version>2.2.0</scalatest.maven.plugin.version>
         <scopt.version>4.1.0</scopt.version>
         <spotless.version>3.10.0</spotless.version>
+        <sshd.version>2.19.0</sshd.version>
         <google.java.format.version>1.36.1</google.java.format.version>
+        <!-- Checkstyle engine run by maven-checkstyle-plugin. The plugin's default engine (9.3)
+             cannot parse Java 21/25 syntax such as record patterns, guarded switch labels and
+             flexible constructor bodies; ModernSyntaxFixtureTest keeps that syntax in the build. -->
+        <checkstyle.version>14.1.0</checkstyle.version>
         <maven.clean.plugin.version>3.5.0</maven.clean.plugin.version>
         <maven.checkstyle.plugin.version>3.6.0</maven.checkstyle.plugin.version>
         <maven.compiler.plugin.version>3.15.0</maven.compiler.plugin.version>
         <maven.dependency.plugin.version>3.11.0</maven.dependency.plugin.version>
         <maven.deploy.plugin.version>3.1.4</maven.deploy.plugin.version>
         <maven.enforcer.plugin.version>3.6.3</maven.enforcer.plugin.version>
-        <maven.failsafe.plugin.version>3.5.3</maven.failsafe.plugin.version>
+        <maven.failsafe.plugin.version>3.5.6</maven.failsafe.plugin.version>
         <maven.install.plugin.version>3.1.4</maven.install.plugin.version>
         <maven.jar.plugin.version>3.5.1</maven.jar.plugin.version>
         <maven.javadoc.plugin.version>3.12.0</maven.javadoc.plugin.version>
@@ -80,7 +93,7 @@
         <maven.shade.plugin.version>3.6.2</maven.shade.plugin.version>
         <maven.site.plugin.version>3.22.0</maven.site.plugin.version>
         <maven.source.plugin.version>3.4.0</maven.source.plugin.version>
-        <maven.surefire.plugin.version>3.5.3</maven.surefire.plugin.version>
+        <maven.surefire.plugin.version>3.5.6</maven.surefire.plugin.version>
     </properties>
 
     <dependencyManagement>
@@ -132,6 +145,13 @@
                 <groupId>org.scalatest</groupId>
                 <artifactId>scalatest_${scala.binary.version}</artifactId>
                 <version>${scalatest.version}</version>
+                <scope>test</scope>
+            </dependency>
+            <!-- Embedded SFTP server for SftpClient tests; sshd-core and sshd-common come transitively. -->
+            <dependency>
+                <groupId>org.apache.sshd</groupId>
+                <artifactId>sshd-sftp</artifactId>
+                <version>${sshd.version}</version>
                 <scope>test</scope>
             </dependency>
         </dependencies>
@@ -212,6 +232,7 @@
                     <version>${maven.surefire.plugin.version}</version>
                     <configuration>
                         <argLine>${test.nio.jvm.args}</argLine>
+                        <failIfNoTests>${surefire.failIfNoTests}</failIfNoTests>
                         <trimStackTrace>false</trimStackTrace>
                         <useModulePath>false</useModulePath>
                         <excludes>
@@ -306,7 +327,7 @@
                             <rules>
                                 <requireJavaVersion>
                                     <version>[25,)</version>
-                                    <message>datacraft-lab builds with JDK 25 or newer and targets Java 25 bytecode. Spark 4.2.0 supports Java 17/21/25; use JDK 25.0.3 or newer, because Spark deprecates Java 25 releases older than 25.0.3.</message>
+                                    <message>datacraft-lab builds with JDK 25 or newer and targets Java 25 bytecode (25.0.3+ recommended: Spark 4.2.0 deprecates earlier Java 25 releases).</message>
                                 </requireJavaVersion>
                                 <requireMavenVersion>
                                     <version>[3.9.0,)</version>
@@ -319,6 +340,31 @@
                                 </requirePluginVersions>
                                 <banDuplicatePomDependencyVersions />
                                 <requireNoRepositories />
+                                <!-- Named explicitly: jackson-annotations is versioned 2.22 (no patch
+                                     number), which sorts below 2.22.3, so a group wildcard would ban it. -->
+                                <bannedDependencies>
+                                    <excludes>
+                                        <exclude>com.fasterxml.jackson.core:jackson-core:[,2.22.3)</exclude>
+                                        <exclude>com.fasterxml.jackson.core:jackson-databind:[,2.22.3)</exclude>
+                                    </excludes>
+                                    <message>jackson-core and jackson-databind older than 2.22.3 are affected by GHSA-wv8q-qhhj-9h54 (CVE-2026-91776), GHSA-cxp5-3px4-pw24 (CVE-2026-91777), GHSA-p6pp-m3f8-5c89 (CVE-2026-89407) and GHSA-7hhh-6rmp-j9qf (CVE-2026-89425).</message>
+                                </bannedDependencies>
+                            </rules>
+                        </configuration>
+                    </execution>
+                    <!-- Warning only: the hard floor above stays [25,) so existing JDK 25 hosts keep building. -->
+                    <execution>
+                        <id>warn-deprecated-jdk</id>
+                        <goals>
+                            <goal>enforce</goal>
+                        </goals>
+                        <configuration>
+                            <rules>
+                                <requireJavaVersion>
+                                    <version>[25.0.3,)</version>
+                                    <level>WARN</level>
+                                    <message>Spark 4.2.0 deprecates Java 25 releases older than 25.0.3; upgrade the JDK.</message>
+                                </requireJavaVersion>
                             </rules>
                         </configuration>
                     </execution>
@@ -397,6 +443,13 @@
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-checkstyle-plugin</artifactId>
                 <version>${maven.checkstyle.plugin.version}</version>
+                <dependencies>
+                    <dependency>
+                        <groupId>com.puppycrawl.tools</groupId>
+                        <artifactId>checkstyle</artifactId>
+                        <version>${checkstyle.version}</version>
+                    </dependency>
+                </dependencies>
                 <configuration>
                     <configLocation>${maven.multiModuleProjectDirectory}/config/checkstyle/checkstyle.xml</configLocation>
                     <consoleOutput>true</consoleOutput>

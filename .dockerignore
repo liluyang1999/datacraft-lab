@@ -16,3 +16,14 @@ tmp/
 *.log
 docs/engineering-report/
 deploy/compose/.env
+
+# Runtime state, database dumps and env files that .gitignore already excludes: never send them to
+# the daemon, where Dockerfile.build's `COPY . .` would bake them into an image layer.
+backups/
+warehouse/
+spark-warehouse/
+.airflow/
+**/.env
+
+# Local assistant state, including nested git worktrees (full source copies).
+.claude/

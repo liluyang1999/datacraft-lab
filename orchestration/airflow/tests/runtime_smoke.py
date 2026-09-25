@@ -1,6 +1,6 @@
 """Real DAG runs against the packaged CLI, Spark and a temporary local SFTP server.
 
-Run with Python from an Airflow 3.3.1 environment that also has pyspark 4.2.0.
+Run with Python from an Airflow 3.3.2 environment that also has pyspark 4.2.0.
 All metadata, credentials, logs, downloads and Parquet outputs live in a temporary directory.
 """
 
@@ -97,6 +97,20 @@ def sftp_source(source):
             raise RuntimeError(f"SFTP fixture did not stop cleanly: {failures}")
 
 
+def verify_output(path):
+    # row_count only compares the dataset with the converter's own count; pin the count and notes.
+    from pyspark.sql import SparkSession
+
+    spark = SparkSession.builder.master("local[1]").appName("runtime-smoke-verify").getOrCreate()
+    try:
+        notes = sorted(row.note for row in spark.read.parquet(str(path)).select("note").collect())
+    finally:
+        spark.stop()
+    if notes != ["hello\nworld", "中文"]:
+        raise AssertionError(f"{path} contains {notes!r}")
+    print(f"Verified output rows: {path.name}", flush=True)
+
+
 def run_dags(data):
     from airflow.dag_processing.dagbag import DagBag
 
@@ -118,6 +132,7 @@ def run_dags(data):
     # Running the same overwrite pipeline twice proves retries do not duplicate rows.
     for _ in range(2):
         run("datacraft_spark_etl", {"input": str(source), "output": str(data / "converted.parquet")})
+    verify_output(data / "converted.parquet")
     with sftp_source(source) as connection:
         os.environ["AIRFLOW_CONN_DATACRAFT_SFTP"] = json.dumps(connection)
         try:
@@ -127,6 +142,7 @@ def run_dags(data):
             })
             if (data / "nested/ingest.csv").read_bytes() != source.read_bytes():
                 raise AssertionError("SFTP content differs from source")
+            verify_output(data / "ingested.parquet")
         finally:
             os.environ.pop("AIRFLOW_CONN_DATACRAFT_SFTP", None)
 
@@ -154,6 +170,8 @@ def main():
             "AIRFLOW_ADMIN_PASSWORD": "-" + secrets.token_urlsafe(24),
             "AIRFLOW_ADMIN_EMAIL": "runtime@example.invalid",
             "DATACRAFT_CLI_JAR": str(jar),
+            # DAG path parameters must stay under the data root; confine them to this run's data.
+            "DATACRAFT_DATA_ROOT": str(work / "data"),
             "DATACRAFT_SPARK_MASTER": "local[1]",
             "DATACRAFT_TASK_RETRIES": "0",
             "SPARK_LOCAL_IP": "127.0.0.1",

@@ -7,10 +7,14 @@
 #   * the datacraft-cli jar and the DAGs
 #
 # Spark jobs run in local mode via spark-submit inside this image. For a real Spark cluster, set
-# DATACRAFT_SPARK_MASTER to the cluster URL, or launch the dedicated Spark image with DockerOperator.
+# DATACRAFT_SPARK_MASTER to the cluster URL; the driver then runs here in client mode, so the cluster
+# also needs data paths the driver and every executor can reach (orchestration/airflow/README.md).
+# No DAG or service runs the separate datacraft/spark image.
 
-ARG JAR_IMAGE=datacraft/jar-builder:latest
-ARG AIRFLOW_IMAGE=apache/airflow:3.3.1
+# No default: build-images.sh passes the locally built builder. A bare name here would resolve to
+# docker.io/datacraft/*, a Docker Hub namespace this project does not own.
+ARG JAR_IMAGE
+ARG AIRFLOW_IMAGE=apache/airflow:3.3.2
 ARG JRE_IMAGE=eclipse-temurin:25-jre
 
 FROM ${JAR_IMAGE} AS jar
@@ -27,7 +31,9 @@ ENV PATH="${JAVA_HOME}/bin:${PATH}"
 # --- Application artifact ---
 USER root
 COPY --from=jar /dist/datacraft-cli.jar /opt/datacraft/datacraft-cli.jar
-RUN mkdir -p /opt/datacraft/data && chown -R airflow:0 /opt/datacraft
+# Docker seeds the empty datacraft-data volume from this directory. Group 0 needs write access:
+# Compose runs Airflow as ${AIRFLOW_UID}:0, and a UID other than 50000 only matches the group.
+RUN mkdir -p /opt/datacraft/data && chown -R airflow:0 /opt/datacraft && chmod -R g+rwX /opt/datacraft/data
 USER airflow
 
 # --- Python deps: providers + pyspark (spark-submit lives under the pyspark package) ---

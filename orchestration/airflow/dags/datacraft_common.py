@@ -10,6 +10,8 @@ from collections.abc import Mapping, Sequence
 from datetime import timedelta
 
 from airflow.providers.standard.operators.bash import BashOperator
+from airflow.sdk import Param
+from airflow.sdk.exceptions import AirflowFailException
 
 
 # --- Configuration resolved from the environment, with laptop-friendly defaults ---------------
@@ -20,8 +22,40 @@ SPARK_SUBMIT = os.environ.get("DATACRAFT_SPARK_SUBMIT", "spark-submit")
 SPARK_MASTER = os.environ.get("DATACRAFT_SPARK_MASTER", "local[*]")
 MAIN_CLASS = "com.example.datacraft.cli.Runner"
 
+
+# Spark globs a read path containing any of {}[]*?\ (Hadoop expands root/{../..}/x and unescapes
+# root/\.\./x before resolving it), so data paths refuse them; NUL, CR and LF are never valid.
+_UNSAFE_PATH_CHARS = r"[\x00\n\r{}\[\]*?\\]"
+
+
+def _data_root() -> str:
+    raw = os.environ.get("DATACRAFT_DATA_ROOT", f"{PROJECT_HOME}/data")
+    # Paths are matched against the root literally, so spell it the way paths are normally written.
+    # Hadoop reads a leading "//" as a host name and the JVM jobs trim the variable, so both are
+    # refused here rather than normalised differently on each side.
+    root = re.sub("/+", "/", raw).rstrip("/")
+    if (not root.startswith("/") or raw.startswith("//") or raw != raw.strip()
+            or re.search(_UNSAFE_PATH_CHARS, root)):
+        raise ValueError(
+            "DATACRAFT_DATA_ROOT (default $DATACRAFT_HOME/data) must be an absolute directory "
+            "other than / that does not start with // or carry surrounding whitespace, without "
+            f"any of {{}}[]*?\\ or NUL, CR, LF, got {raw!r}"
+        )
+    return root
+
+
+# Trigger-conf file paths are confined here: Spark overwrite deletes its target before writing.
+DATA_ROOT = _data_root()
+
+
 def _env_int(name: str, default: int, minimum: int) -> int:
-    value = int(os.environ.get(name, str(default)))
+    raw = os.environ.get(name)
+    if raw is None:
+        return default
+    try:
+        value = int(raw)
+    except ValueError:
+        raise ValueError(f"{name} must be an integer, got {raw!r}") from None
     if value < minimum:
         raise ValueError(f"{name} must be at least {minimum}")
     return value
@@ -31,10 +65,63 @@ DEFAULT_ARGS = {
     "owner": "datacraft",
     "retries": _env_int("DATACRAFT_TASK_RETRIES", 1, 0),
     "retry_delay": timedelta(minutes=2),
-    "retry_exponential_backoff": True,
+    # Airflow 3 takes a float multiplier (0 = constant delay); 2.0 doubles the delay per retry.
+    "retry_exponential_backoff": 2.0,
     "max_retry_delay": timedelta(minutes=10),
     "execution_timeout": timedelta(minutes=_env_int("DATACRAFT_TASK_TIMEOUT_MINUTES", 60, 1)),
 }
+
+
+def _data_path_pattern(root: str) -> str:
+    # Spark (Hadoop Path) and the SFTP download resolve "." and ".." segments, so a prefix check
+    # alone would let root/../x escape. _UNSAFE_PATH_CHARS are refused anywhere, so Spark reads the
+    # literal path and "$" cannot match before a trailing newline. At least one real segment must
+    # follow the root itself. The JVM jobs trim their parameters, so a trailing space or control
+    # character would make them read another file than the SFTP download wrote.
+    return (rf"^(?![\s\S]*{_UNSAFE_PATH_CHARS}){re.escape(root)}(?:/+(?!\.\.?(?:/|$))[^/]+)+/*"
+            r"(?<![\x00-\x20])$")
+
+
+def data_path_param(default_name: str, description: str) -> Param:
+    """Trigger-conf path that must stay under DATA_ROOT; defaults to ``DATA_ROOT/default_name``."""
+    return Param(
+        f"{DATA_ROOT}/{default_name}",
+        description=f"{description} (absolute path under {DATA_ROOT}; no . or .. segments or {{}}[]*?\\)",
+        type="string",
+        minLength=1,
+        pattern=_data_path_pattern(DATA_ROOT),
+    )
+
+
+def require_verified_sftp_host(conn_id: str):
+    """Return a ``pre_execute`` hook that fails the task unless ``conn_id`` verifies the host key.
+
+    The SSH provider accepts any server key (with only a log warning) unless the connection pins
+    ``host_key`` or sets ``no_host_key_check`` to false, so the guard refuses to download otherwise.
+    Settings the provider rejects, such as a malformed or DSS ``host_key``, also fail without retry.
+    """
+
+    def check(context):
+        from airflow.providers.sftp.hooks.sftp import SFTPHook
+        from paramiko import SSHException
+
+        try:
+            hook = SFTPHook(ssh_conn_id=conn_id)  # Reads the connection only; no network I/O.
+        except (ValueError, SSHException) as err:
+            raise AirflowFailException(f"Connection {conn_id!r} has invalid SSH settings: {err}") from err
+        if hook.no_host_key_check or hook.allow_host_key_change:
+            raise AirflowFailException(
+                f"Connection {conn_id!r} must verify the SFTP host key: set the host_key extra and "
+                "do not enable no_host_key_check or allow_host_key_change"
+            )
+
+    return check
+
+
+class _ArgvBashOperator(BashOperator):
+    """Argument values render as Jinja strings, never as ``.sh``/``.bash`` template files."""
+
+    template_ext = ()
 
 
 def _extra_tokens(value: str | Sequence[str]) -> list[str]:
@@ -78,7 +165,7 @@ def _task(task_id: str, argv: list[str], *, structured=False, **kwargs) -> BashO
         )
     else:
         command = "exec " + command
-    return BashOperator(task_id=task_id, bash_command=command, env=env, **kwargs)
+    return _ArgvBashOperator(task_id=task_id, bash_command=command, env=env, **kwargs)
 
 
 def cli_task(task_id, command, *, params=None, lifecycle="dev", extra_args=(), **kwargs):

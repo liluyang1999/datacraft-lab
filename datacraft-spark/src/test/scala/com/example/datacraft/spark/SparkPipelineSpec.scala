@@ -9,14 +9,13 @@ import com.example.datacraft.engine.{
   JobStatus,
   ParameterKeys
 }
+import com.example.datacraft.spark.FileFixtures.deleteRecursively
 import org.scalatest.funsuite.AnyFunSuite
 
 import java.nio.channels.Selector
 import java.nio.charset.StandardCharsets
-import java.nio.file.{Files, Path}
-import java.util.Comparator
+import java.nio.file.Files
 import scala.jdk.CollectionConverters._
-import scala.util.Using
 
 /**
  * End-to-end check that Spark really starts on the running JDK and that [[AbstractSparkDataJob]]
@@ -29,6 +28,8 @@ class SparkPipelineSpec extends AnyFunSuite {
     ParameterKeys.SPARK_MASTER             -> "local[1]",
     ParameterKeys.SPARK_SHUFFLE_PARTITIONS -> "1"
   )
+
+  private val GlobRejection = "input must be a literal file or directory path"
 
   /**
    * Spark's Netty transport cannot start without working NIO selectors. On Windows the selector
@@ -73,12 +74,16 @@ class SparkPipelineSpec extends AnyFunSuite {
       JobExecutionRequest.of(jobName, Lifecycle.DEV, (sparkParameters ++ parameters).asJava)
     )
 
-  private def deleteRecursively(path: Path): Unit =
-    if (Files.exists(path)) {
-      Using.resource(Files.walk(path)) { paths =>
-        paths.sorted(Comparator.reverseOrder[Path]()).forEach(entry => Files.deleteIfExists(entry))
-      }
-    }
+  /**
+   * The Spark jobs with an explicit data root, so an ambient `DATACRAFT_DATA_ROOT` cannot confine
+   * the temporary paths these tests use.
+   */
+  private def newEngine(dataRoot: Option[String] = None): JobExecutionEngine = {
+    val registry = new JobRegistry()
+    List(new SparkVersionJob, new CsvToParquetJob(dataRoot), new RowCountJob)
+      .foreach(registry.register)
+    new JobExecutionEngine(registry)
+  }
 
   test("CSV options preserve identifiers decimals and multiline records") {
     requireNioSelectors()
@@ -91,7 +96,7 @@ class SparkPipelineSpec extends AnyFunSuite {
         input,
         "id;amount;note\n001;9007199254740993.1234;\"first\nsecond\"\n002;0.0001;ok\n"
       )
-      val engine    = new JobExecutionEngine(SparkJobs.register(new JobRegistry()))
+      val engine    = newEngine()
       val converted = execute(
         engine,
         "csv-to-parquet",
@@ -139,7 +144,7 @@ class SparkPipelineSpec extends AnyFunSuite {
       Files.createDirectory(output)
       Files.writeString(output.resolve("sentinel"), "keep")
       Files.writeString(input, "id,amount\n1,not-a-number\n")
-      val engine = new JobExecutionEngine(SparkJobs.register(new JobRegistry()))
+      val engine = newEngine()
       val result = execute(
         engine,
         "csv-to-parquet",
@@ -160,13 +165,160 @@ class SparkPipelineSpec extends AnyFunSuite {
     try {
       val input = workDir.resolve("input.csv")
       Files.writeString(input, "id\n1\n")
-      val engine = new JobExecutionEngine(SparkJobs.register(new JobRegistry()))
+      val engine = newEngine()
       for (output <- Seq(input.toString, workDir.toString)) {
         val result =
           execute(engine, "csv-to-parquet", Map("input" -> input.toString, "output" -> output))
         assert(result.status() == JobStatus.FAILED)
+        assert(
+          result.message().contains("Input and output paths must not overlap"),
+          result.message()
+        )
         assert(Files.readString(input) == "id\n1\n")
       }
+    } finally deleteRecursively(workDir)
+  }
+
+  test("conversion rejects output nested inside an input directory") {
+    requireNioSelectors()
+    val workDir = Files.createTempDirectory("datacraft-spark-descendant")
+    try {
+      val inputDir = Files.createDirectory(workDir.resolve("indir"))
+      Files.writeString(inputDir.resolve("part.csv"), "id\n1\n")
+      val engine = newEngine()
+      val result = execute(
+        engine,
+        "csv-to-parquet",
+        Map("input" -> inputDir.toString, "output" -> inputDir.resolve("sub").toString)
+      )
+      assert(result.status() == JobStatus.FAILED)
+      assert(result.message().contains("Input and output paths must not overlap"), result.message())
+      assert(Files.readString(inputDir.resolve("part.csv")) == "id\n1\n")
+      assert(!Files.exists(inputDir.resolve("sub")))
+    } finally deleteRecursively(workDir)
+  }
+
+  test("conversion rejects a symbolic link alias of the input directory") {
+    requireNioSelectors()
+    val workDir = Files.createTempDirectory("datacraft-spark-alias")
+    try {
+      val input = workDir.resolve("input.csv")
+      Files.writeString(input, "id\n1\n")
+      val alias = workDir.resolve("alias")
+      FileFixtures.createSymbolicLinkOrCancelOnWindows(alias, workDir)
+      val engine = newEngine()
+      val result =
+        execute(
+          engine,
+          "csv-to-parquet",
+          Map("input" -> input.toString, "output" -> alias.toString)
+        )
+      assert(result.status() == JobStatus.FAILED)
+      assert(result.message().contains("Input and output paths must not overlap"), result.message())
+      assert(Files.readString(input) == "id\n1\n")
+    } finally deleteRecursively(workDir)
+  }
+
+  test("conversion rejects glob inputs that could match its own output") {
+    requireNioSelectors()
+    val workDir = Files.createTempDirectory("datacraft-spark-pattern-output")
+    try {
+      Files.writeString(workDir.resolve("input.csv"), "id\n1\n")
+      val output = Files.createDirectory(workDir.resolve("out.parquet"))
+      Files.writeString(output.resolve("sentinel"), "keep")
+      val engine = newEngine()
+      val result = execute(
+        engine,
+        "csv-to-parquet",
+        Map("input" -> s"$workDir/*", "output" -> output.toString)
+      )
+      assert(result.status() == JobStatus.FAILED)
+      assert(result.message().contains(GlobRejection), result.message())
+      assert(Files.readString(output.resolve("sentinel")) == "keep")
+    } finally deleteRecursively(workDir)
+  }
+
+  test("a glob input selecting files inside the output directory cannot delete the source") {
+    requireNioSelectors()
+    val workDir = Files.createTempDirectory("datacraft-spark-pattern-source")
+    try {
+      val batch = Files.createDirectory(workDir.resolve("batch1"))
+      Files.writeString(batch.resolve("raw.csv"), "id\n1\n")
+      val engine = newEngine()
+      val result = execute(
+        engine,
+        "csv-to-parquet",
+        Map("input" -> s"$workDir/*/raw.csv", "output" -> batch.toString)
+      )
+      assert(result.status() == JobStatus.FAILED)
+      assert(result.message().contains(GlobRejection), result.message())
+      assert(Files.readString(batch.resolve("raw.csv")) == "id\n1\n")
+    } finally deleteRecursively(workDir)
+  }
+
+  test("row-count validates complete CSV records instead of pruned columns") {
+    requireNioSelectors()
+    val workDir = Files.createTempDirectory("datacraft-spark-count-csv")
+    try {
+      val engine = newEngine()
+      for (
+        (content, schema) <- Seq(
+          "id,amount\n1,x\n" -> "id INT, amount DECIMAL(10,2)",
+          "id\n1\nabc\n"     -> "id INT"
+        )
+      ) {
+        val input  = Files.writeString(Files.createTempFile(workDir, "bad", ".csv"), content)
+        val result = execute(
+          engine,
+          "row-count",
+          Map("input" -> input.toString, "inputFormat" -> "csv", "schema" -> schema)
+        )
+        assert(result.status() == JobStatus.FAILED, s"$content counted as ${result.metrics()}")
+      }
+    } finally deleteRecursively(workDir)
+  }
+
+  test("row-count validates complete JSON records") {
+    requireNioSelectors()
+    val workDir = Files.createTempDirectory("datacraft-spark-count-json")
+    try {
+      val engine    = newEngine()
+      val truncated = Files.writeString(
+        workDir.resolve("truncated.json"),
+        "{\"id\":1,\"name\":\"a\"}\n{\"id\":2,\"name\":\"b\"}\n{\"id\":3,\"na\n"
+      )
+      val truncatedResult = execute(
+        engine,
+        "row-count",
+        Map("input" -> truncated.toString, "inputFormat" -> "json", "expectedRows" -> "3")
+      )
+      assert(truncatedResult.status() == JobStatus.FAILED, truncatedResult.metrics())
+      val mistyped = Files.writeString(
+        workDir.resolve("mistyped.json"),
+        "{\"id\":1,\"name\":\"a\"}\n{\"id\":\"oops\",\"name\":\"b\"}\n"
+      )
+      val mistypedResult = execute(
+        engine,
+        "row-count",
+        Map(
+          "input"        -> mistyped.toString,
+          "inputFormat"  -> " JSON ",
+          "schema"       -> "id INT, name STRING",
+          "expectedRows" -> "2"
+        )
+      )
+      assert(mistypedResult.status() == JobStatus.FAILED, mistypedResult.metrics())
+      val valid = Files.writeString(
+        workDir.resolve("valid.json"),
+        "{\"id\":1,\"name\":\"a\"}\n{\"id\":2,\"name\":\"b\"}\n"
+      )
+      val validResult = execute(
+        engine,
+        "row-count",
+        Map("input" -> valid.toString, "inputFormat" -> "json", "expectedRows" -> "2")
+      )
+      assert(validResult.status() == JobStatus.SUCCEEDED, validResult.message())
+      assert(validResult.metrics().get("rows") == "2")
     } finally deleteRecursively(workDir)
   }
 
@@ -179,7 +331,7 @@ class SparkPipelineSpec extends AnyFunSuite {
       val output = workDir.resolve("output.parquet")
       Files.writeString(input, "id,name\n1,alice\n2,bob\n3,carol\n", StandardCharsets.UTF_8)
 
-      val engine = new JobExecutionEngine(SparkJobs.register(new JobRegistry()))
+      val engine = newEngine()
 
       val converted = execute(
         engine,
@@ -205,7 +357,7 @@ class SparkPipelineSpec extends AnyFunSuite {
 
   test("spark-version job reports the running spark runtime") {
     requireNioSelectors()
-    val engine = new JobExecutionEngine(SparkJobs.register(new JobRegistry()))
+    val engine = newEngine()
 
     val result = execute(engine, "spark-version", Map.empty[String, String])
 
@@ -221,9 +373,11 @@ class SparkPipelineSpec extends AnyFunSuite {
       val input  = workDir.resolve("input.csv")
       val output = workDir.resolve("output.parquet")
       Files.writeString(input, "id\n1\n2\n")
-      val engine = new JobExecutionEngine(SparkJobs.register(new JobRegistry()))
+      val engine = newEngine()
       val params = Map("input" -> input.toString, "output" -> output.toString)
-      assert(execute(engine, "csv-to-parquet", params).status() == JobStatus.SUCCEEDED)
+      val first  = execute(engine, "csv-to-parquet", params)
+      assert(first.status() == JobStatus.SUCCEEDED, first.message())
+      assert(first.message() == s"Wrote 2 rows to $output")
       val ignored = execute(
         engine,
         "csv-to-parquet",
@@ -232,6 +386,7 @@ class SparkPipelineSpec extends AnyFunSuite {
       assert(ignored.status() == JobStatus.SUCCEEDED)
       assert(ignored.metrics().get("rows") == "0")
       assert(ignored.metrics().get("skipped") == "true")
+      assert(ignored.message() == s"Skipped: $output already exists (mode=ignore)")
       assert(
         execute(engine, "csv-to-parquet", params + ("mode" -> "errorifexists"))
           .status() == JobStatus.FAILED
@@ -246,12 +401,88 @@ class SparkPipelineSpec extends AnyFunSuite {
     } finally deleteRecursively(workDir)
   }
 
+  test("a configured data root rejects conversions that leave it before touching data") {
+    requireNioSelectors()
+    val workDir = Files.createTempDirectory("datacraft-spark-root-reject")
+    try {
+      val root = Files.createDirectory(workDir.resolve("root"))
+      val kept = Files.createDirectories(root.resolve("keep")).resolve("part.parquet")
+      Files.writeString(kept, "keep")
+      val inside  = Files.writeString(root.resolve("in.csv"), "id\n1\n")
+      val outside = Files.createDirectory(workDir.resolve("outside"))
+      Files.writeString(outside.resolve("in.csv"), "id\n1\n")
+      val engine = newEngine(Some(root.toString))
+
+      val intoRoot = execute(
+        engine,
+        "csv-to-parquet",
+        Map("input" -> outside.resolve("in.csv").toString, "output" -> root.toString)
+      )
+      assert(intoRoot.status() == JobStatus.FAILED)
+      assert(
+        intoRoot.message().contains("input must be inside the configured data root"),
+        intoRoot.message()
+      )
+      assert(Files.readString(kept) == "keep")
+
+      val leaving = execute(
+        engine,
+        "csv-to-parquet",
+        Map("input" -> inside.toString, "output" -> outside.resolve("o.parquet").toString)
+      )
+      assert(leaving.status() == JobStatus.FAILED)
+      assert(
+        leaving.message().contains("output must be inside the configured data root"),
+        leaving.message()
+      )
+      assert(!Files.exists(outside.resolve("o.parquet")))
+
+      val overRoot =
+        execute(
+          engine,
+          "csv-to-parquet",
+          Map("input" -> inside.toString, "output" -> root.toString)
+        )
+      assert(overRoot.status() == JobStatus.FAILED)
+      assert(
+        overRoot.message().contains("output must be inside the configured data root"),
+        overRoot.message()
+      )
+      assert(Files.readString(kept) == "keep")
+    } finally deleteRecursively(workDir)
+  }
+
+  test("a configured data root admits conversions inside it and no root leaves paths unconfined") {
+    requireNioSelectors()
+    requireLocalHadoopWrites()
+    val workDir = Files.createTempDirectory("datacraft-spark-root-accept")
+    try {
+      val root    = Files.createDirectory(workDir.resolve("root"))
+      val inside  = Files.writeString(root.resolve("in.csv"), "id\n1\n")
+      val outside = Files.createDirectory(workDir.resolve("outside"))
+      val within  = execute(
+        newEngine(Some(root.toString)),
+        "csv-to-parquet",
+        Map("input" -> inside.toString, "output" -> root.resolve("out.parquet").toString)
+      )
+      assert(within.status() == JobStatus.SUCCEEDED, within.message())
+      assert(within.metrics().get("rows") == "1")
+      val unconfined = execute(
+        newEngine(None),
+        "csv-to-parquet",
+        Map("input" -> inside.toString, "output" -> outside.resolve("out.parquet").toString)
+      )
+      assert(unconfined.status() == JobStatus.SUCCEEDED, unconfined.message())
+      assert(unconfined.metrics().get("rows") == "1")
+    } finally deleteRecursively(workDir)
+  }
+
   test("managed jobs do not stop an externally owned Spark session") {
     requireNioSelectors()
     val session =
       SparkSessions.create(SparkRuntimeConfig.local("external-owner").copy(master = "local[1]"))
     try {
-      val engine = new JobExecutionEngine(SparkJobs.register(new JobRegistry()))
+      val engine = newEngine()
       assert(
         execute(engine, "spark-version", Map.empty[String, String]).status() == JobStatus.FAILED
       )
