@@ -16,8 +16,9 @@
       </header>
 
       <p>
-        最新数据计算、Airflow 与部署验收见
-        <a href="2026-09-19-review.md">2026-09-19 复盘记录</a>；
+        当前的结论、评分与风险汇总见 <a href="../../PROJECT-REVIEW.html">综合评估报告</a>；
+        本轮改进与验证见 <a href="2026-09-25-review.md">2026-09-25 复盘记录</a>，
+        上一轮数据计算、Airflow 与部署验收见 <a href="2026-09-19-review.md">2026-09-19 复盘记录</a>；
         参数及数据一致性约定见 <a href="../data-processing.md">数据处理契约</a>。
       </p>
 
@@ -32,7 +33,7 @@
         </div>
         <div>
           <strong>构建体系</strong>
-          <span>Maven Wrapper + 多模块 Reactor</span>
+          <span>Maven Wrapper（Maven 3.9.16）+ 多模块 Reactor</span>
         </div>
         <div>
           <strong>质量门</strong>
@@ -48,7 +49,7 @@
         </p>
         <p>
           当前工程采用保守的标准 JVM 结构：父 POM 统一管理版本和质量插件，子模块只声明自身依赖和模块级打包配置。
-          Java 用于稳定的领域端口和基础设施实现，Scala 用于 CLI、Spark 作业和更自然的数据处理入口。
+          Java 用于稳定的领域端口、基础设施实现和不依赖 Spark 的 JVM 作业，Scala 用于 CLI、Spark 作业和更自然的数据处理入口。
         </p>
       </section>
 
@@ -79,14 +80,29 @@
             <tr>
               <td><code>datacraft-io</code></td>
               <td><code>com.example.datacraft.io</code></td>
-              <td>本地文件、根目录约束存储端口、SFTP 传输。</td>
-              <td><code>StorageService</code>, <code>LocalStorageService</code>, <code>LocalFiles</code>, <code>SftpClient</code></td>
+              <td>本地文件、根目录约束存储端口、小文件 CSV 读写、SFTP 传输。</td>
+              <td>
+                <code>StorageService</code>, <code>LocalStorageService</code>, <code>LocalFiles</code>, <code>CsvFiles</code>,
+                <code>SftpClient</code>
+              </td>
             </tr>
             <tr>
               <td><code>datacraft-engine</code></td>
               <td><code>com.example.datacraft.engine</code></td>
-              <td>作业契约、作业目录、执行请求与执行结果，是在线/离线复用的中心层。</td>
-              <td><code>DataJob</code>, <code>JobCatalog</code>, <code>JobRegistry</code>, <code>JobExecutionEngine</code></td>
+              <td>作业契约、作业目录、执行请求与执行结果，是在线/离线复用的中心层；内置 <code>echo</code>、<code>noop</code> 两个作业。</td>
+              <td>
+                <code>DataJob</code>, <code>JobCatalog</code>, <code>JobRegistry</code>, <code>JobExecutionEngine</code>,
+                <code>BuiltInJobs</code>
+              </td>
+            </tr>
+            <tr>
+              <td><code>datacraft-jobs</code></td>
+              <td><code>com.example.datacraft.jobs</code></td>
+              <td>
+                不需要 Spark 运行时的 JVM 小文件数据作业 <code>csv-profile</code> 与 <code>file-checksum</code>，沿用
+                <code>DataJob</code> 契约并复用 datacraft-io；设置 <code>DATACRAFT_DATA_ROOT</code> 时输入文件必须位于该目录内。
+              </td>
+              <td><code>JvmJobs</code>, <code>CsvProfileJob</code>, <code>FileChecksumJob</code>, <code>InputFiles</code></td>
             </tr>
             <tr>
               <td><code>datacraft-spark</code></td>
@@ -103,7 +119,7 @@
             <tr>
               <td><code>datacraft-cli</code></td>
               <td><code>com.example.datacraft.cli</code></td>
-              <td>命令行入口，供本地用户、脚本和 Airflow 调用。</td>
+              <td>命令行入口，供本地用户、脚本和 Airflow 调用；组装完整作业目录并打包为可执行 shaded jar。</td>
               <td><code>Runner</code>, <code>CliParser</code>, <code>CommandLineArgs</code></td>
             </tr>
           </tbody>
@@ -112,21 +128,26 @@
 
       <section>
         <h2>三、依赖方向</h2>
-        <p>模块依赖必须单向、清晰、可解释。当前推荐依赖方向如下：</p>
-        <pre><code>datacraft-common
-  -> datacraft-config
-  -> datacraft-io
-  -> datacraft-engine
-  -> datacraft-spark
-  -> datacraft-api
-  -> datacraft-cli
+        <p>
+          模块依赖必须单向、清晰、可解释。下面列出各模块 <code>pom.xml</code> 声明的直接依赖（不含测试依赖）：
+          箭头后为项目内模块，“外部”为第三方构件。
+        </p>
+        <pre><code>datacraft-common   -> （无项目内依赖）
+datacraft-config   -> common
+datacraft-io       -> common                        外部：jsch
+datacraft-engine   -> common                        Enforcer 限定：仅 common，禁止 Spark
+datacraft-jobs     -> common, engine, io
+datacraft-spark    -> common, engine                外部：scala-library、Spark（spark.scope，默认 provided）
+datacraft-api      -> common, engine                外部：jackson-databind
+datacraft-cli      -> common, config, api, engine, io, jobs, spark    外部：scala-library、scopt
 
 orchestration/airflow
-  -> 调用 datacraft-cli 构建产物
+  -> 调用 datacraft-cli 构建产物（java -jar / spark-submit）
 </code></pre>
         <p>
-          实际 Maven 依赖不是简单链式，而是按职责声明。例如 API 依赖 engine，CLI 依赖 api、engine、io、spark。
-          禁止 common 反向依赖上层模块，禁止 API 或 CLI 持有具体业务实现。
+          <code>datacraft-engine</code> 的 <code>enforce-module-boundaries</code> 规则在项目模块中只允许它依赖
+          <code>datacraft-common</code>，并禁止任何 Spark 构件，违反时构建在 <code>validate</code> 阶段失败；其他模块都直接依赖 common，common 若反向依赖上层模块会形成环，
+          由 Maven reactor 的循环检测拒绝。禁止 API 或 CLI 持有具体业务实现。
         </p>
       </section>
 
@@ -135,7 +156,9 @@ orchestration/airflow
         <h3>1. 存储端口</h3>
         <p>
           <code>StorageService</code> 是应用层访问文件系统的稳定端口。它不暴露绝对路径，避免上层代码绕过根目录约束。
-          <code>LocalStorageService</code> 是根目录绑定实现，所有路径都必须是相对路径，并且不能通过 <code>..</code> 逃逸根目录。
+          <code>LocalStorageService</code> 是根目录绑定实现，所有路径都必须是相对路径，并且不能通过 <code>..</code> 逃逸根目录；
+          路径穿过符号链接，或任一已存在路径段的真实位置落在根目录之外（例如 Windows junction）时同样拒绝。
+          它是应用层防护而不是操作系统沙箱：硬链接、Windows 保留设备名（如 <code>NUL</code>）和并发文件系统变更不在检测范围内。
         </p>
         <p>
           <code>LocalFiles</code> 保留为低层 NIO 工具，不承担领域边界。这个分层避免了“工具函数直接散落到业务代码”。
@@ -144,7 +167,7 @@ orchestration/airflow
         <h3>2. 作业目录端口</h3>
         <p>
           <code>JobCatalog</code> 是只读作业目录端口，定义作业查询、列举和必需作业读取语义。
-          <code>JobRegistry</code> 是当前内存实现，负责注册、重复名称校验和稳定排序。
+          <code>JobRegistry</code> 是当前内存实现，负责注册、名称校验（拒绝空名、重复名和含 <code>/</code> 的名称）和按名称稳定排序。
         </p>
         <p>
           <code>JobExecutionEngine</code> 只依赖 <code>JobCatalog</code>，不绑定具体注册表。后续如果切换为数据库目录、
@@ -157,22 +180,37 @@ orchestration/airflow
           <code>EngineJson</code> 负责引擎响应 JSON 编码，<code>HttpJsonResponse</code> 负责 HTTP 响应写入。
           这个拆分避免服务器类同时承担路由、序列化和响应 I/O 三种职责。
         </p>
+        <p>
+          API 没有认证，且文件作业会读取 <code>input</code> 指定的路径，因此 <code>serve-api</code> 在
+          <code>--host</code> 不是回环地址且 <code>DATACRAFT_DATA_ROOT</code> 未设置或为空白时拒绝启动（退出码 2）。
+        </p>
 
         <h3>4. Spark 运行抽象</h3>
         <p>
-          <code>SparkRuntimeConfig</code> 描述 Spark 本地或集群运行参数。默认 master 是 <code>local[*]</code>，
-          适合在没有集群时使用本机多核心运行。<code>SparkSessions</code> 是 SparkSession 工厂和释放入口。
+          <code>SparkRuntimeConfig</code> 描述 Spark 本地或集群运行参数。master 依次取作业参数 <code>spark.master</code>、
+          <code>spark-submit --master</code>，都没有时使用 <code>local[*]</code>，即在没有集群时使用本机多核心运行。
+          <code>SparkSessions</code> 是 SparkSession 工厂和释放入口。
+        </p>
+
+        <h3>5. JVM 数据作业</h3>
+        <p>
+          <code>JvmJobs.register</code> 把 <code>csv-profile</code> 与 <code>file-checksum</code> 注册进同一个
+          <code>JobRegistry</code>，与内置作业和 Spark 作业共用一个目录，在 CLI 和 HTTP API 中都可运行，只需普通
+          <code>java -jar</code>，不需要 Spark 运行时。<code>InputFiles</code> 在设置了 <code>DATACRAFT_DATA_ROOT</code>
+          （去除首尾空白后非空）时要求输入规范化后严格位于该目录内，并只经 <code>LocalStorageService</code> 读取；
+          未设置时直接用 <code>LocalFiles</code> 读取任意可读路径。
         </p>
       </section>
 
       <section>
         <h2>五、运行路径</h2>
-        <h3>CLI 执行内置作业</h3>
+        <h3>CLI 执行作业</h3>
         <pre><code>java -jar datacraft-cli/target/datacraft-cli.jar --command echo --param message=hello
 
 Runner
   -> CliParser
-  -> BuiltInJobs.registry()
+  -> Runner.registry()
+       = requireDispatchable(JvmJobs.register(SparkJobs.register(BuiltInJobs.registry())))
   -> JobExecutionEngine
   -> DataJob.run()
   -> JobExecutionResult
@@ -182,11 +220,12 @@ Runner
         <pre><code>POST /jobs/echo/runs?lifecycle=dev&amp;message=hello
 
 EngineHttpServer
+  -> 方法检查（非 POST 返回 405）与 Origin 检查（带 Origin 返回 403）
   -> parseQuery()
   -> JobExecutionRequest
   -> JobExecutionEngine
   -> EngineJson.result()
-  -> HttpJsonResponse.write()
+  -> HttpJsonResponse.write()（SUCCEEDED 返回 200，FAILED 返回 500）
 </code></pre>
 
         <h3>Airflow 编排</h3>
@@ -210,12 +249,12 @@ Airflow DAG
           </thead>
           <tbody>
             <tr>
-              <td><code>GET</code></td>
+              <td><code>GET</code> | <code>HEAD</code></td>
               <td><code>/health</code></td>
               <td>服务健康检查。</td>
             </tr>
             <tr>
-              <td><code>GET</code></td>
+              <td><code>GET</code> | <code>HEAD</code></td>
               <td><code>/jobs</code></td>
               <td>列出当前作业目录中的作业名称和描述。</td>
             </tr>
@@ -226,6 +265,13 @@ Airflow DAG
             </tr>
           </tbody>
         </table>
+        <p>
+          运行请求 SUCCEEDED 返回 200、FAILED（包括作业参数校验失败）返回 500，两者都带结果 JSON；
+          格式错误的请求返回 400 <code>invalid_request</code>（<code>java.net.URI</code> 无法解析的请求目标在进入处理器前
+          由 JDK 直接返回 HTML 400）；带 <code>Origin</code> 头的运行请求返回 403 <code>cross_origin_forbidden</code>；
+          未知路由和作业返回 JSON 404；方法不符返回 405 并带 <code>Allow</code> 头。完整状态约定见
+          <a href="../data-processing.md">数据处理契约</a>。
+        </p>
       </section>
 
       <section>
@@ -234,6 +280,8 @@ Airflow DAG
           <li>新增跨模块模型优先放入 <code>datacraft-common</code>，但 common 不允许依赖上层模块。</li>
           <li>新增 IO 能力优先通过 <code>StorageService</code> 表达应用需求，再决定是否补充底层 <code>LocalFiles</code> 能力。</li>
           <li>新增可执行任务必须实现 <code>DataJob</code>，并通过 <code>JobCatalog</code> 暴露给 CLI/API。</li>
+          <li>作业名不得包含 <code>/</code>，也不得与 CLI 控制命令 <code>list-jobs</code>、<code>serve-api</code> 重名。</li>
+          <li>不依赖 Spark 的 JVM 数据作业放入 <code>datacraft-jobs</code>，并通过 <code>JvmJobs</code> 注册。</li>
           <li>新增 Spark 作业应保持 Spark 相关代码在 <code>datacraft-spark</code> 或未来 Spark 业务模块内。</li>
           <li>API 层不得直接写业务逻辑，只负责协议适配、请求转换和响应编码。</li>
           <li>CLI 层不得复制 API 或 engine 逻辑，只做参数解析和入口编排。</li>
@@ -252,12 +300,17 @@ Airflow DAG
           <span class="tag">JUnit Jupiter</span>
           <span class="tag">ScalaTest</span>
         </p>
-        <pre><code>$env:JAVA_HOME='D:\Java'
+        <pre><code># Windows PowerShell：把 &lt;JDK 25 安装目录&gt; 换成本机路径
+$env:JAVA_HOME='&lt;JDK 25 安装目录&gt;'
 .\mvnw.cmd verify
+
+# Linux / macOS / WSL，与 CI 相同
+./mvnw -B -ntp verify
 </code></pre>
         <p class="callout">
-          当前工程在 JDK 25 字节码目标下构建（Spark 4.2.0 / Scala 2.13.18）。Windows 本机如果没有全局设置 <code>JAVA_HOME</code>，
-          需要在 PowerShell 会话内显式设置。
+          当前工程以 Java 25 字节码为目标构建（Spark 4.2.0 / Scala 2.13.18）。Enforcer 要求 JDK 25 及以上，
+          低于 25.0.3 时输出警告并继续构建。Windows 本机如果没有全局设置 <code>JAVA_HOME</code>，需要在 PowerShell 会话内显式设置。
+          CI 在 ubuntu-24.04 上执行 <code>./mvnw -B -ntp verify</code>，以其结果为准。
         </p>
         <p>
           Maven 构建体系的完整布局、插件职责、生命周期绑定和生产命令详见
@@ -268,7 +321,10 @@ Airflow DAG
       <section>
         <h2>九、扩展建议</h2>
         <ul>
-          <li>下一步可新增 <code>datacraft-jobs</code> 模块，集中放置实际数据处理作业。</li>
+          <li>
+            <code>datacraft-jobs</code> 模块已建立（<code>csv-profile</code>、<code>file-checksum</code>）；后续不依赖 Spark 的
+            JVM 数据作业继续放在该模块，并沿用 <code>DATACRAFT_DATA_ROOT</code> 路径约束。
+          </li>
           <li>当 HTTP API 面稳定后，再考虑引入成熟 Web 框架；当前 JDK HTTP server 更适合底座阶段。</li>
           <li>当作业数量增多后，可新增插件扫描或配置驱动的 <code>JobCatalog</code> 实现。</li>
           <li>当需要对象存储、HDFS 或云存储时，新增 <code>StorageService</code> 实现，而不是修改业务作业。</li>

@@ -58,11 +58,11 @@
 <p>Cloudflare Workers/Pages 不能直接运行当前 JVM + PostgreSQL + Airflow Compose；Cloudflare Containers 能运行 Linux 容器，但其生命周期与存储架构仍需重新适配，不能当作现有有状态栈的直接低价替换。R2 可以存备份；本项目尚未配置 S3A，不把 <code>s3://</code> 路径当作已支持的 Spark 数据路径。</p>
 <p>AWS MWAA 的传统常驻环境、Google 托管 Airflow 要计入控制面、工作节点、数据库和网络费用。MWAA Serverless 另有按任务计费模式，不能用传统环境最低月费概括所有托管选项；现有本地 JVM/Spark 命令也不是直接兼容其托管任务模型。参见 <a href="https://aws.amazon.com/managed-workflows-for-apache-airflow/pricing/">MWAA 定价</a>与 <a href="https://cloud.google.com/products/managed-service-for-apache-airflow/pricing">Google 托管 Airflow 定价</a>。当前小规模场景没有证明迁移与维护成本值得。</p>
 <p>不先购买 Savings Plans、Reserved Instances 或 CUD。先观察稳定利用率；承诺费不会因为偶尔关机自动消失。默认 Swarm 使用本地卷并固定数据节点，仍不是多主机高可用。</p></section>
-<section><h2>部署准备与验收边界</h2><p>源码、CSV/Parquet 数据契约、Airflow DAG、镜像构建与运行已完成项目级验证；完整结果见 <a href="docs/engineering-report/2026-09-19-review.md">工程复盘记录</a>。本轮额外补齐安全初始化、部署前检查、资源并发、日志轮转和费用计算测试。</p>
+<section><h2>部署准备与验收边界</h2><p>源码、CSV/Parquet 数据契约、Airflow DAG、镜像构建与运行的验证方式、证据和剩余风险见 <a href="PROJECT-REVIEW.html">项目综合评估报告</a>；本轮改动与验证记录见 <a href="docs/engineering-report/2026-09-25-review.md">2026-09-25 工程复盘</a>。2026-09-19 一轮补齐了安全初始化、部署前检查、资源并发、日志轮转和费用计算测试；2026-09-25 一轮把 Airflow 升到 3.3.2（FAB provider 3.9.0 安全修复），必需密钥缺失即拒绝启动，DAG 与 CLI jar 只来自镜像，JVM API 以非 root 用户只读挂载数据卷。已有部署的升级步骤见部署教程。</p>
 <pre><code>python3 deploy/scripts/deployment_env.py init
 bash deploy/scripts/build-images.sh
 bash deploy/scripts/compose-up.sh</code></pre>
-<p><a href="docs/deployment/cloud-and-deployment.md">完整部署、备份、恢复与停机教程</a> · <a href="docs/deployment/pricing-evidence.md">价格来源、SKU、计算式和核验范围</a></p>
+<p><a href="docs/deployment/cloud-and-deployment.md">完整部署、升级、备份、恢复与停机教程</a> · <a href="docs/deployment/pricing-evidence.md">价格来源、SKU、计算式和核验范围</a></p>
 <p class="note">已准备部署脚本，不代表已经购买或上线。真实云账号权限、库存、网络、用户数据性能与 ARM 主机运行尚未验证；当前容器运行证据来自 Linux amd64。镜像提供 arm64 清单也不能替代 ARM 实机测试。</p></section>
-<footer>资料版本：2026-09-19。价格快照用于方案比较，不是锁价订单；执行前按所选账户、地域、SKU 和税费复核。所有计算仅保留最终显示时的分币四舍五入。</footer>
+<footer>价格资料版本：2026-09-19；部署说明与链接更新于 2026-09-25。价格快照用于方案比较，不是锁价订单；执行前按所选账户、地域、SKU 和税费复核。所有计算仅保留最终显示时的分币四舍五入。</footer>
 </main></body></html>

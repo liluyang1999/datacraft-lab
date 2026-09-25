@@ -26,6 +26,22 @@
           这种布局符合 Maven 的约定优先原则：默认生命周期仍由 Maven 管理，项目只显式声明必须固定的版本、
           编译目标、质量规则和与 Java/Scala/Spark 混合工程相关的差异。
         </p>
+        <h3>Maven Wrapper</h3>
+        <p>
+          <code>.mvn/wrapper/maven-wrapper.properties</code> 使用 Apache Maven Wrapper 3.3.4 的
+          <code>distributionType=only-script</code>：仓库只提交 <code>mvnw</code>、<code>mvnw.cmd</code> 两个脚本和该属性文件，
+          不提交 <code>maven-wrapper.jar</code>。脚本下载 Maven 3.9.16 的 <code>bin.zip</code>，并用
+          <code>distributionSha256Sum</code> 校验其 SHA-256，不符时以
+          <code>Failed to validate Maven distribution SHA-256</code> 退出。
+        </p>
+        <p>
+          校验只在下载时进行，即 <code>MAVEN_USER_HOME</code>（默认 <code>~/.m2</code>）下的
+          <code>wrapper/dists</code> 中还没有对应发行版时；已存在的目录直接复用。Linux、macOS 和 WSL 需要
+          <code>unzip</code>：没有它时脚本改为下载 <code>.tar.gz</code>，其 SHA-256 与固定的 zip 校验值不符，
+          会以上述校验失败退出。<code>mvnw.cmd</code> 在 <code>powershell.exe</code> 中执行下载与校验。
+          CI 在 <code>Verify</code> 之前检查校验值已固定、仓库中没有 <code>maven-wrapper.jar</code>，
+          并确认把校验值改错的副本拒绝运行。
+        </p>
       </section>
 
       <section>
@@ -56,7 +72,10 @@
             </tr>
             <tr>
               <td><code>modules</code></td>
-              <td>声明 reactor 模块顺序和成员。</td>
+              <td>
+                声明 reactor 模块顺序和成员：common、config、io、engine、jobs、spark、api、cli，
+                连同父项目共 9 个 reactor 项目。
+              </td>
               <td>由 Maven 自动计算模块构建顺序，避免手写脚本排序。</td>
             </tr>
             <tr>
@@ -108,7 +127,11 @@
             <tr>
               <td>JDK 编译目标</td>
               <td><code>java.version</code>, <code>maven.compiler.release</code></td>
-              <td>以 Java 25（当前 LTS）字节码为目标；Spark 4.2.0 支持 Java 17/21/25，建议使用 25.0.3 及以上版本。</td>
+              <td>
+                <code>java.version</code> 为 25，<code>maven.compiler.release</code> 取 <code>${java.version}</code>，
+                javac 的 <code>release</code> 与 scalac 的 <code>-release:</code> 都引用它。以 Java 25（当前 LTS）字节码为目标；
+                Spark 4.2.0 支持 Java 17/21/25，并弃用 25.0.3 之前的 Java 25 版本，建议使用 25.0.3 及以上版本。
+              </td>
             </tr>
             <tr>
               <td>Scala/Spark 生态</td>
@@ -121,17 +144,37 @@
             <tr>
               <td>JSON 序列化</td>
               <td><code>jackson.version</code>（以 <code>jackson-bom</code> 方式 import）</td>
-              <td>通过 BOM 统一锁定 Jackson 全家桶版本，供 <code>datacraft-api</code> 序列化 HTTP 响应使用。</td>
+              <td>
+                通过 BOM 统一锁定 Jackson 全家桶版本（当前 2.22.3），供 <code>datacraft-api</code> 的 <code>EngineJson</code>
+                编码 HTTP 响应和 CLI 的 JSON 结果。在 <code>spark-submit</code> 下，Spark 默认
+                （<code>spark.driver.userClassPathFirst=false</code>）先加载自带的 Jackson（Spark 4.2.0 为 2.21.2），替代制品内的版本；
+                CI 的 Airflow 作业用 PySpark 4.2.0 的 <code>spark-submit</code> 运行打包后的 CLI，覆盖这一组合。
+              </td>
             </tr>
             <tr>
               <td>测试依赖</td>
-              <td><code>junit.jupiter.version</code>, <code>scalatest.version</code></td>
-              <td>Java 和 Scala 测试框架版本统一锁定。</td>
+              <td><code>junit.jupiter.version</code>, <code>scalatest.version</code>, <code>sshd.version</code></td>
+              <td>Java 和 Scala 测试框架版本统一锁定；<code>sshd.version</code> 固定 SFTP 测试使用的嵌入式 Apache MINA SSHD 服务器。</td>
+            </tr>
+            <tr>
+              <td>测试 JVM 与测试门</td>
+              <td><code>test.nio.jvm.args</code>, <code>spark.test.jvm.args</code>, <code>surefire.failIfNoTests</code></td>
+              <td>
+                <code>test.nio.jvm.args</code> 为 <code>-Djdk.net.unixdomain.tmpdir=${project.build.directory}</code>：
+                Windows 上的 NIO Selector 在该目录创建 AF_UNIX 唤醒套接字，而部分 Windows 用户 TEMP 目录无法承载
+                AF_UNIX 套接字；模块构建目录在各操作系统上都可用。<code>spark.test.jvm.args</code> 是 Spark 嵌入测试 JVM 所需的
+                <code>--add-opens</code> 等参数，<code>spark-submit</code> 运行时会自动注入等价设置。
+                <code>surefire.failIfNoTests</code> 默认 <code>true</code>。
+              </td>
             </tr>
             <tr>
               <td>插件版本</td>
-              <td><code>maven.compiler.plugin.version</code>, <code>maven.surefire.plugin.version</code></td>
-              <td>所有 Maven 插件版本显式锁定，配合 Enforcer 禁止默认漂移。</td>
+              <td><code>maven.compiler.plugin.version</code>, <code>maven.surefire.plugin.version</code>, <code>checkstyle.version</code></td>
+              <td>
+                所有 Maven 插件版本显式锁定，配合 Enforcer 禁止默认漂移；surefire 与 failsafe 为 3.5.6。
+                <code>checkstyle.version</code> 固定 Checkstyle 引擎为 14.1.0，不使用 maven-checkstyle-plugin 3.6.0 默认的
+                9.3，后者无法解析 record pattern、带 <code>when</code> 的 switch 标签和灵活构造器体。
+              </td>
             </tr>
           </tbody>
         </table>
@@ -161,27 +204,38 @@
             <tr>
               <td><code>maven-compiler-plugin</code></td>
               <td>Java 编译。</td>
-              <td>使用 <code>release=21</code>、保留方法参数名、显示编译警告。</td>
+              <td>使用 <code>release=25</code>（<code>${maven.compiler.release}</code>）、保留方法参数名、显示编译警告。</td>
             </tr>
             <tr>
               <td><code>scala-maven-plugin</code></td>
               <td>Scala main/test 编译。</td>
-              <td>绑定 compile/testCompile，并开启 deprecation、feature、unchecked、Xlint。</td>
+              <td>
+                绑定 compile/testCompile，传入 <code>-release:${maven.compiler.release}</code>，并开启 deprecation、feature、
+                unchecked、Xlint。
+              </td>
             </tr>
             <tr>
               <td><code>maven-surefire-plugin</code></td>
               <td><code>test</code> 阶段单元测试。</td>
-              <td>排除 <code>*IT</code>，避免单元测试和集成测试混跑。</td>
+              <td>
+                排除 <code>*IT</code>/<code>*ITCase</code>，避免单元测试和集成测试混跑；<code>argLine</code> 为
+                <code>${test.nio.jvm.args}</code>；<code>failIfNoTests</code> 取 <code>${surefire.failIfNoTests}</code>，
+                JUnit 扫描不到任何测试的模块以 <code>No tests were executed!</code> 失败。datacraft-cli 与 datacraft-spark
+                由 ScalaTest 运行测试，把该属性设为 <code>false</code>。
+              </td>
             </tr>
             <tr>
               <td><code>maven-failsafe-plugin</code></td>
               <td><code>integration-test</code> 与 <code>verify</code> 阶段集成测试。</td>
-              <td>包含 <code>*IT</code>/<code>*ITCase</code>，确保资源清理阶段可执行。</td>
+              <td>包含 <code>*IT</code>/<code>*ITCase</code>，确保资源清理阶段可执行；目前没有模块包含此类测试。</td>
             </tr>
             <tr>
               <td><code>scalatest-maven-plugin</code></td>
               <td>运行 ScalaTest 套件。</td>
-              <td>输出 Surefire 兼容报告，方便 CI 聚合测试结果。</td>
+              <td>
+                <code>argLine</code> 为 <code>${test.nio.jvm.args}</code>（datacraft-spark 另加
+                <code>${spark.test.jvm.args}</code>）；把 JUnit XML 写入 <code>surefire-reports</code>，方便 CI 聚合测试结果。
+              </td>
             </tr>
             <tr>
               <td><code>maven-jar-plugin</code></td>
@@ -191,22 +245,38 @@
             <tr>
               <td><code>maven-shade-plugin</code></td>
               <td>CLI 可执行 fat jar。</td>
-              <td>只在 <code>datacraft-cli</code> 模块执行，设置 mainClass 和 service 合并。</td>
+              <td>
+                只在 <code>datacraft-cli</code> 模块执行，设置 mainClass、合并 service 文件和 <code>reference.conf</code>。
+                manifest 写入 <code>Multi-Release: true</code>，使依赖的 <code>META-INF/versions</code> 类（jsch 的
+                Ed25519/X25519/ML-KEM、Jackson）在 fat jar 中生效；排除签名文件以及依赖的 <code>module-info.class</code>
+                和 <code>META-INF/versions/*/module-info.class</code>。
+              </td>
             </tr>
             <tr>
               <td><code>spotless-maven-plugin</code></td>
               <td>格式检查。</td>
-              <td>统一 Java、Scala、XML、Markdown、HTML、CSS、Airflow Python 文档格式。</td>
+              <td>
+                Java 使用 google-java-format，Scala 使用 scalafmt；XML、YAML、properties、Markdown、docs 下的 HTML/CSS
+                与 Airflow Python 统一 LF 行尾、去除行尾空白并以换行结尾。
+              </td>
             </tr>
             <tr>
               <td><code>maven-checkstyle-plugin</code></td>
               <td>Java 静态规则。</td>
-              <td>集中读取 <code>config/checkstyle/checkstyle.xml</code>。</td>
+              <td>
+                集中读取 <code>config/checkstyle/checkstyle.xml</code>，在 <code>verify</code> 阶段检查 main 与 test 源码；
+                通过插件依赖把 Checkstyle 引擎固定为 <code>${checkstyle.version}</code>（14.1.0）。
+              </td>
             </tr>
             <tr>
               <td><code>maven-enforcer-plugin</code></td>
               <td>构建环境与 POM 规则。</td>
-              <td>强制 JDK/Maven 版本、插件版本、禁止重复依赖版本、禁止项目级仓库。</td>
+              <td>
+                <code>enforce-build-environment</code>：JDK <code>[25,)</code>、Maven <code>[3.9.0,)</code>、插件必须显式声明版本、
+                禁止在同一 POM 中重复声明依赖、禁止项目级仓库，并禁止低于 2.22.3 的 jackson-core 与 jackson-databind 进入依赖图
+                （GHSA-wv8q-qhhj-9h54 等 4 个公告）。<code>warn-deprecated-jdk</code>：JDK 低于 25.0.3 时以 WARN
+                级别提示升级，构建继续。datacraft-engine 另有 <code>enforce-module-boundaries</code>，见第六节。
+              </td>
             </tr>
             <tr>
               <td><code>maven-source-plugin</code></td>
@@ -251,7 +321,17 @@
             <tr>
               <td><code>.\mvnw.cmd verify</code></td>
               <td>执行测试、集成测试 verify、格式检查、Checkstyle、Enforcer、打包校验。</td>
-              <td>提交前和 CI 默认入口。</td>
+              <td>提交前的默认入口。</td>
+            </tr>
+            <tr>
+              <td><code>./mvnw -B -ntp verify</code></td>
+              <td>与上一行相同的完整门禁，非交互输出。</td>
+              <td>Linux、macOS、WSL 与 CI（ubuntu-24.04）。</td>
+            </tr>
+            <tr>
+              <td><code>make verify</code></td>
+              <td>调用 <code>$(MVN) -B -ntp verify</code>，<code>MVN</code> 默认 <code>./mvnw</code>。</td>
+              <td>需要系统 Maven 时用 <code>make MVN=mvn verify</code>。</td>
             </tr>
             <tr>
               <td><code>.\mvnw.cmd -pl datacraft-cli -am package</code></td>
@@ -275,6 +355,11 @@
             </tr>
           </tbody>
         </table>
+        <p>
+          在多个模块上用 <code>-Dtest=...</code> 只跑部分测试时，为了让没有匹配测试的模块不失败，需要同时传入
+          <code>-Dsurefire.failIfNoSpecifiedTests=false -Dsurefire.failIfNoTests=false</code>；surefire 报错信息建议的
+          <code>-DfailIfNoTests=false</code> 在本项目中不起作用，因为插件配置读取的是 <code>surefire.failIfNoTests</code> 属性。
+        </p>
       </section>
 
       <section>
@@ -286,7 +371,13 @@
           <li>依赖版本优先来自父 POM <code>dependencyManagement</code>。</li>
           <li>插件版本不得在子模块硬编码。</li>
           <li>只有模块特有行为才在子模块声明插件，例如 CLI 的 shade 打包。</li>
+          <li>模块级开关通过覆盖父 POM 属性表达，例如 datacraft-cli 与 datacraft-spark 的 <code>surefire.failIfNoTests=false</code>。</li>
         </ul>
+        <p>
+          <code>datacraft-engine</code> 的 <code>enforce-module-boundaries</code> 执行用 bannedDependencies 排除全部
+          <code>com.example.datacraft</code> 构件和 <code>org.apache.spark</code>，只放行 <code>datacraft-common</code>；
+          违反时 <code>validate</code> 阶段失败并提示 engine 只能依赖 common、不得依赖 Spark。
+        </p>
         <p>
           这种规则使模块结构可扩展，也避免每新增一个模块就复制一份构建配置。
         </p>
@@ -309,7 +400,7 @@
         <p>
           将 <code>spark.scope</code> 由 <code>provided</code> 切换为 <code>compile</code>，把 Spark 运行时一并打入制品，
           用于没有 <code>spark-submit</code> 的环境下直接 <code>java -jar</code> 运行。产物体积显著增大，
-          仅建议笔记本规模的本地实验使用。
+          仅建议笔记本规模的本地实验使用。它使用同一份 shade 配置，因此同样是 Multi-Release jar。
         </p>
       </section>
 
@@ -339,6 +430,10 @@
           <li>
             Enforcer Plugin 用于约束 Maven/JDK 环境和构建规则：
             <a href="https://maven.apache.org/enforcer/maven-enforcer-plugin/">maven-enforcer-plugin</a>
+          </li>
+          <li>
+            Maven Wrapper 的 only-script 分发类型与 <code>distributionSha256Sum</code> 校验：
+            <a href="https://maven.apache.org/tools/wrapper/">Maven Wrapper</a>
           </li>
         </ul>
       </section>

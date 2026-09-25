@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>datacraft-lab 全局复盘与深度开发报告</title>
+<title>datacraft-lab 综合评估报告</title>
 <style>
   :root {
     --bg: #ffffff;
@@ -13,8 +13,11 @@
     --text-muted: #5f6368;
     --border: rgba(0, 0, 0, 0.12);
     --accent: #185fa5;
+    --bar: #185fa5;
+    --bar-before: #b9c4d0;
     --ok-bg: #eaf3de; --ok-fg: #3b6d11;
     --warn-bg: #faeeda; --warn-fg: #854f0b;
+    --risk-bg: #fbe4e2; --risk-fg: #8a1f17;
     --info-bg: #e6f1fb; --info-fg: #0c447c;
   }
   @media (prefers-color-scheme: dark) {
@@ -26,292 +29,363 @@
       --text-muted: #a1a4a9;
       --border: rgba(255, 255, 255, 0.14);
       --accent: #85b7eb;
+      --bar: #85b7eb;
+      --bar-before: #4a525c;
       --ok-bg: #27500a; --ok-fg: #c0dd97;
       --warn-bg: #633806; --warn-fg: #fac775;
+      --risk-bg: #5c1b16; --risk-fg: #f5b5ae;
       --info-bg: #0c447c; --info-fg: #b5d4f4;
     }
   }
   * { box-sizing: border-box; }
   body {
-    margin: 0; padding: 2.5rem 1.25rem 4rem;
+    margin: 0; padding: 2.5rem 1rem 4rem;
     background: var(--bg); color: var(--text);
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
     font-size: 15px; line-height: 1.75;
   }
-  main { max-width: 960px; margin: 0 auto; }
-  h1 { font-size: 26px; font-weight: 600; margin: 0 0 .3rem; letter-spacing: -.01em; }
+  main { max-width: 1000px; margin: 0 auto; }
+  h1 { font-size: 27px; font-weight: 600; margin: 0 0 .3rem; letter-spacing: -.01em; }
   h2 {
-    font-size: 19px; font-weight: 600; margin: 2.6rem 0 .9rem;
+    font-size: 20px; font-weight: 600; margin: 2.8rem 0 .9rem;
     padding-bottom: .45rem; border-bottom: 1px solid var(--border);
   }
   h3 { font-size: 16px; font-weight: 600; margin: 1.6rem 0 .5rem; }
+  p, li { max-width: 78ch; }
   .sub { color: var(--text-muted); font-size: 14px; margin: 0 0 .2rem; }
   code {
     font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
     font-size: 13px; background: var(--bg-code);
-    padding: 1px 5px; border-radius: 4px;
+    padding: 1px 5px; border-radius: 4px; overflow-wrap: anywhere;
   }
   pre {
     background: var(--bg-code); border: 1px solid var(--border);
-    border-radius: 8px; padding: .9rem 1rem; overflow-x: auto; font-size: 13px;
+    border-radius: 8px; padding: .9rem 1rem; overflow-x: auto; font-size: 13px; line-height: 1.55;
   }
-  pre code { background: none; padding: 0; }
+  pre code { background: none; padding: 0; overflow-wrap: normal; }
   .table-wrap { overflow-x: auto; }
   table { width: 100%; border-collapse: collapse; margin: .6rem 0 1rem; font-size: 14px; }
-  th, td { text-align: left; padding: .55rem .7rem; border-bottom: 1px solid var(--border); vertical-align: top; }
+  th, td { text-align: left; padding: .5rem .65rem; border-bottom: 1px solid var(--border); vertical-align: top; }
   th { background: var(--bg-soft); font-weight: 600; white-space: nowrap; }
-  .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: .8rem; margin: 1rem 0; }
-  .card { background: var(--bg-soft); border: 1px solid var(--border); border-radius: 10px; padding: .85rem 1rem; }
-  .card .k { font-size: 12px; color: var(--text-muted); margin-bottom: .2rem; }
-  .card .v { font-size: 22px; font-weight: 600; }
-  .badge { display: inline-block; font-size: 12px; font-weight: 600; padding: 2px 9px; border-radius: 999px; }
+  .scores td:first-child { white-space: nowrap; }
+  td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(170px, 100%), 1fr)); gap: .75rem; margin: 1.2rem 0; }
+  .card { background: var(--bg-soft); border: 1px solid var(--border); border-radius: 10px; padding: .8rem .95rem; }
+  .card .k { font-size: 12px; color: var(--text-muted); margin-bottom: .15rem; }
+  .card .v { font-size: 22px; font-weight: 600; font-variant-numeric: tabular-nums; }
+  .card .d { font-size: 12px; color: var(--text-muted); }
+  .badge { display: inline-block; font-size: 12px; font-weight: 600; padding: 1px 9px; border-radius: 999px; white-space: nowrap; }
   .b-ok { background: var(--ok-bg); color: var(--ok-fg); }
   .b-warn { background: var(--warn-bg); color: var(--warn-fg); }
+  .b-risk { background: var(--risk-bg); color: var(--risk-fg); }
   .b-info { background: var(--info-bg); color: var(--info-fg); }
   .note {
     background: var(--bg-soft); border: 1px solid var(--border);
     border-left: 3px solid var(--accent); border-radius: 0 8px 8px 0;
     padding: .8rem 1rem; margin: 1rem 0;
   }
+  .score { display: flex; align-items: center; gap: .5rem; min-width: 140px; }
+  .track { position: relative; flex: 1; height: 8px; background: var(--bg-code); border-radius: 4px; }
+  .track span { position: absolute; left: 0; top: 0; height: 8px; border-radius: 4px; }
+  .track .before { background: var(--bar-before); }
+  .track .after { background: var(--bar); height: 4px; top: 2px; }
+  .score b { font-variant-numeric: tabular-nums; font-size: 13px; white-space: nowrap; }
+  ol.timeline { list-style: none; padding: 0; margin: 1rem 0; border-left: 2px solid var(--border); }
+  ol.timeline li { position: relative; padding: 0 0 .9rem 1.1rem; }
+  ol.timeline li::before {
+    content: ""; position: absolute; left: -6px; top: .55rem; width: 10px; height: 10px;
+    border-radius: 50%; background: var(--accent);
+  }
+  ol.timeline .when { font-variant-numeric: tabular-nums; color: var(--text-muted); font-size: 13px; }
+  .toc { columns: 2; column-gap: 2rem; font-size: 14px; padding-left: 1.2rem; }
   .meta { color: var(--text-muted); font-size: 13px; margin-top: 3rem; padding-top: 1rem; border-top: 1px solid var(--border); }
   a { color: var(--accent); }
+  @media (max-width: 640px) {
+    body { padding: 1.5rem 1rem 3rem; }
+    .toc { columns: 1; }
+    th { white-space: normal; }
+  }
 </style>
 </head>
 <body>
-<aside style="margin: 1rem; padding: 1rem; border: 1px solid currentColor;">
-  本页保留此前复盘的历史快照，其中测试数量、环境状态与部署行为不代表当前版本。
-  当前数据处理、Airflow 与验收记录见
-  <a href="docs/engineering-report/2026-09-19-review.md">2026-09-19 复盘记录</a>。
-</aside>
 <main>
 
-  <h1>datacraft-lab 全局复盘与深度开发报告</h1>
-  <p class="sub">个人 JVM 数据处理工厂 · Maven 多模块 · <strong>Java 25</strong> / Scala 2.13.18 · Spark 4.2.0 · Airflow 3.x · Docker 部署</p>
-  <p class="sub">报告版本：v1.1　|　分支：<code>main</code>　|　作者：Luyang Li</p>
+  <h1>datacraft-lab 综合评估报告</h1>
+  <p class="sub">个人 JVM 数据处理工厂 · Maven 多模块 · Java 25 / Scala 2.13.18 · Spark 4.2.0 · Airflow 3.3.2 · Docker Compose / Swarm</p>
+  <p class="sub">报告版本：v2.0（2026-09-25）　|　分支：<code>main</code>　|　作者：Luyang Li</p>
+
+  <div class="note">
+    本报告是项目当前状态的<strong>唯一汇总评估</strong>，取代根目录此前的 v1.1 历史快照（原文保存在 git 历史中）。
+    配套文档：云成本与厂商比较见 <a href="CLOUD-DEPLOYMENT-ANALYSIS.html">云部署费用报告</a>；
+    本轮的逐项记录与复现命令见 <a href="docs/engineering-report/2026-09-25-review.md">2026-09-25 复盘记录</a>；
+    工程结构说明见 <a href="docs/engineering-report/index.html">工程开发文档</a>。
+  </div>
 
   <div class="cards">
-    <div class="card"><div class="k">模块数</div><div class="v">7</div></div>
-    <div class="card"><div class="k">CLI Jar 体积</div><div class="v">8.61 MB</div></div>
-    <div class="card"><div class="k">本地可验证模块</div><div class="v">5 / 7 全绿</div></div>
-    <div class="card"><div class="k">新增 Spark 作业</div><div class="v">3</div></div>
-    <div class="card"><div class="k">GitHub CI</div><div class="v">5 / 5 全绿</div></div>
+    <div class="card"><div class="k">Maven 模块</div><div class="v">8</div><div class="d">新增 datacraft-jobs</div></div>
+    <div class="card"><div class="k">可调度作业</div><div class="v">7</div><div class="d">纯 JVM 2 · Spark 3 · 内置 2</div></div>
+    <div class="card"><div class="k">JVM 测试用例</div><div class="v">262</div><div class="d">本轮前 73</div></div>
+    <div class="card"><div class="k">Python / Node 测试</div><div class="v">86</div><div class="d">部署与文档 65 · DAG 16 · 成本 5（本轮前 19）</div></div>
+    <div class="card"><div class="k">审计确认的问题</div><div class="v">134</div><div class="d">11 个维度提出 137 项，驳回 3 项</div></div>
+    <div class="card"><div class="k">综合评分</div><div class="v">3.2 → 4.3</div><div class="d">满分 5，评估者判断</div></div>
   </div>
 
-  <h2>一、项目定位</h2>
-  <p>
-    <code>datacraft-lab</code> 是一个面向个人日常与大小项目需求的数据处理工厂：以 Maven 多模块组织，
-    Java 与 Scala 混合开发，Spark 承担重量级计算、纯 JVM 代码覆盖轻量场景，
-    通过<strong>同一套执行引擎</strong>对外提供 CLI 与 HTTP API 两种入口，
-    并由 Airflow 3.x 负责工作流编排，配套 Docker Compose（单机）与 Docker Swarm（多机）部署。
-  </p>
-
-  <h2>二、复盘发现的问题与处置</h2>
-  <p>
-    原有工程基础质量良好（记录类、不可变性、<code>Optional</code>、路径逃逸防护、集中式构建治理），
-    但对照“随时可部署”的目标存在 5 项实质缺口：
-  </p>
-  <div class="table-wrap">
-  <table>
-    <thead><tr><th>问题</th><th>具体表现</th><th>处置</th></tr></thead>
-    <tbody>
-      <tr>
-        <td>打包不适合上集群</td>
-        <td>Spark 为 <code>compile</code> 作用域，胖包会打入约 250 MB Spark，脆弱且不符合业界实践</td>
-        <td>改为 <code>provided</code>（<code>${spark.scope}</code>），由 <code>spark-submit</code> 提供运行时</td>
-      </tr>
-      <tr>
-        <td>引擎与 Spark 割裂</td>
-        <td><code>DataJob</code>（Java）与 <code>SparkJob</code>（Scala）互不相通，CLI 用 <code>match</code> 硬编码命令，属重复派发逻辑</td>
-        <td>新增 <code>AbstractSparkDataJob</code> 桥接，CLI 改为泛化派发</td>
-      </tr>
-      <tr>
-        <td>IO 复用不足</td>
-        <td>SFTP 为具体类而非接口，缺 list / exists / delete / mkdirs / rename / 流式操作；本地 FS 缺 move / delete / size</td>
-        <td>抽出 <code>RemoteFileTransfer</code> 端口，补全两侧操作，新增 <code>CsvFiles</code></td>
-      </tr>
-      <tr>
-        <td>Airflow 仅为占位</td>
-        <td>单个 12 行 stub DAG，无复用、无参数化</td>
-        <td>复用型 helpers + 3 个真实 DAG</td>
-      </tr>
-      <tr>
-        <td>完全没有部署层</td>
-        <td>无 Dockerfile、无编排文件、无脚本、无云方案</td>
-        <td>补齐镜像、Compose、Swarm、脚本与教程文档</td>
-      </tr>
-    </tbody>
-  </table>
-  </div>
-
-  <h2>三、统一作业模型（架构主干）</h2>
-  <p>所有执行路径收敛到唯一契约 <code>engine.DataJob</code>，这是消除冗余的核心设计：</p>
-<pre><code>HTTP / CLI / Airflow
-  -&gt; datacraft-cli（泛化派发） 或 datacraft-api（HTTP）
-  -&gt; datacraft-engine: JobRegistry（目录） + JobExecutionEngine（执行 + 采集指标）
-  -&gt; 具体 DataJob 实现：
-       - 内置作业 echo / noop                       [engine]
-       - Spark 作业经 AbstractSparkDataJob 桥接      [spark]
-         (spark-version / csv-to-parquet / row-count)</code></pre>
-  <ul>
-    <li>
-      <strong><code>AbstractSparkDataJob</code></strong>：从请求参数推导 <code>SparkRuntimeConfig</code>，
-      用 <code>SparkSessions.withSession</code> 确定性管理 Session 生命周期，执行子类的 <code>runSpark</code> 并装配结果与指标。
-      因此 Spark 作业在 CLI、API、Airflow 中的调用方式完全一致，无需按调用方分支。
-    </li>
-    <li><strong><code>ParameterKeys</code></strong>：跨层共享参数名的唯一事实源，杜绝魔法字符串重复。</li>
-  </ul>
-
-  <h2>四、各层改造明细</h2>
-  <div class="table-wrap">
-  <table>
-    <thead><tr><th>层</th><th>改造内容</th></tr></thead>
-    <tbody>
-      <tr><td>构建 / 打包</td><td>Spark → <code>provided</code>；引入 Jackson BOM；CLI jar 降至 8.61 MB；新增 <code>bundled-spark</code> profile 供本地自包含运行</td></tr>
-      <tr><td>datacraft-io</td><td><code>RemoteFileTransfer</code> 端口 + 完整 <code>SftpClient</code>（流 / list / exists / size / mkdirs / delete / rename）；<code>SftpConfig.fromProperties</code>；<code>LocalFiles</code> 与 <code>StorageService</code> 补齐 move / delete / deleteRecursively / exists / size / 行读写；零依赖 RFC 4180 <code>CsvFiles</code></td></tr>
-      <tr><td>datacraft-engine</td><td>新增 <code>ParameterKeys</code>；<code>JobExecutionResult.succeeded/failed</code> 支持合并作业指标与自动计算 <code>durationMillis</code></td></tr>
-      <tr><td>datacraft-spark</td><td><code>AbstractSparkDataJob</code> 桥接；复用型 <code>DataFrames</code> 读写；3 个真实作业；删除无用的 <code>SparkJob</code> trait</td></tr>
-      <tr><td>datacraft-cli</td><td>泛化引擎派发（仅保留 <code>list-jobs</code> / <code>serve-api</code> 两个控制命令）；新增 <code>--config</code>、<code>--host</code>；规范退出码 0 / 1 / 2；接入此前闲置的 config 模块</td></tr>
-      <tr><td>datacraft-api</td><td>改用 Jackson + 记录类 DTO 序列化（修复控制字符转义缺陷）；支持绑定 <code>0.0.0.0</code> 以适配容器</td></tr>
-      <tr><td>Airflow 编排</td><td><code>datacraft_common</code> 复用助手（环境驱动配置 + <code>cli_task</code> / <code>spark_task</code>）；3 个 DAG：engine_jobs（冒烟）、spark_etl（CSV→Parquet→计数）、sftp_ingest（SFTP 摄取）</td></tr>
-      <tr><td>部署</td><td>4 个 Dockerfile（build / jvm / spark / airflow）；单机 Compose（LocalExecutor）；多机 Swarm（CeleryExecutor + Redis）；带 Docker 存在性检测的脚本；<code>Makefile</code>、<code>.dockerignore</code></td></tr>
-      <tr><td>文档 / CI</td><td>云决策与部署教程、README 与架构文档刷新、CHANGELOG；GitHub Actions（Linux JDK 25 <code>mvn verify</code>、CLI jar 冒烟、DAG 语法、脚本 lint、编排文件校验）</td></tr>
-    </tbody>
-  </table>
-  </div>
-
-  <h2>五、验证证据</h2>
-  <p>
-    <span class="badge b-ok">5 模块 verify 全绿</span>
-    <span class="badge b-ok">Spotless / Checkstyle 干净</span>
-    <span class="badge b-ok">CLI jar 冒烟通过</span>
-    <span class="badge b-ok">DAG py_compile 通过</span>
-    <span class="badge b-ok">脚本 bash -n 通过</span>
-    <span class="badge b-ok">GitHub CI 5 作业全绿</span>
-  </p>
-  <ul>
-    <li><code>mvn verify</code>：common、config、io、engine、spark 全部 SUCCESS，格式化与静态检查干净，Enforcer 通过。</li>
-    <li>CLI 实测：<code>list-jobs</code> 输出 5 个作业；<code>echo</code> / <code>noop</code> 成功；未知命令返回退出码 2。</li>
-    <li>引擎测试补齐后共 13 项通过（新增 <code>JobExecutionResultTest</code> 6 项，覆盖指标合并、不可变性、时钟回拨与参数校验）。</li>
-    <li>
-      <strong>GitHub Actions 全绿</strong>：JDK 25 完整 <code>verify</code>（含真实启动 SparkSession 的
-      <code>SparkPipelineSpec</code>）、CLI jar 冒烟、Airflow DAG 语法、部署脚本 lint（<code>bash -n</code> +
-      ShellCheck）、Compose 与 Swarm 编排文件校验。Linux 上 <code>datacraft-api</code> 与
-      <code>datacraft-cli</code> 的全部测试通过，<strong>反证了本机失败确系环境问题</strong>。
-    </li>
-  </ul>
-  <div class="note">
-    <strong>已知本机限制（非代码缺陷）：</strong>
-    本机 JDK 25 的 <code>java.nio.channels.Selector.open()</code> 故障（<code>Unable to establish loopback connection</code>），
-    导致依赖 JDK HttpServer 的 <code>datacraft-api</code> 2 项测试与 <code>datacraft-cli</code> 1 项测试仅在本机失败。
-    已用独立探针程序定位为 JDK / 操作系统层问题，与项目代码无关。<strong>该限制同样使本机无法启动 Spark</strong>
-    （Netty 报 <code>failed to open a new selector</code>），因此 <code>SparkPipelineSpec</code> 在本机自动
-    cancel、在 Linux/CI 上真实执行。CI 全部通过，证实该问题为 <strong>Windows 平台特有</strong>。
-    <strong>未以削弱或跳过测试的方式掩盖该问题。</strong>
-  </div>
-
-  <h2>六、云服务决策（已更新）</h2>
-  <p>2026-09-19 已按东京、新加坡及按需/常开两种方式重新核对官方价格。
-  最新方案、计费条件、计算器与来源统一见
-  <a href="CLOUD-DEPLOYMENT-ANALYSIS.html">云部署与费用报告</a>。
-  本页旧估价和未经实测的内存下限已移除，不能再据此购买长期承诺套餐。</p>
-  <p>单机 Compose 是当前起点。Cloudflare 可提供访问与备份配套，Containers 并非当前持久化栈的直接替换。
-  镜像架构清单不等于 ARM 运行验收，当前完整容器运行证据为 Linux amd64。</p>
-
-  <h2>七、部署拓扑</h2>
-  <h3>单机起步（Docker Compose，推荐先行）</h3>
-<pre><code>            +------------------ 单台 Linux 虚拟机 ------------------+
- Cloudflare |  +------------+   +---------------------------------+ |
- Tunnel  --&gt;|  | airflow-   |   | scheduler·dag-processor·triggerer| |
- (UI)       |  | apiserver  |   +---------------------------------+ |
-            |  +------------+   +----------+   +-----------------+  |
-            |        |          | postgres |   |  datacraft-api  |  |
-            |        +----------+----------+   +-----------------+  |
-            |   spark-submit (local[*]) 与 java -jar 在 Airflow 内执行 |
-            +------------------------------------------------------+</code></pre>
-  <h3>多机扩展（Docker Swarm）</h3>
-  <p>
-    新增 Redis 作为 Celery broker，<code>airflow-worker</code> 跨节点执行任务（CeleryExecutor）；
-    状态服务（Postgres、Redis）固定在 manager 节点，无状态组件与 worker 分散调度，按需调整副本数。
-    生产化建议：以网络存储（NFS / EBS / EFS）替换节点本地卷、以 <code>docker secret</code> 替代 <code>.env</code>、
-    作业规模增大后将 <code>DATACRAFT_SPARK_MASTER</code> 指向真实 Spark 集群。
-  </p>
-  <h3>快速开始</h3>
-<pre><code>python3 deploy/scripts/deployment_env.py init   # 创建独立密钥，已有文件不会被覆盖
-bash deploy/scripts/build-images.sh                  # 构建镜像（容器内编译 jar）
-bash deploy/scripts/compose-up.sh                    # 启动单机栈
-# Airflow UI: http://&lt;host&gt;:8080    datacraft-api: http://&lt;host&gt;:8088/health</code></pre>
-
-  <h2>八、需要补充安装的现代化工具</h2>
-  <div class="table-wrap">
-  <table>
-    <thead><tr><th>工具</th><th>用途</th><th>状态</th></tr></thead>
-    <tbody>
-      <tr><td>Docker Engine + Compose v2</td><td>构建镜像、运行 Compose / Swarm</td><td><span class="badge b-warn">必需，当前未安装</span></td></tr>
-      <tr><td><code>make</code></td><td><code>make up</code> / <code>make verify</code> 等便捷目标</td><td><span class="badge b-info">可选</span></td></tr>
-      <tr><td>AWS CLI</td><td>创建与管理云主机</td><td><span class="badge b-info">上云时需要</span></td></tr>
-      <tr><td><code>cloudflared</code></td><td>建立 Cloudflare Tunnel</td><td><span class="badge b-info">上云时需要</span></td></tr>
-      <tr><td>JDK 25 / Maven 3.9.15 / Python 3.14 / git</td><td>本地构建与校验</td><td><span class="badge b-ok">已具备</span></td></tr>
-    </tbody>
-  </table>
-  </div>
-  <p class="sub">所有部署脚本均先检测 Docker 是否存在，缺失时打印安装指引并安全退出，不会在工具链就绪前产生任何破坏性动作。</p>
-
-  <h2>九、工程边界与合规复盘</h2>
-  <ul>
-    <li>
-      诊断 JDK 问题时曾在项目外创建临时目录 <code>D:\st</code>，<strong>违反了“当前工作目录为硬性写边界”的规定</strong>；
-      该目录已在获得授权后带内容校验地安全移除，<code>D:\</code> 根目录已无任何由此产生的残留。
-    </li>
-    <li>另清理了旧扁平布局删除后遗留的空目录 <code>src/</code> 与 <code>scopt/</code>（均为 0 文件）。</li>
-    <li>后续约定：项目目录之外不做任何写入或修改；临时文件一律置于项目内并及时清理。</li>
-  </ul>
-
-  <h2>十、JDK 25 升级</h2>
-  <p>
-    升级的关键不在于修改 pom 中的版本号，而在于运行期兼容性：<strong>Spark 4.1 官方仅支持 Java 17/21</strong>，
-    Java 25 支持是 <strong>Spark 4.2.0</strong> 才加入的；<strong>Scala 2.13.16 也不支持 JDK 25</strong>，需 2.13.17+。
-    因此本次升级是三者联动的，缺一不可。
-  </p>
-  <div class="table-wrap">
-  <table>
-    <thead><tr><th>项目</th><th>升级前</th><th>升级后</th><th>原因</th></tr></thead>
-    <tbody>
-      <tr><td>Java 目标 / 构建</td><td>21</td><td><strong>25</strong></td><td>本次升级目标</td></tr>
-      <tr><td>Spark</td><td>4.1.2</td><td><strong>4.2.0</strong></td><td>4.1 不支持 Java 25；4.2.0 官方支持 17/21/25</td></tr>
-      <tr><td>Scala</td><td>2.13.16</td><td><strong>2.13.18</strong></td><td>2.13.17+ 才支持 JDK 25；且与 Spark 4.2.0 自身编译所用版本完全一致</td></tr>
-      <tr><td>构建镜像</td><td><code>maven:3.9-eclipse-temurin-21</code></td><td><code>…-25</code></td><td>与字节码目标一致</td></tr>
-      <tr><td>运行镜像</td><td><code>eclipse-temurin:21-jre</code></td><td><code>25-jre</code></td><td>Java 25 字节码需要 25 运行时</td></tr>
-      <tr><td>Spark 镜像</td><td><code>4.1.2-…-java21-…</code></td><td><code>4.2.0-scala2.13-java25-python3-ubuntu</code></td><td>已核实该标签存在</td></tr>
-      <tr><td>pyspark（Airflow 镜像）</td><td>4.1.2</td><td>4.2.0</td><td>与 JVM 侧 Spark 版本对齐</td></tr>
-      <tr><td>Enforcer</td><td><code>[21,)</code></td><td><code>[25,)</code></td><td>防止用低版本 JDK 误构建</td></tr>
-    </tbody>
-  </table>
-  </div>
-  <p>
-    <strong>新增真实 Spark 集成测试</strong>：此前所有 Spark 测试都只断言纯配置、从未启动过 SparkSession，
-    而升级风险恰恰在运行期。新增的 <code>SparkPipelineSpec</code> 会真实启动 Spark、执行
-    「CSV → Parquet → 计数」全链路并校验指标，由 CI 在 JDK 25 上证明 Spark 4.2.0 确实可运行。
-    Spark 嵌入测试 JVM 时需要 JPMS 开放参数（<code>spark-submit</code> 会自动注入，测试 JVM 不会），
-    已通过 <code>spark.test.jvm.args</code> 统一配置。
-  </p>
-  <div class="note">
-    <strong>请注意本机 JDK 版本：</strong>Spark 4.2.0 文档明确指出
-    「Java 25 prior to version 25.0.3 support is deprecated」。本机当前为 <strong>JDK 25.0.2</strong>，
-    正落在该 deprecated 区间，建议升级到 <strong>25.0.3 或更新版本</strong>。
-  </div>
-
-  <h2>十一、后续建议</h2>
-  <ol>
-    <li><s>在 CI 中校验编排文件</s>——已完成：CI 每次推送均执行 <code>docker compose config</code> 校验 Compose 与 Swarm 文件。仍需在实际构建镜像前确认 <code>apache/airflow</code>、<code>apache/spark</code> 镜像标签在所选版本下确实存在。</li>
-    <li><s>在 GitHub Actions 确认完整 <code>mvn verify</code> 通过</s>——已完成（JDK 25）。</li>
-    <li>先以单机 Compose 上线运行一段时间，确有并发或高可用需求时再切换至 Swarm。</li>
-    <li>生产环境以 <code>docker secret</code> 或云端密钥管理替代 <code>.env</code> 明文。</li>
+  <ol class="toc">
+    <li><a href="#summary">结论摘要</a></li>
+    <li><a href="#requirements">需求符合度</a></li>
+    <li><a href="#architecture">架构评估</a></li>
+    <li><a href="#scores">分维度评分</a></li>
+    <li><a href="#method">本轮评估方法</a></li>
+    <li><a href="#fixes">发现与修复明细</a></li>
+    <li><a href="#evidence">质量门禁与验证证据</a></li>
+    <li><a href="#security">安全评估</a></li>
+    <li><a href="#deploy">部署与云成本</a></li>
+    <li><a href="#risks">残余风险与路线图</a></li>
+    <li><a href="#history">演进历程</a></li>
+    <li><a href="#index">文档索引</a></li>
   </ol>
 
+  <h2 id="summary">一、结论摘要</h2>
+  <p>
+    <strong>总体判断：</strong>项目已达到“个人单机数据处理平台可以放心使用和部署”的水平。
+    主干设计扎实：CLI、HTTP API 与 Airflow 共用同一个 <code>DataJob</code> 契约和执行引擎，模块边界清晰，
+    版本与安装约束集中管理，Linux CI 覆盖构建、真实 Spark、真实 Airflow 流水线、镜像和 Compose 栈。
+    本轮之前的主要缺陷不在正常路径，而集中在<strong>失败路径、跨平台行为、边界输入、部署默认值和文档漂移</strong>上。
+  </p>
+  <p><strong>本轮最重要的改进：</strong></p>
+  <ul>
+    <li><strong>失败语义统一。</strong>此前作业抛出 <code>Error</code>（例如在纯 JVM 镜像里调用 Spark 作业时的
+      <code>NoClassDefFoundError</code>）会逃出引擎：CLI 不写结构化结果，HTTP 请求永久挂起。现在除虚拟机级错误外，一律变为 FAILED 结果并记录完整堆栈。</li>
+    <li><strong>补齐“纯 JVM 覆盖小场景”这一既定需求。</strong>新增 <code>datacraft-jobs</code> 模块：<code>csv-profile</code>、<code>file-checksum</code>，复用 IO 端口，受数据根目录约束并带堆内存预算保护。</li>
+    <li><strong>数据安全边界。</strong>新增统一的 <code>DATACRAFT_DATA_ROOT</code> 约束（Spark 转换、纯 JVM 作业、Airflow 参数、部署栈），拒绝 Hadoop 通配符绕过；修复 SFTP 通配符误删/误覆盖、Windows 目录联接越界、下载截断旧文件等问题。</li>
+    <li><strong>安全与供应链。</strong>Airflow 3.3.2 / FAB 3.9.0（修复认证类 CVE）、Jackson 2.22.3、Checkstyle 14.1.0、带 SHA-256 校验的 Maven Wrapper、SHA 固定的 GitHub Actions、非 root 的 API 镜像、缺失密钥即失败、浏览器跨源请求 403。</li>
+    <li><strong>可验证性。</strong>JVM 测试用例从 73 增至 262；本机（Windows）首次能真实运行 HTTP 与 Spark 测试；CI 新增“每个模块确实执行了测试”的下限断言、jar 清单与算法探针、退出码冒烟。</li>
+  </ul>
+  <p><strong>仍需注意（详见第十节）：</strong>API 没有认证，只能留在回环地址或加认证网关后暴露；Swarm 多机配置只做过静态与桩测试，尚未在真实多节点验证；
+    本机 JDK 为 25.0.2，低于 Spark 4.2.0 建议的 25.0.3（构建会给出警告）；Spark 4.2.0 自带依赖存在当前不可达的公告，需等待上游修复版。</p>
+
+  <h2 id="requirements">二、需求符合度</h2>
+  <p>需求来源：README 简介、<code>docs/architecture.md</code>、工程开发文档、数据处理契约、Airflow 与部署文档，以及历史报告中的后续建议。</p>
+  <div class="table-wrap">
+  <table>
+    <thead><tr><th>需求</th><th>实现</th><th>证据</th><th>状态</th></tr></thead>
+    <tbody>
+      <tr><td>Maven 多模块、严格边界</td><td>8 个模块；<code>engine</code> 只依赖 <code>common</code></td><td>Enforcer <code>enforce-module-boundaries</code>（本轮新增，负向检查已验证）；common 由 reactor 环检测保护</td><td><span class="badge b-ok">满足</span></td></tr>
+      <tr><td>Java 与 Scala 混合</td><td>Java：common、config、io、engine、jobs、api；Scala：spark、cli</td><td>同一 reactor 构建，Spotless 统一格式</td><td><span class="badge b-ok">满足</span></td></tr>
+      <tr><td>Spark 承担重量级计算</td><td><code>csv-to-parquet</code>、<code>row-count</code>、<code>spark-version</code>；Spark 为 <code>provided</code></td><td>Linux CI 真实启动 SparkSession，断言无 cancel</td><td><span class="badge b-ok">满足</span></td></tr>
+      <tr><td>纯 JVM 覆盖小场景</td><td>本轮新增 <code>datacraft-jobs</code>：<code>csv-profile</code>、<code>file-checksum</code></td><td>67 项模块测试；打包 jar 实测退出码 0/1</td><td><span class="badge b-ok">本轮补齐</span></td></tr>
+      <tr><td>同一引擎服务 CLI 与 HTTP</td><td><code>DataJob</code> → <code>JobExecutionEngine</code>；失败边界统一</td><td>CLI 23 项、API 12 项、引擎 31 项测试</td><td><span class="badge b-ok">满足</span></td></tr>
+      <tr><td>可复用配置与 IO 端口</td><td><code>DataCraftConfig</code>、<code>StorageService</code>、<code>RemoteFileTransfer</code></td><td>纯 JVM 作业通过 <code>LocalStorageService</code> 访问数据根；SFTP 客户端首次有嵌入式服务器测试</td><td><span class="badge b-ok">满足</span></td></tr>
+      <tr><td>Airflow 3.x 编排</td><td>3 个 DAG，Airflow 3.3.2 与官方 constraints</td><td>16 项契约测试；CI 在真实 Airflow 中执行三条流水线</td><td><span class="badge b-ok">满足</span></td></tr>
+      <tr><td>单机 Compose / 多机 Swarm</td><td>Compose 为主；Swarm 固定单数据节点</td><td>Compose 在 CI 真实启动并做备份恢复；Swarm 仅 <code>stack config</code> 与静态测试</td><td><span class="badge b-warn">部分</span></td></tr>
+      <tr><td>云部署评估与成本</td><td>东京/新加坡、按需/常开比较与计算器</td><td>价格快照核验日 2026-09-19，本轮未改价格</td><td><span class="badge b-ok">满足</span></td></tr>
+      <tr><td>质量门禁与 CI</td><td>格式、Checkstyle、Enforcer、测试、打包、5 个 CI 作业</td><td>见第七节</td><td><span class="badge b-ok">满足</span></td></tr>
+      <tr><td>在线 API 的访问控制</td><td>回环绑定、Origin 403、数据根约束、非回环需数据根</td><td>无认证层，属已记录的设计边界</td><td><span class="badge b-warn">部分</span></td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <h2 id="architecture">三、架构评估</h2>
+  <h3>执行主干</h3>
+<pre><code>HTTP (datacraft-api)      CLI (datacraft-cli)      Airflow DAG (BashOperator)
+        \                        |                         /
+         \                       |      java -jar / spark-submit --class Runner
+          +------------> JobExecutionEngine (datacraft-engine) <--------+
+                                 |  catalog = JvmJobs + SparkJobs + BuiltInJobs
+             +-------------------+----------------------+
+             |                   |                      |
+     BuiltInJobs [engine]   JvmJobs [jobs]        SparkJobs [spark]
+      echo, noop            csv-profile,           spark-version,
+                            file-checksum          csv-to-parquet, row-count
+                                 |                      |
+                        datacraft-io (StorageService, CsvFiles, SFTP)
+</code></pre>
+  <p>
+    <strong>评价：</strong>“一个契约、一个引擎、多种入口”的设计是本项目最大的优点，新作业只需实现 <code>DataJob</code> 并注册，
+    即可同时在 CLI、API 和 Airflow 中使用。本轮补上了此前的薄弱点：引擎现在对所有非虚拟机级错误给出统一的 FAILED 结果；
+    作业名必须是单个 URL 路径段且不能与 CLI 控制命令同名；Spark 作业在纯 JVM 环境中返回带有 <code>spark-submit</code> 提示的失败结果，而不是崩溃。
+  </p>
+  <h3>模块依赖（已由构建强制）</h3>
+<pre><code>datacraft-common
+  <- datacraft-config, datacraft-io, datacraft-engine
+datacraft-engine
+  <- datacraft-jobs (+ io), datacraft-spark, datacraft-api
+datacraft-cli  -> api, engine, jobs, spark, io, config   (唯一的进程入口，打包为瘦 jar)
+</code></pre>
+  <p>
+    Spark 以 <code>provided</code> 作用域引入，CLI jar 约 9 MB，Spark 作业通过 <code>spark-submit</code> 运行；
+    <code>spark-submit --master</code> 现在会被真正继承（此前 CLI 注入的 <code>local[*]</code> 会静默覆盖集群配置）。
+  </p>
+
+  <h2 id="scores">四、分维度评分</h2>
+  <p>评分为评估者对“本轮开始前 → 本轮结束后”的判断（1–5 分），依据列出可核对的事实。浅色条为本轮前，深色细条为本轮后。</p>
+  <div class="table-wrap">
+  <table class="scores">
+    <thead><tr><th>维度</th><th>评分</th><th>主要依据</th></tr></thead>
+    <tbody>
+      <tr><td>架构与模块边界</td><td><div class="score"><div class="track"><span class="before" style="width:80%"></span><span class="after" style="width:90%"></span></div><b>4.0→4.5</b></div></td><td>边界改为构建强制；新增作业模块位置正确</td></tr>
+      <tr><td>执行引擎与失败语义</td><td><div class="score"><div class="track"><span class="before" style="width:60%"></span><span class="after" style="width:90%"></span></div><b>3.0→4.5</b></div></td><td>Error 不再逃逸；失败日志含堆栈；失败路径测试从 0 到完整</td></tr>
+      <tr><td>配置加载</td><td><div class="score"><div class="track"><span class="before" style="width:60%"></span><span class="after" style="width:90%"></span></div><b>3.0→4.5</b></div></td><td>BOM、原样值、带文件名的错误、<code>--config</code> 错误退出码 2</td></tr>
+      <tr><td>本地 IO 与 SFTP</td><td><div class="score"><div class="track"><span class="before" style="width:60%"></span><span class="after" style="width:80%"></span></div><b>3.0→4.0</b></div></td><td>junction/通配符/原子下载修复；SFTP 首次有集成测试；真实第三方 SFTP 未验证</td></tr>
+      <tr><td>Spark 数据处理</td><td><div class="score"><div class="track"><span class="before" style="width:70%"></span><span class="after" style="width:90%"></span></div><b>3.5→4.5</b></div></td><td>先校验后启动会话；HDFS 与 glob 感知的路径保护；JSON 严格计数</td></tr>
+      <tr><td>CLI 与 HTTP 接口</td><td><div class="score"><div class="track"><span class="before" style="width:60%"></span><span class="after" style="width:90%"></span></div><b>3.0→4.5</b></div></td><td>退出码可测试；输出跨平台字节一致；JSON 404、HEAD、排空停机</td></tr>
+      <tr><td>Airflow 编排</td><td><div class="score"><div class="track"><span class="before" style="width:70%"></span><span class="after" style="width:90%"></span></div><b>3.5→4.5</b></div></td><td>路径约束、SFTP 主机密钥守卫、具名配置错误；3.3.2</td></tr>
+      <tr><td>容器与部署</td><td><div class="score"><div class="track"><span class="before" style="width:60%"></span><span class="after" style="width:80%"></span></div><b>3.0→4.0</b></div></td><td>失败即停的密钥、非 root API、Swarm 初始化服务；Swarm 仍缺真实多节点验证</td></tr>
+      <tr><td>构建与供应链</td><td><div class="score"><div class="track"><span class="before" style="width:60%"></span><span class="after" style="width:90%"></span></div><b>3.0→4.5</b></div></td><td>Multi-Release jar、Checkstyle 14、Jackson 禁用旧版、Wrapper 校验和、SHA 固定 Actions</td></tr>
+      <tr><td>测试与 CI</td><td><div class="score"><div class="track"><span class="before" style="width:70%"></span><span class="after" style="width:90%"></span></div><b>3.5→4.5</b></div></td><td>73→262 用例；每模块执行下限；本机可跑 HTTP/Spark</td></tr>
+      <tr><td>文档</td><td><div class="score"><div class="track"><span class="before" style="width:60%"></span><span class="after" style="width:80%"></span></div><b>3.0→4.0</b></div></td><td>统一报告、勘误与一致性测试；中英文文档仍并存</td></tr>
+      <tr><td>安全</td><td><div class="score"><div class="track"><span class="before" style="width:50%"></span><span class="after" style="width:70%"></span></div><b>2.5→3.5</b></div></td><td>多层防护已加；API 仍无认证、机密在容器间共享</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <h2 id="method">五、本轮评估方法</h2>
+  <ol>
+    <li><strong>基线：</strong>确认 GitHub 上最新提交 CI 全绿；在本机跑完整构建，记录 Windows 特有失败并查明原因
+      （其中 CLI 输出换行不一致是真实缺陷；Selector 失败源自用户 TEMP 目录无法承载 AF_UNIX 套接字，用
+      <code>-Djdk.net.unixdomain.tmpdir</code> 解决，而非此前记录的“JDK 缺陷”）。</li>
+    <li><strong>分维度审查：</strong>引擎核心、IO、Spark、CLI/API、Airflow、部署、构建与 CI、文档准确性、依赖与漏洞、需求覆盖、安全共 11 个维度，共提出 137 项发现，每项附证据与失败场景。</li>
+    <li><strong>独立复核：</strong>每项发现由另一方尝试反驳并尽量复现，驳回 3 项，确认 134 项（中 23、低 99、信息 12），去重后约 100 个独立问题。</li>
+    <li><strong>归并为工作包：</strong>12 个文件互不重叠的工作包，外加按项目扩展规划新增的 WP-13（纯 JVM 作业模块）；28 项记为残余风险或路线图。</li>
+    <li><strong>隔离实施与审查：</strong>每个工作包在独立的 git worktree 中实现，先写能在旧代码上失败的回归测试；再由独立审查方复核，4 个包按意见返修。</li>
+    <li><strong>集成后审查：</strong>从 CI 预测、跨模块契约、JVM 正确性、安全等 5 个视角审查整体改动，确认 14 项，其中 3 项会直接导致 CI 失败（Linux 测试下限、Airflow 3.3.2 在 stdout 输出警告导致初始化脚本解析失败），全部在推送前修复并复验。</li>
+    <li><strong>外部事实核实：</strong>版本、CVE/GHSA、Actions 标签与 Maven 分发包校验和均对照官方来源核实。</li>
+  </ol>
+
+  <h2 id="fixes">六、发现与修复明细</h2>
+  <div class="table-wrap">
+  <table>
+    <thead><tr><th>工作包</th><th>代表性问题（修复前）</th><th>处理</th><th>回归证据</th></tr></thead>
+    <tbody>
+      <tr><td>WP-01 执行引擎</td><td>作业抛出 <code>Error</code> 时逃出引擎；异常类型与堆栈丢失</td><td>捕获除 <code>VirtualMachineError</code> 外的所有 Throwable；ERROR 级日志；作业名禁止 <code>/</code>；移除未使用的 <code>OUTPUT_FORMAT</code></td><td>引擎 31 项</td></tr>
+      <tr><td>WP-02 HTTP API</td><td>作业 Error 使连接挂起；未知路由返回 HTML；HEAD 返回 405 并刷警告；原始非 ASCII 查询被错误解码；浏览器可跨源触发作业；停机强制中断</td><td>统一兜底 500；JSON 404；支持 HEAD；非法字节 400；带 <code>Origin</code> 的运行请求 403；最多 8 秒排空</td><td>API 12 项</td></tr>
+      <tr><td>WP-03 CLI 契约</td><td><code>--config</code> 错误退出码 1 且打印堆栈；Windows 上 stdout 与结果文件字节不同；默认 <code>spark.master</code> 覆盖 spark-submit</td><td>0/1/2 退出码可测试；UTF-8+LF 字节一致；主节点优先级；控制命令拒绝作业参数</td><td>CLI 23 项（含子进程 CRLF 测试）</td></tr>
+      <tr><td>WP-04 配置加载</td><td>带 BOM 的文件首个键被静默忽略；值被 trim 导致制表符分隔符无法配置</td><td>去 BOM；值原样保留、类型读取时去空格；错误带文件名</td><td>配置 12 项</td></tr>
+      <tr><td>WP-05 IO 与 SFTP</td><td>NTFS 目录联接可越过存储根读写，递归删除会删到树外；SFTP 路径中的 <code>*</code>/<code>?</code> 被展开导致误删、误覆盖；下载失败会截断旧文件；CSV 写入对单个空字段有损</td><td>基于真实路径的根校验；字面化 SFTP 路径；临时文件+原子替换；写入保真；嵌入式 SSHD 测试</td><td>IO 62 项</td></tr>
+      <tr><td>WP-06 Spark</td><td>参数错误在启动 Spark 后才报；HDFS 别名与 glob 可绕过输入输出重叠检查；JSON 计数宽松；ignore 模式误报写入</td><td>先校验后启动；PathGuards；<code>DATACRAFT_DATA_ROOT</code>；继承启动器配置；FAILFAST 计数；大小写变体参数报错</td><td>Spark 48 项</td></tr>
+      <tr><td>WP-07 Airflow</td><td>触发参数中的路径不受限制，覆盖写可删除任意目录；SFTP 连接默认不校验主机密钥；以 <code>.sh</code> 结尾的参数被当作模板文件</td><td>数据根参数模式；主机密钥守卫（不重试）；字面参数；具名环境变量错误；3.3.2</td><td>DAG 16 项</td></tr>
+      <tr><td>WP-08 容器镜像</td><td>Airflow 3.3.1 / FAB 3.8.0 含认证类 CVE（CVE-2026-86473、82355、82311、86462、82310、86466）；API 镜像以 root 运行；备份与 <code>.env</code> 可能进入构建上下文</td><td>3.3.2；UID 10001；<code>.dockerignore</code>；构建参数无默认值；先拉取基础镜像；镜像内设置数据根</td><td>静态测试 + CI 容器冒烟</td></tr>
+      <tr><td>WP-09 Compose/Swarm</td><td>缺失密钥时回退到弱默认值；Swarm 初始化依赖尚未迁移的 scheduler；管理员密码出现在进程参数</td><td><code>${VAR:?}</code> 失败即停；init 服务；日志与健康检查；密码经 stdin；回环与只读挂载校验</td><td>部署 56 项（WSL）</td></tr>
+      <tr><td>WP-10 构建</td><td>瘦 jar 缺少 <code>Multi-Release</code>，JSch 的 Ed25519/X25519 失效；Checkstyle 9.3 无法解析 Java 21+ 语法；Wrapper 无校验</td><td>MR 清单；Checkstyle 14.1.0；Jackson 2.22.3 与旧版禁用；Apache 脚本式 Wrapper 3.3.4 + SHA-256；引擎边界规则</td><td>负向检查逐项记录</td></tr>
+      <tr><td>WP-11 CI</td><td>Node 20 旧动作、仅标签固定；未断言各模块真的执行了测试</td><td>最新主版本并固定 SHA；ubuntu-24.04；执行数下限；jar 与退出码冒烟；缺失密钥拒绝检查</td><td>计数脚本 11 项测试</td></tr>
+      <tr><td>WP-12 文档</td><td>历史快照被当作当前报告；孤立页面、机器相关路径、错误归因</td><td>本报告、勘误、文档一致性测试</td><td><code>test_docs_consistency.py</code></td></tr>
+      <tr><td>WP-13 纯 JVM 作业</td><td>“纯 JVM 覆盖小场景”只有库，没有作业</td><td><code>csv-profile</code>、<code>file-checksum</code>；数据根约束；读取前与解析前的堆预算</td><td>jobs 67 项</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <h3>集成后审查补充修复（14 项）</h3>
+  <ul>
+    <li><span class="badge b-risk">CI 阻断</span> Linux 下 <code>datacraft-io</code> 有 6 个仅 Windows 运行的测试，执行数下限按 Linux 实际值设定。</li>
+    <li><span class="badge b-risk">CI 阻断</span> Airflow 3.3.2（无 httpx2 时）会在 <code>users list</code> 的 stdout 前输出弃用警告，初始化脚本改用 <code>airflow users export</code> 写文件；已在真实 3.3.2 环境中两次运行验证幂等。</li>
+    <li><span class="badge b-warn">安全</span> 纯 JVM 作业在未设数据根时不受约束：API 镜像内置 <code>DATACRAFT_DATA_ROOT</code>（无挂载时失败即停）；<code>serve-api</code> 绑定非回环地址且无数据根时拒绝启动。</li>
+    <li><span class="badge b-info">其他</span> <code>csv-profile</code> 读取前先检查堆预算；数据根本身是符号链接时可用；SFTP 主机名/用户名去空格；Airflow 路径拒绝尾部空白、数据根拒绝 <code>//</code> 开头；文档与 Javadoc 更正。</li>
+  </ul>
+
+  <h2 id="evidence">七、质量门禁与验证证据</h2>
+  <h3>JVM 测试用例（按模块）</h3>
+  <div class="table-wrap">
+  <table>
+    <thead><tr><th>模块</th><th class="num">本轮前</th><th class="num">本轮后</th><th class="num">Windows 本机执行</th><th class="num">Linux CI 执行</th><th>说明</th></tr></thead>
+    <tbody>
+      <tr><td>datacraft-common</td><td class="num">3</td><td class="num">7</td><td class="num">7</td><td class="num">7</td><td>含 Java 21+ 语法夹具</td></tr>
+      <tr><td>datacraft-config</td><td class="num">4</td><td class="num">12</td><td class="num">12</td><td class="num">12</td><td></td></tr>
+      <tr><td>datacraft-io</td><td class="num">24</td><td class="num">62</td><td class="num">57</td><td class="num">56</td><td>Windows 跳过符号链接/特殊文件名 5 项；Linux 跳过 junction 6 项</td></tr>
+      <tr><td>datacraft-engine</td><td class="num">13</td><td class="num">31</td><td class="num">31</td><td class="num">31</td><td></td></tr>
+      <tr><td>datacraft-jobs</td><td class="num">—</td><td class="num">67</td><td class="num">65</td><td class="num">67</td><td>Windows 跳过符号链接 2 项</td></tr>
+      <tr><td>datacraft-spark</td><td class="num">17</td><td class="num">48</td><td class="num">41</td><td class="num">48</td><td>Windows 缺 winutils/符号链接权限时 cancel 7 项；CI 断言 0 cancel</td></tr>
+      <tr><td>datacraft-api</td><td class="num">4</td><td class="num">12</td><td class="num">12</td><td class="num">12</td><td></td></tr>
+      <tr><td>datacraft-cli</td><td class="num">8</td><td class="num">23</td><td class="num">23</td><td class="num">23</td><td></td></tr>
+      <tr><th>合计</th><th class="num">73</th><th class="num">262</th><th class="num">248</th><th class="num">256</th><th></th></tr>
+    </tbody>
+  </table>
+  </div>
+  <h3>本机门禁（Windows 11，JDK 25.0.2）</h3>
+  <ul>
+    <li><code>./mvnw -B -ntp -o spotless:apply verify</code>：8 个模块全部 SUCCESS（格式、Checkstyle 0 违规、Enforcer、测试、打包）。</li>
+    <li>WSL Ubuntu Python 3.12：部署与文档一致性测试 65 项通过；Airflow 3.3.2 + 官方 constraints 虚拟环境中 DAG 测试 16 项通过；真实 Airflow 3.3.2 下初始化脚本两次运行结果正确。</li>
+    <li>Node：成本计算测试 5 项通过；所有 Shell 脚本 <code>bash -n</code> 通过；Compose/Swarm 文件 YAML 解析通过。</li>
+    <li>打包后的 CLI jar 实测：7 个作业可列出；纯 JVM 作业成功返回 0、质量门槛不符返回 1；Spark 作业在纯 JVM 下返回结构化 FAILED；未知命令、坏参数、缺失配置文件返回 2 且无未捕获异常；清单含 <code>Multi-Release: true</code>，JSch Ed25519/X25519 可用。</li>
+  </ul>
+  <h3>Linux CI（GitHub Actions，ubuntu-24.04）</h3>
+  <p>五个作业：构建与验证（含 Spark 真实运行与模块执行下限）、Airflow 契约与真实流水线、部署脚本与测试、Compose/Swarm 配置校验、镜像构建与容器/Compose 冒烟。
+    本轮提交的实际运行结果见 <a href="docs/engineering-report/2026-09-25-review.md">2026-09-25 复盘记录</a> 中的 CI 记录；Docker、真实 Airflow 端到端与容器冒烟只能由 CI 证明，本机不作替代。</p>
+
+  <h2 id="security">八、安全评估</h2>
+  <div class="table-wrap">
+  <table>
+    <thead><tr><th>攻击面</th><th>风险</th><th>当前防护</th><th>残余</th></tr></thead>
+    <tbody>
+      <tr><td>HTTP API（无认证）</td><td>任意调用方可运行作业、读取文件摘要</td><td>Compose 仅绑定 127.0.0.1；Swarm 不发布端口；带 <code>Origin</code> 的运行请求 403；纯 JVM 作业限制在只读挂载的数据根；非回环绑定必须设置数据根</td><td><span class="badge b-warn">中</span> 对外暴露前必须加认证网关</td></tr>
+      <tr><td>作业路径参数</td><td>覆盖写删除任意目录；通配符越界读取</td><td>Spark 转换与纯 JVM 作业的数据根约束；拒绝 glob 字符；Airflow 参数模式校验</td><td><span class="badge b-info">低</span> <code>row-count</code> 只读且不受约束；远程存储白名单未设计</td></tr>
+      <tr><td>Airflow 任务参数</td><td>Shell 注入、模板注入</td><td>参数经环境变量逐项引用；<code>template_ext</code> 为空；参数键白名单</td><td><span class="badge b-ok">低</span></td></tr>
+      <tr><td>SFTP</td><td>中间人攻击、误删/误覆盖</td><td>JVM 客户端严格主机密钥；Airflow 下载要求 <code>host_key</code>；字面路径；原子下载</td><td><span class="badge b-info">低</span> 需对真实服务器验收</td></tr>
+      <tr><td>部署机密</td><td>弱默认值、泄露到进程参数或镜像</td><td>独立随机生成、强度与独立性预检、<code>:?</code> 失败即停、stdin 传密码、<code>.dockerignore</code></td><td><span class="badge b-warn">中</span> 所有 Airflow 容器共享机密，DAG/CLI/Spark 属管理员级可信代码</td></tr>
+      <tr><td>供应链</td><td>被篡改的构建工具或依赖</td><td>Wrapper SHA-256、Actions 固定 SHA、Jackson 旧版禁用、官方 constraints、基础镜像先拉取</td><td><span class="badge b-info">低</span> 无持续漏洞扫描；基础镜像未固定 digest</td></tr>
+      <tr><td>Swarm 网络</td><td>未加密覆盖网络、Redis 无密码</td><td>有状态服务固定在数据节点；文档要求防火墙限制 2377/7946/4789</td><td><span class="badge b-warn">中</span> 多机前需加密与认证设计</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <h2 id="deploy">九、部署与云成本</h2>
+  <p>推荐先用<strong>单机 Docker Compose</strong>（LocalExecutor），Airflow UI 与 API 只绑定回环地址，经 SSH 转发或带认证的隧道访问：</p>
+<pre><code>python3 deploy/scripts/deployment_env.py init   # 生成独立随机机密，不覆盖已有文件
+bash deploy/scripts/build-images.sh              # 拉取基础镜像并构建（DAG 与 jar 均打入镜像）
+bash deploy/scripts/compose-up.sh                # 预检机密与端口后启动并等待健康</code></pre>
+  <p><strong>升级既有部署的注意事项（破坏性变更）：</strong>四个核心机密缺失时启动直接失败；DAG 目录不再绑定挂载，<code>git pull</code> 后必须重建镜像；
+    Swarm 必须指定具体镜像标签（不能是 <code>latest</code>）并在管理节点登录镜像仓库；SFTP 连接必须配置 <code>host_key</code>；
+    非 50000 UID 的既有数据卷需一次性修复权限。完整步骤见 <a href="docs/deployment/cloud-and-deployment.md">部署教程</a>。</p>
+  <div class="table-wrap">
+  <table>
+    <thead><tr><th>场景</th><th>候选</th><th class="num">月费用（税前）</th><th>前提</th></tr></thead>
+    <tbody>
+      <tr><td>常开</td><td>腾讯云 Lighthouse 入门型 2 核 / 8 GB / 80 GB</td><td class="num">$10.15</td><td>含示例备份 $0.15；以下单页库存为准</td></tr>
+      <tr><td>每月约 60 小时</td><td>Oracle OCI A1 2 OCPU / 8 GB</td><td class="num">$4.79</td><td>不计免费额度；ARM 需实机验收</td></tr>
+      <tr><td>已有 AWS 习惯</td><td>AWS Lightsail 8 GB</td><td class="num">$44.15</td><td>预算清晰但费用较高</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <p class="sub">价格为 2026-09-19 核验的公开价快照，本轮未重新核价；东京与新加坡的完整比较、停机计费规则和计算器见 <a href="CLOUD-DEPLOYMENT-ANALYSIS.html">云部署费用报告</a>。</p>
+
+  <h2 id="risks">十、残余风险与路线图</h2>
+  <div class="table-wrap">
+  <table>
+    <thead><tr><th>优先级</th><th>事项</th><th>影响</th><th>建议</th></tr></thead>
+    <tbody>
+      <tr><td><span class="badge b-risk">P1</span></td><td>API 无认证</td><td>误暴露即可被任意调用</td><td>保持回环；需要远程访问时在前面加认证网关</td></tr>
+      <tr><td><span class="badge b-risk">P1</span></td><td>Swarm 未在真实多节点验证</td><td>初始化服务、健康检查、工作节点排空只做过静态与桩测试</td><td>真正扩展到多机前，先配置共享存储、加密覆盖网络与 Redis 认证，并做一次演练</td></tr>
+      <tr><td><span class="badge b-risk">P1</span></td><td>JDK 补丁级别</td><td>本机 25.0.2 低于建议的 25.0.3；Temurin 25.0.4.1 镜像尚未发布，镜像仍继承 25.0.4+7</td><td>升级本机 JDK 后把 Enforcer 下限提升为硬性要求；上游标签发布后重建镜像</td></tr>
+      <tr><td><span class="badge b-warn">P2</span></td><td>Spark 4.2.0 自带依赖的公告</td><td>Jackson 2.21.2、Netty、Jetty 存在公告，当前配置下不可达</td><td>不发布 Spark UI/RPC 端口；Spark 4.2.1 发布后升级</td></tr>
+      <tr><td><span class="badge b-warn">P2</span></td><td>机密在 Airflow 容器间共享</td><td>任一任务代码可读取全部机密</td><td>视为可信代码边界；多租户前再做机密隔离</td></tr>
+      <tr><td><span class="badge b-warn">P2</span></td><td>无持续依赖/漏洞监控</td><td>SHA 固定的 Actions 与依赖会逐渐过时</td><td>经所有者同意后启用 Dependabot 与定期 SCA 扫描</td></tr>
+      <tr><td><span class="badge b-info">P3</span></td><td>Spark 会话锁无超时、<code>durationMillis</code> 含排队时间、Lifecycle 仅为标签、编译告警未设门禁</td><td>当前部署拓扑下不触发</td><td>引入 HTTP 侧 Spark 服务或多租户时再处理</td></tr>
+      <tr><td><span class="badge b-info">路线图</span></td><td>功能扩展</td><td>—</td><td>更多纯 JVM 作业与流式 CSV 解析；配置化/插件化作业目录；对象存储版 <code>StorageService</code>（S3A）；docker secrets；云端、ARM 与真实 SFTP 服务器验收</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <h2 id="history">十一、演进历程</h2>
+  <ol class="timeline">
+    <li><span class="when">2025-05-25</span>　项目初始化（合并早期 data-harvester 仓库）。</li>
+    <li><span class="when">2026-04-08</span>　代码质量初步改进。</li>
+    <li><span class="when">2026-07-11</span>　数据处理主体落地：模块化引擎、Spark 作业、CLI/API、Airflow DAG、Docker 部署（97 个文件）。</li>
+    <li><span class="when">2026-08-23 – 08-24</span>　首份综合复盘报告；修复并扩展 CI；升级到 JDK 25 + Spark 4.2.0 + Scala 2.13.18 并对齐各框架；重做云厂商评估。</li>
+    <li><span class="when">2026-09-19</span>　数据处理与 Airflow 执行加固；经济型云部署准备与费用核验；Compose 冒烟修复。</li>
+    <li><span class="when">2026-09-25</span>　本轮：跨平台测试可运行、11 维审计与 13 个工作包、集成后审查、统一评估报告 v2.0。</li>
+  </ol>
+
+  <h2 id="index">十二、文档索引</h2>
+  <ul>
+    <li><a href="README.md">README</a>：构建、CLI、HTTP API 与部署入口。</li>
+    <li><a href="docs/architecture.md">架构说明</a> · <a href="docs/data-processing.md">数据处理契约</a>（参数、写入模式、路径约束、HTTP 状态码）。</li>
+    <li><a href="orchestration/airflow/README.md">Airflow 编排说明</a> · <a href="docs/deployment/cloud-and-deployment.md">部署教程</a> · <a href="docs/deployment/pricing-evidence.md">价格依据</a>。</li>
+    <li><a href="docs/engineering-report/index.html">工程开发文档</a> · <a href="docs/engineering-report/maven-build.html">Maven 构建说明</a>。</li>
+    <li><a href="docs/engineering-report/2026-09-25-review.md">2026-09-25 复盘记录</a>（本轮）· <a href="docs/engineering-report/2026-09-19-review.md">2026-09-19 复盘记录</a>（历史）。</li>
+    <li><a href="CHANGELOG.md">CHANGELOG</a>：逐项变更，含破坏性变更标注。</li>
+  </ul>
+
   <p class="meta">
-    本报告汇总自对 <code>datacraft-lab</code> 的全量代码复核、构建验证与部署方案设计。
-    详细文档参见 <code>README.md</code>、<code>docs/architecture.md</code>、
-    <code>docs/deployment/cloud-and-deployment.md</code> 与 <code>orchestration/airflow/README.md</code>。
+    评分与优先级为评估者基于代码、测试与运行证据作出的判断；所有版本、公告编号与校验和均已对照官方来源核实。
+    本报告未购买或部署任何付费云资源，未连接真实生产数据库、SFTP 账号或集群。
   </p>
 
 </main>
