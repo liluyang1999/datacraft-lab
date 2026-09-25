@@ -127,6 +127,7 @@
     <div class="card"><div class="k">JVM 测试用例</div><div class="v">262</div><div class="d">本轮前 73</div></div>
     <div class="card"><div class="k">Python / Node 测试</div><div class="v">86</div><div class="d">部署与文档 65 · DAG 16 · 成本 5（本轮前 19）</div></div>
     <div class="card"><div class="k">审计确认的问题</div><div class="v">134</div><div class="d">11 个维度提出 137 项，驳回 3 项</div></div>
+    <div class="card"><div class="k">GitHub CI</div><div class="v">5 / 5</div><div class="d">ubuntu-24.04 全部通过</div></div>
     <div class="card"><div class="k">综合评分</div><div class="v">3.2 → 4.3</div><div class="d">满分 5，评估者判断</div></div>
   </div>
 
@@ -308,7 +309,8 @@ datacraft-cli  -> api, engine, jobs, spark, io, config   (唯一的进程入口�
   </ul>
   <h3>Linux CI（GitHub Actions，ubuntu-24.04）</h3>
   <p>五个作业：构建与验证（含 Spark 真实运行与模块执行下限）、Airflow 契约与真实流水线、部署脚本与测试、Compose/Swarm 配置校验、镜像构建与容器/Compose 冒烟。
-    本轮提交的实际运行结果见 <a href="docs/engineering-report/2026-09-25-review.md">2026-09-25 复盘记录</a> 中的 CI 记录；Docker、真实 Airflow 端到端与容器冒烟只能由 CI 证明，本机不作替代。</p>
+    提交 <code>d36f528</code> 的 <a href="https://github.com/liluyang1999/datacraft-lab/actions/runs/36141206917">运行 36141206917</a> 五个作业全部成功（构建 88 秒、Airflow 176 秒、镜像与 Compose 冒烟 379 秒），逐项见
+    <a href="docs/engineering-report/2026-09-25-review.md">2026-09-25 复盘记录</a>。Docker、真实 Airflow 端到端与容器冒烟只能由 CI 证明，本机不作替代。</p>
 
   <h2 id="security">八、安全评估</h2>
   <div class="table-wrap">
