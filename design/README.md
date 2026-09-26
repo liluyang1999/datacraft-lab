@@ -42,8 +42,9 @@ fixing. How to install, run and operate the project is in [`docs/`](../docs/READ
 - [Airflow guide](../docs/guides/airflow.md): the DAGs and their configuration.
 - [Deployment guide](../docs/guides/deployment.md) (Chinese): Compose and Swarm deployment,
   operations, backup and restore.
-- [Evaluation report](../docs/reports/evaluation-report.html) (Chinese): the current assessment,
-  evidence, residual risks, the cloud platform comparison and the cost calculator.
+- [Evaluation report](../docs/reports/evaluation-report.html) (Chinese): the current assessment
+  with architecture diagrams, verification evidence, the cloud platform analysis with its cost
+  model and calculator, and the residual risks.
 - [Pricing evidence](../docs/reports/pricing-evidence.md) (Chinese): price sources, SKUs and
   formulas.
 - [Changelog](../docs/CHANGELOG.md): the history of changes.

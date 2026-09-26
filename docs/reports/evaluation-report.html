@@ -18,9 +18,10 @@
     --rule-strong: #b3bfc7;
     --accent: #0c6a61;
     --accent-soft: #dcede9;
-    --bar: #0c6a61;
-    --bar-prev: #b7c4cc;
-    --hatch: rgba(76, 92, 105, 0.28);
+    --s-oci: #2a78d6;
+    --s-tc: #eb6834;
+    --mark-ctx: #8d9ba6;
+    --mark-faint: #c3cdd4;
     --ok-bg: #e3f0d9; --ok-fg: #2b5c14;
     --warn-bg: #f9ecd2; --warn-fg: #7a4900;
     --risk-bg: #f8dfdb; --risk-fg: #8c2219;
@@ -34,7 +35,7 @@
       color-scheme: dark;
       --paper: #0d1418; --surface: #131c22; --sunken: #1a252c; --ink: #e1e8ed; --ink-2: #a2b1bc;
       --ink-3: #82939f; --rule: #26343d; --rule-strong: #3a4953; --accent: #5ac0b3; --accent-soft: #14302c;
-      --bar: #5ac0b3; --bar-prev: #3a4953; --hatch: rgba(162, 177, 188, 0.3);
+      --s-oci: #3987e5; --s-tc: #d95926; --mark-ctx: #6f808c; --mark-faint: #3d4c56;
       --ok-bg: #1c3811; --ok-fg: #b3da94; --warn-bg: #3b2906; --warn-fg: #f1c370;
       --risk-bg: #44150e; --risk-fg: #f3ada4; --info-bg: #0f2f4d; --info-fg: #accbef; --focus: #f0b24a;
     }
@@ -43,7 +44,7 @@
     color-scheme: dark;
     --paper: #0d1418; --surface: #131c22; --sunken: #1a252c; --ink: #e1e8ed; --ink-2: #a2b1bc;
     --ink-3: #82939f; --rule: #26343d; --rule-strong: #3a4953; --accent: #5ac0b3; --accent-soft: #14302c;
-    --bar: #5ac0b3; --bar-prev: #3a4953; --hatch: rgba(162, 177, 188, 0.3);
+    --s-oci: #3987e5; --s-tc: #d95926; --mark-ctx: #6f808c; --mark-faint: #3d4c56;
     --ok-bg: #1c3811; --ok-fg: #b3da94; --warn-bg: #3b2906; --warn-fg: #f1c370;
     --risk-bg: #44150e; --risk-fg: #f3ada4; --info-bg: #0f2f4d; --info-fg: #accbef; --focus: #f0b24a;
   }
@@ -57,7 +58,7 @@
   a { color: var(--accent); text-underline-offset: 3px; text-decoration-thickness: 1px; }
   a:hover { text-decoration-thickness: 2px; }
   :focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; border-radius: 2px; }
-  code, kbd, pre { font-family: var(--mono); }
+  code, pre { font-family: var(--mono); }
   code {
     font-size: 0.86em; background: var(--sunken); padding: 0.08em 0.36em;
     border-radius: 4px; overflow-wrap: anywhere;
@@ -82,13 +83,10 @@
     letter-spacing: -0.01em; text-wrap: balance;
   }
   .lede { margin: 0; max-width: 46em; font-size: 16.5px; color: var(--ink-2); }
-  .facts {
-    display: flex; flex-wrap: wrap; gap: 6px 22px; margin: 4px 0 0; padding: 0;
-    font-size: 13px; color: var(--ink-2);
-  }
+  .facts { display: flex; flex-wrap: wrap; gap: 6px 22px; margin: 4px 0 0; padding: 0; font-size: 13px; color: var(--ink-2); }
   .facts div { display: flex; gap: 6px; }
-  .facts dt { color: var(--ink-3); }
-  .facts dd { margin: 0; font-variant-numeric: tabular-nums; }
+  .facts dt { color: var(--ink-3); flex: none; }
+  .facts dd { margin: 0; }
 
   .kpis {
     display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); margin: 12px 0 0;
@@ -98,9 +96,9 @@
   .kpi:nth-child(odd) { padding-right: 16px; border-right: 1px solid var(--rule); }
   .kpi:nth-child(even) { padding-left: 16px; }
   .kpi:nth-last-child(-n+2) { border-bottom: 0; }
-  .kpi dt { font-family: var(--mono); font-size: 11.5px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink-3); }
+  .kpi dt { font-size: 12.5px; color: var(--ink-3); }
   .kpi dd { margin: 0; }
-  .kpi .v { font-size: 27px; font-weight: 600; line-height: 1.3; font-variant-numeric: tabular-nums; }
+  .kpi .v { font-size: 27px; font-weight: 600; line-height: 1.3; }
   .kpi .v small { font-size: 14px; font-weight: 500; color: var(--ink-2); margin-left: 2px; }
   .kpi .d { font-size: 12.5px; color: var(--ink-2); line-height: 1.5; }
   @media (min-width: 760px) {
@@ -113,30 +111,21 @@
 
   .toc { font-size: 14px; margin-bottom: 8px; }
   .toc p { margin: 0 0 6px; }
-  .toc ol {
-    list-style: none; margin: 0; padding: 0; display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 2px 16px;
-  }
+  .toc ol { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 2px 16px; }
   .toc a { display: block; padding: 3px 0; color: var(--ink-2); text-decoration: none; }
   .toc a:hover { color: var(--accent); }
   @media (min-width: 1080px) {
-    .page { grid-template-columns: 196px minmax(0, 1fr); padding-inline: 32px; }
-    .toc {
-      position: sticky; top: calc(env(safe-area-inset-top, 0px) + 24px); align-self: start;
-      max-height: calc(100vh - 48px); overflow-y: auto; padding-top: 6px;
-    }
+    .page { grid-template-columns: 200px minmax(0, 1fr); padding-inline: 32px; }
+    .toc { position: sticky; top: calc(env(safe-area-inset-top, 0px) + 24px); align-self: start; max-height: calc(100vh - 48px); overflow-y: auto; padding-top: 6px; }
     .toc ol { grid-template-columns: 1fr; }
     .toc a { border-left: 2px solid var(--rule); padding: 4px 0 4px 12px; }
     .toc a:hover { border-left-color: var(--accent); }
   }
 
   main { min-width: 0; }
-  section { padding-top: 12px; margin-bottom: 44px; scroll-margin-top: 16px; }
-  h2 {
-    margin: 0 0 16px; padding-bottom: 10px; border-bottom: 1px solid var(--rule-strong);
-    font-size: 23px; line-height: 1.35; font-weight: 700; text-wrap: balance;
-  }
-  h3 { margin: 28px 0 10px; font-size: 16.5px; line-height: 1.45; font-weight: 600; text-wrap: balance; }
+  section { padding-top: 12px; margin-bottom: 48px; scroll-margin-top: 16px; }
+  h2 { margin: 0 0 16px; padding-bottom: 10px; border-bottom: 1px solid var(--rule-strong); font-size: 23px; line-height: 1.35; font-weight: 700; text-wrap: balance; }
+  h3 { margin: 30px 0 10px; font-size: 16.5px; line-height: 1.45; font-weight: 600; text-wrap: balance; }
   p, li { max-width: 46em; }
   p { margin: 0 0 12px; }
   ul, ol { padding-left: 1.3em; margin: 0 0 12px; }
@@ -144,17 +133,14 @@
   li::marker { color: var(--ink-3); }
   .muted { color: var(--ink-2); }
   .small { font-size: 13px; }
-  .stack { display: grid; gap: 14px; }
 
-  .box {
-    background: var(--surface); border: 1px solid var(--rule); border-radius: 6px;
-    padding: 14px 16px; margin: 14px 0;
-  }
+  .box { background: var(--surface); border: 1px solid var(--rule); border-radius: 6px; padding: 14px 16px; margin: 14px 0; }
   .box > :last-child { margin-bottom: 0; }
-  .box-label {
-    display: block; margin-bottom: 4px; font-family: var(--mono); font-size: 11.5px;
-    letter-spacing: 0.1em; text-transform: uppercase; color: var(--ink-3);
-  }
+  .box-label { display: block; margin-bottom: 4px; font-size: 12.5px; font-weight: 600; color: var(--ink-3); }
+  .split { display: grid; grid-template-columns: minmax(0, 1fr); gap: 12px; margin: 14px 0; }
+  @media (min-width: 820px) { .split { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+  .split .box { margin: 0; }
+  .split ul { margin: 0; }
 
   .table-wrap { overflow-x: auto; margin: 12px 0 16px; border: 1px solid var(--rule); border-radius: 6px; background: var(--surface); }
   table { width: 100%; border-collapse: collapse; font-size: 14px; line-height: 1.6; }
@@ -167,48 +153,73 @@
   .nowrap { white-space: nowrap; }
   td.money, .money { font-family: var(--mono); font-size: 13px; white-space: nowrap; font-variant-numeric: tabular-nums; }
 
-  .tag {
-    display: inline-block; font-size: 12px; font-weight: 600; line-height: 1.6;
-    padding: 0 8px; border-radius: 3px; white-space: nowrap;
-  }
+  .tag { display: inline-block; font-size: 12px; font-weight: 600; line-height: 1.6; padding: 0 8px; border-radius: 3px; white-space: nowrap; }
   .tag.ok { background: var(--ok-bg); color: var(--ok-fg); }
   .tag.warn { background: var(--warn-bg); color: var(--warn-fg); }
   .tag.risk { background: var(--risk-bg); color: var(--risk-fg); }
   .tag.info { background: var(--info-bg); color: var(--info-fg); }
 
-  .score { display: grid; grid-template-columns: minmax(80px, 1fr) auto; align-items: center; gap: 10px; min-width: 190px; }
-  .score .track { position: relative; height: 10px; background: var(--sunken); border-radius: 2px; }
-  .score .track span { position: absolute; left: 0; border-radius: 2px; }
-  .score .prev { top: 0; height: 10px; background: var(--bar-prev); }
-  .score .now { top: 3px; height: 4px; background: var(--bar); }
-  .score b { font-family: var(--mono); font-size: 12.5px; font-weight: 500; white-space: nowrap; }
-  .legend { display: flex; flex-wrap: wrap; gap: 6px 18px; font-size: 12.5px; color: var(--ink-2); margin: 6px 0 0; }
-  .legend span::before {
-    content: ""; display: inline-block; width: 16px; height: 8px; margin-right: 6px;
-    vertical-align: 1px; border-radius: 2px; background: var(--swatch);
-  }
+  .legend { display: flex; flex-wrap: wrap; gap: 6px 18px; font-size: 12.5px; color: var(--ink-2); margin: 8px 0 0; }
+  .legend span::before { content: ""; display: inline-block; width: 14px; height: 10px; margin-right: 6px; vertical-align: 0; border-radius: 2px; background: var(--swatch); }
+  .legend .line::before { height: 2px; vertical-align: 4px; border-radius: 1px; }
+  .legend .dot::before { width: 10px; height: 10px; border-radius: 50%; vertical-align: 0; }
 
-  .choices { display: grid; grid-template-columns: minmax(0, 1fr); gap: 12px; margin: 16px 0; }
-  @media (min-width: 820px) { .choices { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
-  .choice {
-    background: var(--surface); border: 1px solid var(--rule); border-radius: 6px;
-    padding: 16px; display: grid; gap: 6px; align-content: start;
-  }
-  .choice.primary { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
-  .choice .when { margin: 0; font-family: var(--mono); font-size: 12px; letter-spacing: 0.06em; color: var(--ink-3); }
-  .choice .price { margin: 0; font-size: 28px; font-weight: 600; line-height: 1.25; font-variant-numeric: tabular-nums; }
-  .choice .price small { font-size: 14px; font-weight: 500; color: var(--ink-2); }
-  .choice h3 { margin: 0; font-size: 16px; }
-  .choice p { margin: 0; font-size: 14px; color: var(--ink-2); }
+  /* Diagrams */
+  .fig { margin: 18px 0 22px; }
+  .fig .canvas { overflow-x: auto; background: var(--surface); border: 1px solid var(--rule); border-radius: 6px; padding: 12px; }
+  .fig svg { display: block; width: 100%; height: auto; min-width: 660px; font-family: var(--sans); color: var(--ink); }
+  .fig figcaption { margin-top: 8px; font-size: 13px; color: var(--ink-2); max-width: 52em; }
+  .dg .n { fill: var(--surface); stroke: currentColor; stroke-opacity: .45; stroke-width: 1.2; }
+  .dg .n-core { stroke: var(--accent); stroke-opacity: 1; stroke-width: 2; }
+  .dg .n-soft { fill: var(--sunken); stroke: currentColor; stroke-opacity: .25; stroke-width: 1; }
+  .dg .grp { fill: none; stroke: currentColor; stroke-opacity: .3; stroke-width: 1; stroke-dasharray: 5 4; }
+  .dg .t { font-size: 13px; font-weight: 600; fill: currentColor; }
+  .dg .s { font-size: 11.5px; fill: var(--ink-2); }
+  .dg .m { font-family: var(--mono); font-size: 11px; fill: var(--ink-2); }
+  .dg .h { font-size: 11.5px; font-weight: 600; fill: var(--ink-3); }
+  .dg .e { stroke: currentColor; stroke-opacity: .55; stroke-width: 1.3; fill: none; }
+  .dg .el { font-size: 11px; fill: var(--ink-2); }
+  .dg .ah { fill: currentColor; fill-opacity: .7; }
+  .dg .ban { stroke: var(--risk-fg); stroke-width: 1.5; stroke-dasharray: 5 4; fill: none; }
+  .dg .ban-t { font-size: 11px; font-weight: 600; fill: var(--risk-fg); }
+  .dg .ah-ban { fill: var(--risk-fg); }
 
-  .calc { background: var(--surface); border: 1px solid var(--rule); border-radius: 6px; padding: 18px 16px 16px; margin: 16px 0; }
+  /* Break-even line chart */
+  .chart-wrap { position: relative; }
+  .lc .grid { stroke: var(--rule); stroke-width: 1; }
+  .lc .tick { font-family: var(--mono); font-size: 11px; fill: var(--ink-3); }
+  .lc .axis-title { font-size: 11px; fill: var(--ink-3); }
+  .lc .ref { stroke: var(--rule-strong); stroke-width: 1; }
+  .lc .ref-t { font-size: 11px; fill: var(--ink-3); }
+  .lc .ln { fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+  .lc .ln-oci { stroke: var(--s-oci); }
+  .lc .ln-tc { stroke: var(--s-tc); }
+  .lc .ln-ctx { stroke: var(--mark-ctx); }
+  .lc .ln-faint { stroke: var(--mark-faint); }
+  .lc .dot { stroke: var(--surface); stroke-width: 2; }
+  .lc .dot-oci { fill: var(--s-oci); }
+  .lc .dot-be { fill: var(--ink); }
+  .lc .lab { font-size: 11.5px; font-weight: 600; fill: var(--ink); }
+  .lc .lab-2 { font-size: 11px; fill: var(--ink-2); }
+  .lc .xh { stroke: var(--ink-3); stroke-width: 1; }
+  .lc .hit { fill: transparent; cursor: crosshair; }
+  .tip {
+    position: absolute; z-index: 5; pointer-events: none; min-width: 200px; max-width: 280px;
+    background: var(--surface); color: var(--ink); border: 1px solid var(--rule-strong); border-radius: 6px;
+    box-shadow: 0 6px 18px rgba(10, 20, 30, 0.14); padding: 8px 10px; font-size: 12.5px; line-height: 1.55;
+  }
+  .tip-h { font-weight: 600; margin-bottom: 4px; }
+  .tip-r { display: grid; grid-template-columns: 14px minmax(0, 1fr) auto; gap: 8px; align-items: center; color: var(--ink-2); }
+  .tip-r .key { width: 12px; height: 2px; border-radius: 1px; background: var(--k); }
+  .tip-r .v { font-family: var(--mono); font-weight: 600; color: var(--ink); text-align: right; }
+  .tip-note { margin-top: 4px; color: var(--ink-3); font-size: 12px; }
+
+  /* Calculator */
+  .calc { position: relative; background: var(--surface); border: 1px solid var(--rule); border-radius: 6px; padding: 18px 16px 16px; margin: 16px 0; }
   .controls { display: flex; flex-wrap: wrap; gap: 14px 22px; align-items: flex-end; margin-bottom: 14px; }
   .field { display: grid; gap: 4px; }
   .field label, .seg legend { font-size: 13px; font-weight: 600; color: var(--ink-2); }
-  input[type="number"] {
-    width: 9.5em; font: 15px/1.4 var(--mono); color: var(--ink); background: var(--paper);
-    border: 1px solid var(--rule-strong); border-radius: 4px; padding: 7px 10px;
-  }
+  input[type="number"] { width: 9.5em; font: 15px/1.4 var(--mono); color: var(--ink); background: var(--paper); border: 1px solid var(--rule-strong); border-radius: 4px; padding: 7px 10px; }
   .seg { border: 0; margin: 0; padding: 0; display: grid; gap: 4px; }
   .seg legend { padding: 0; margin-bottom: 4px; }
   .seg-options { display: flex; border: 1px solid var(--rule-strong); border-radius: 4px; overflow: hidden; }
@@ -219,36 +230,26 @@
   .seg-options input:checked + span { background: var(--accent); color: var(--surface); font-weight: 600; }
   .seg-options input:focus-visible + span { outline: 3px solid var(--focus); outline-offset: -3px; }
   .presets { display: flex; gap: 8px; flex-wrap: wrap; }
-  button {
-    font: 14px/1.4 var(--sans); color: var(--ink); background: var(--paper); cursor: pointer;
-    border: 1px solid var(--rule-strong); border-radius: 4px; padding: 7px 12px;
-  }
+  button { font: 14px/1.4 var(--sans); color: var(--ink); background: var(--paper); cursor: pointer; border: 1px solid var(--rule-strong); border-radius: 4px; padding: 7px 12px; }
   button:hover { border-color: var(--accent); color: var(--accent); }
   .calc-error { min-height: 1.5em; margin: 0 0 6px; color: var(--risk-fg); font-size: 14px; }
   .calc-summary { margin: 0 0 12px; font-size: 14.5px; }
-
-  .plot { --label-w: minmax(0, 15em); --value-w: 6.8em; }
+  .plot { --label-w: minmax(0, 15em); --value-w: 8.5em; }
   .bars { list-style: none; margin: 0; padding: 0; }
-  .bar-row {
-    display: grid; grid-template-columns: var(--label-w) minmax(0, 1fr) var(--value-w);
-    align-items: center; gap: 12px; padding: 5px 0; max-width: none; margin: 0;
-  }
+  .bar-row { display: grid; grid-template-columns: var(--label-w) minmax(0, 1fr) var(--value-w); align-items: center; gap: 12px; padding: 5px 4px; max-width: none; margin: 0; border-radius: 4px; }
+  .bar-row:hover, .bar-row:focus-visible { background: var(--sunken); }
   .bar-label { font-size: 13.5px; line-height: 1.35; }
   .bar-label small { display: block; font-size: 12px; color: var(--ink-3); }
-  .bar-track {
-    position: relative; height: 22px; border-right: 1px solid var(--rule);
-    background-image: linear-gradient(to right, var(--rule) 0 1px, transparent 1px);
-    background-size: calc(100% / var(--intervals, 4)) 100%;
-  }
-  .bar { position: absolute; left: 0; top: 4px; height: 14px; background: var(--bar-prev); border-radius: 0 2px 2px 0; }
-  .is-best .bar { background: var(--bar); }
-  .is-partial .bar {
-    background: repeating-linear-gradient(135deg, var(--hatch) 0 3px, transparent 3px 7px);
-    box-shadow: inset 0 0 0 1px var(--ink-3);
-  }
+  .bar-track { position: relative; height: 22px; border-right: 1px solid var(--rule); background-image: linear-gradient(to right, var(--rule) 0 1px, transparent 1px); background-size: calc(100% / var(--intervals, 4)) 100%; }
+  .bar { position: absolute; left: 0; top: 4px; height: 14px; background: var(--mark-ctx); border-radius: 0 4px 4px 0; }
+  .is-oci .bar { background: var(--s-oci); }
+  .is-tc .bar { background: var(--s-tc); }
+  .is-partial .bar { background: var(--mark-faint); }
   .bar-value { font-family: var(--mono); font-size: 13px; text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
-  .is-best .bar-value, .is-best .bar-label { font-weight: 600; }
+  .best-tag { display: inline-block; margin-right: 6px; font-family: var(--sans); font-size: 11.5px; font-weight: 600; color: var(--ok-fg); background: var(--ok-bg); padding: 0 6px; border-radius: 3px; }
+  .is-best .bar-label { font-weight: 600; }
   .axis-row { padding-top: 0; }
+  .axis-row:hover { background: none; }
   .bar-axis { position: relative; height: 18px; font-family: var(--mono); font-size: 11.5px; color: var(--ink-3); }
   .bar-axis span { position: absolute; top: 0; transform: translateX(-50%); white-space: nowrap; }
   .bar-axis span:first-child { transform: none; }
@@ -261,14 +262,32 @@
     .axis-row > span:not(.bar-axis) { display: none; }
   }
 
-  .reactor { font-size: 12.5px; }
+  /* Recommendation cards */
+  .choices { display: grid; grid-template-columns: minmax(0, 1fr); gap: 12px; margin: 16px 0; }
+  @media (min-width: 820px) { .choices { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+  .choice { background: var(--surface); border: 1px solid var(--rule); border-radius: 6px; padding: 16px; display: grid; gap: 6px; align-content: start; }
+  .choice .when { margin: 0; font-size: 12.5px; font-weight: 600; color: var(--ink-3); }
+  .choice .price { margin: 0; font-size: 28px; font-weight: 600; line-height: 1.25; }
+  .choice .price small { font-size: 14px; font-weight: 500; color: var(--ink-2); }
+  .choice h4 { margin: 0; font-size: 16px; display: flex; align-items: center; gap: 8px; }
+  .choice h4::before { content: ""; width: 10px; height: 10px; border-radius: 50%; background: var(--swatch, var(--mark-ctx)); flex: none; }
+  .choice p { margin: 0; font-size: 14px; color: var(--ink-2); }
+
+  /* Score dumbbells */
+  .db-axis { position: relative; height: 16px; font-family: var(--mono); font-size: 11px; color: var(--ink-3); min-width: 170px; }
+  .db-axis span { position: absolute; top: 0; transform: translateX(-50%); }
+  .db { position: relative; height: 20px; min-width: 170px; border-right: 1px solid var(--rule); background-image: linear-gradient(to right, var(--rule) 0 1px, transparent 1px); background-size: 25% 100%; }
+  .db .seg { position: absolute; top: 9px; height: 2px; background: var(--rule-strong); }
+  .db .pt { position: absolute; top: 10px; width: 10px; height: 10px; margin: -5px 0 0 -5px; border-radius: 50%; box-shadow: 0 0 0 2px var(--surface); }
+  .db .prev { background: var(--mark-ctx); }
+  .db .now { background: var(--accent); }
+  .db-val { font-family: var(--mono); font-size: 12.5px; white-space: nowrap; }
+
   .tree { font-size: 13px; }
+  .reactor { font-size: 12.5px; }
   ol.timeline { list-style: none; padding: 0; margin: 12px 0; border-left: 1px solid var(--rule-strong); }
   ol.timeline li { position: relative; padding: 0 0 12px 18px; margin: 0; }
-  ol.timeline li::before {
-    content: ""; position: absolute; left: -4px; top: 0.62em; width: 7px; height: 7px;
-    border-radius: 50%; background: var(--accent);
-  }
+  ol.timeline li::before { content: ""; position: absolute; left: -4px; top: 0.62em; width: 7px; height: 7px; border-radius: 50%; background: var(--accent); }
   ol.timeline time { font-family: var(--mono); font-size: 12.5px; color: var(--ink-3); margin-right: 8px; }
   .docs-index { display: grid; grid-template-columns: minmax(0, 1fr); gap: 0 32px; padding: 0; list-style: none; }
   .docs-index li { padding: 8px 0; border-bottom: 1px solid var(--rule); margin: 0; }
@@ -276,187 +295,262 @@
   @media (min-width: 760px) { .docs-index { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
   footer { margin-top: 8px; padding-top: 16px; border-top: 1px solid var(--rule-strong); font-size: 13px; color: var(--ink-2); }
   footer p { max-width: none; }
-
   @media (prefers-reduced-motion: no-preference) { html { scroll-behavior: smooth; } }
 </style>
 
 <div class="page" lang="zh-CN">
 
 <header class="masthead">
-  <p class="eyebrow">datacraft-lab · Evaluation report v3.1</p>
+  <p class="eyebrow">datacraft-lab · Evaluation report v4.0</p>
   <h1>datacraft-lab 综合评估报告</h1>
-  <p class="lede">个人 JVM 数据处理平台的当前状态：架构与模块职责、本轮整理结果、质量证据、安全边界，以及东京与新加坡两地的云平台抉择和月费用计算。</p>
+  <p class="lede">个人 JVM 数据处理平台的综合评估：技术架构与模块职责、质量与验证证据、安全边界、东京与新加坡两地的云平台抉择与成本模型，以及残余风险。</p>
   <dl class="facts">
     <div><dt>日期</dt><dd>2026-09-26</dd></div>
     <div><dt>分支</dt><dd><code>main</code></dd></div>
     <div><dt>作者</dt><dd>Luyang Li</dd></div>
     <div><dt>技术栈</dt><dd>Java 25 · Scala 2.13.18 · Spark 4.2.0 · Airflow 3.3.2 · Docker Compose / Swarm</dd></div>
-    <div><dt>价格核验</dt><dd>2026-09-19</dd></div>
+    <div><dt>价格快照</dt><dd>2026-09-19</dd></div>
   </dl>
   <dl class="kpis">
     <div class="kpi"><dt>Maven 模块</dt><dd class="v">8</dd><dd class="d">4 个职责分组，依赖范围由构建强制</dd></div>
     <div class="kpi"><dt>可调度作业</dt><dd class="v">7</dd><dd class="d">纯 JVM 2 · Spark 3 · 内置 2</dd></div>
-    <div class="kpi"><dt>JVM 测试用例</dt><dd class="v">262</dd><dd class="d">Linux 执行 256 · Windows 执行 248</dd></div>
-    <div class="kpi"><dt>跳过 / 取消</dt><dd class="v">0</dd><dd class="d">平台相关测试按标签排除，不再跳过</dd></div>
-    <div class="kpi"><dt>构建与检查告警</dt><dd class="v">0</dd><dd class="d">JDK 25.0.4.1 全量构建 0 警告；pyright、ShellCheck 0 问题</dd></div>
-    <div class="kpi"><dt>Python / Node 测试</dt><dd class="v">99</dd><dd class="d">部署 45 · CI/CD 19 · 文档 13 · DAG 16 · 计算器 6</dd></div>
+    <div class="kpi"><dt>JVM 测试用例</dt><dd class="v">262</dd><dd class="d">Linux 执行 256 · Windows 执行 248 · 0 跳过</dd></div>
+    <div class="kpi"><dt>Python 与 Node 测试</dt><dd class="v">99</dd><dd class="d">部署 45 · CI/CD 19 · 文档 13 · DAG 16 · 计算器 6</dd></div>
+    <div class="kpi"><dt>构建与检查警告</dt><dd class="v">0</dd><dd class="d">JDK 25.0.4.1 全量构建；pyright、ShellCheck 0 问题</dd></div>
     <div class="kpi"><dt>综合评分</dt><dd class="v">4.3<small>/ 5</small></dd><dd class="d">2026-09-25 审计前为 3.2</dd></div>
     <div class="kpi"><dt>常开月费</dt><dd class="v">$10.15</dd><dd class="d">腾讯云 Lighthouse 2 核 / 8 GB / 80 GB</dd></div>
+    <div class="kpi"><dt>按需月费（60 小时）</dt><dd class="v">$4.79</dd><dd class="d">Oracle OCI A1 2 OCPU / 8 GB</dd></div>
   </dl>
 </header>
 
 <nav class="toc" aria-label="目录">
   <p class="eyebrow">目录</p>
   <ol>
-    <li><a href="#summary">一、结论摘要</a></li>
-    <li><a href="#round">二、本轮整理</a></li>
-    <li><a href="#architecture">三、架构与模块职责</a></li>
-    <li><a href="#requirements">四、需求符合度</a></li>
-    <li><a href="#scores">五、分维度评分</a></li>
-    <li><a href="#evidence">六、质量门禁与证据</a></li>
-    <li><a href="#security">七、安全评估</a></li>
-    <li><a href="#cloud">八、云平台抉择</a></li>
-    <li><a href="#risks">九、残余风险与路线图</a></li>
-    <li><a href="#audit">十、附录：09-25 审计</a></li>
-    <li><a href="#history">十一、演进历程</a></li>
-    <li><a href="#index">十二、文档索引</a></li>
+    <li><a href="#summary">一、执行摘要</a></li>
+    <li><a href="#scope">二、评估范围与方法</a></li>
+    <li><a href="#architecture">三、技术架构</a></li>
+    <li><a href="#quality">四、质量与验证</a></li>
+    <li><a href="#security">五、安全评估</a></li>
+    <li><a href="#cloud">六、云平台抉择分析</a></li>
+    <li><a href="#scores">七、分维度评分</a></li>
+    <li><a href="#risks">八、残余风险与路线图</a></li>
+    <li><a href="#appendix-round">附录 A 本轮整理明细</a></li>
+    <li><a href="#appendix-audit">附录 B 09-25 审计</a></li>
+    <li><a href="#appendix-history">附录 C 演进历程</a></li>
+    <li><a href="#appendix-index">附录 D 文档索引</a></li>
   </ol>
 </nav>
 
 <main>
 
 <section id="summary" aria-labelledby="h-summary">
-  <h2 id="h-summary">一、结论摘要</h2>
-  <p><strong>总体判断：</strong>项目已达到“个人单机数据处理平台可以放心使用和部署”的水平。CLI、HTTP API 与 Airflow 共用同一个 <code>DataJob</code> 契约和执行引擎；8 个 Maven 模块按职责分成 core、io、processing、interfaces 四组，每个模块可以依赖哪些项目模块由构建强制检查；CI/CD 流水线逻辑集中在 <code>cicd/</code>，覆盖构建、真实 Spark、真实 Airflow 流水线、镜像与 Compose 栈，并且可以脱离 GitHub Actions 在本机运行。</p>
-  <p><strong>本轮（2026-09-26）完成的工作：</strong></p>
-  <ul>
-    <li><strong>工程目录按职责重组。</strong>源码模块移入 <code>modules/</code> 的四个分组，全部测试移入 <code>tests/</code>，CI/CD 逻辑集中到 <code>cicd/</code>，文档集中到 <code>docs/</code>，架构设计集中到 <code>design/</code>。artifactId 与包名不变，文件移动保留 git 历史。</li>
-    <li><strong>CI/CD 逻辑独立。</strong>GitHub 只从 <code>.github/workflows</code> 读取工作流，所以 <code>ci.yml</code> 留在原处，但只负责触发条件、运行环境和作业编排；原来写在 YAML 里的检查全部改为 <code>cicd/</code> 下按作业分组的脚本（build、airflow、lint、stacks），并有测试保证工作流不再出现多行内联逻辑。</li>
-    <li><strong>告警清零并设门禁。</strong>javac <code>-Xlint:all</code> 加 <code>failOnWarning</code>、scalac <code>-Werror</code>、pyright 0 诊断（已加入 CI）；shade 不再报告资源重叠；测试日志默认静默；平台相关测试改为按标签排除，Windows 与 Linux 都不再出现跳过或取消。ShellCheck 门禁从 error 收紧到 warning 级别。本机 JDK 升级到 25.0.4.1 后，完整构建的输出从 6,715 行降到 623 行，<code>[WARNING]</code> 与 JVM 警告从 32 条降到 0 条。</li>
-    <li><strong>依赖与代码同步到最新。</strong>逐项对照 Maven Central、PyPI、npm、Docker Hub 与 GitHub：升级 6 个构建与测试组件，pyright 固定到最新的 1.1.414，CI 升到 Node 24 与 Python 3.13；JDK 下限改为强制要求 25.0.4.1（本机、CI 与构建镜像均已是该版本），其余均已是最新稳定版。Jackson 3 因 Spark 4.2 固定使用 Jackson 2 而不迁移。</li>
-    <li><strong>云平台抉择定稿。</strong>常开选腾讯云 Lighthouse 入门型（$10.15/月）；每月约 60 小时选 Oracle OCI A1（$4.79/月）；必须使用 AWS 时选 Lightsail 8 GB（$44.15/月）。托管 Airflow 与 Cloudflare 运行时不采用，R2 只存备份。</li>
-  </ul>
-  <p><strong>仍需注意（详见第九节）：</strong>API 没有认证，只能留在回环地址或放在认证网关之后；Swarm 多机配置只做过静态与桩测试；Spark 4.2.0 自带依赖有当前不可达的安全公告；GitHub Actions 额度不足，本轮推送不会触发 CI，Docker 镜像、Compose 栈与 Stack 文件校验本轮没有在 Linux 上重新运行（见第六节）。</p>
+  <h2 id="h-summary">一、执行摘要</h2>
+  <p><strong>总体结论：</strong>datacraft-lab 已达到“个人单机数据处理平台可以放心使用和部署”的水平。CLI、HTTP API 与 Airflow 共用同一个 <code>DataJob</code> 契约和执行引擎，失败语义统一；8 个 Maven 模块按职责分为 core、io、processing、interfaces 四组，越界依赖在构建的 <code>validate</code> 阶段即失败；质量门禁不允许任何编译、类型检查或 Shell 检查警告，CI/CD 逻辑集中在 <code>cicd/</code>，可以脱离 GitHub Actions 在本机复现。</p>
+  <div class="split">
+    <div class="box">
+      <span class="box-label">主要优势</span>
+      <ul>
+        <li>一个契约、一个引擎、三种入口，新作业注册一次即可在 CLI、API 与 Airflow 中使用（第三章）。</li>
+        <li>模块边界、JDK 版本下限与零警告由构建强制，而不是靠约定（3.2、4.3）。</li>
+        <li>262 项 JVM 测试与 99 项脚本、文档、DAG 测试，平台差异用标签表达，两个平台都没有跳过的测试（4.2）。</li>
+      </ul>
+    </div>
+    <div class="box">
+      <span class="box-label">主要风险</span>
+      <ul>
+        <li>HTTP API 没有认证，只能绑定回环地址或放在认证网关之后（第五章）。</li>
+        <li>Swarm 多机配置只做过静态与桩测试，不能当作高可用方案（第八章）。</li>
+        <li>GitHub Actions 额度不足，本轮改动没有在 Linux CI 上运行；需要 Docker 的镜像与 Compose 冒烟测试本轮未复验（4.5）。</li>
+      </ul>
+    </div>
+  </div>
+  <p><strong>云平台结论（第六章）：</strong>每月运行不足 227.5 小时时选 Oracle OCI A1 按需（60 小时约 $4.79/月）；常开或超过 227.5 小时选腾讯云 Lighthouse 入门型（$10.15/月）；必须使用 AWS 时选 Lightsail 8 GB（$44.15/月）。托管 Airflow 与 Cloudflare 运行时不采用，R2 只用于备份。所有价格为 2026-09-19 的公开价快照，尚未购买任何云资源。</p>
+  <p><strong>本轮（2026-09-26）完成：</strong>工程目录按职责整理为 <code>modules/</code>、<code>tests/</code>、<code>cicd/</code>、<code>docs/</code>、<code>design/</code>；构建警告清零；JDK 25.0.4.1 成为强制下限；依赖逐项核对并同步到最新稳定版；本报告按“架构、质量、安全、云平台、风险”重新组织。逐项明细见附录 A。</p>
 </section>
 
-<section id="round" aria-labelledby="h-round">
-  <h2 id="h-round">二、本轮整理（2026-09-26）</h2>
-
-  <h3>2.1 工程目录</h3>
-  <p>顶层目录只按职责划分：源码、编排、部署、设计、文档、测试各有唯一位置。</p>
-<pre class="tree"><code>datacraft-lab/
-├── pom.xml  mvnw  mvnw.cmd  .mvn/  Makefile    构建入口（Wrapper 固定 Maven 3.9.16）
-├── pyrightconfig.json  config/checkstyle/       Python 类型检查、Checkstyle 规则
-├── .github/workflows/ci.yml                     CI 工作流：只负责触发、运行环境与作业编排
-├── cicd/                                        CI/CD 逻辑：build · airflow · lint · stacks
-├── modules/                                     JVM 源码模块，按职责分组
-│   ├── core/         datacraft-common · datacraft-config · datacraft-engine
-│   ├── io/           datacraft-io
-│   ├── processing/   datacraft-jobs（纯 JVM）· datacraft-spark（Spark）
-│   └── interfaces/   datacraft-api（HTTP）· datacraft-cli（进程入口）
-├── orchestration/airflow/                       DAG 与依赖清单
-├── deploy/                                      docker/ · compose/ · swarm/ · scripts/
-├── design/                                      架构与设计（英文）
-├── docs/                                        全部文档（README、CHANGELOG、guides/、reports/）
-└── tests/                                       全部测试
-    ├── jvm/&lt;artifactId&gt;/{java,scala}             各模块的 JVM 测试，由该模块的构建运行
-    ├── jvm/resources/                           共享测试资源（日志配置）
-    ├── orchestration/  smoke/                   Airflow DAG 契约测试、运行时与容器冒烟
-    └── deploy/  ci/  docs/                      部署脚本、CI/CD 脚本、文档与计算器测试</code></pre>
-
+<section id="scope" aria-labelledby="h-scope">
+  <h2 id="h-scope">二、评估范围与方法</h2>
+  <p>评估对象是 <code>main</code> 分支本轮提交时的完整仓库：JVM 源码与构建配置、Airflow DAG、部署定义、CI/CD 脚本、测试与文档。结论只来自可以复核的证据，每一项证据的来源与本轮状态如下。</p>
   <div class="table-wrap">
   <table>
-    <caption>模块按 artifactId 选择，例如 <code>./mvnw -pl :datacraft-cli -am package</code>；打包后的 CLI 位于 <code>modules/interfaces/datacraft-cli/target/datacraft-cli.jar</code>。逐个文件的原路径与新路径记录在 <a href="../CHANGELOG.md">CHANGELOG</a> 中。</caption>
-    <thead><tr><th>内容</th><th>原位置</th><th>现位置</th></tr></thead>
+    <thead><tr><th>证据</th><th>来源</th><th>本轮状态</th></tr></thead>
     <tbody>
-      <tr><td>JVM 模块</td><td>仓库根目录 <code>datacraft-*</code></td><td><code>modules/core/</code>、<code>modules/io/</code>、<code>modules/processing/</code>、<code>modules/interfaces/</code></td></tr>
-      <tr><td>JVM 测试</td><td>各模块 <code>src/test/{java,scala}</code></td><td><code>tests/jvm/&lt;artifactId&gt;/{java,scala}</code>；根 POM 的 <code>testSourceDirectory</code> 指向这里</td></tr>
-      <tr><td>Airflow 测试</td><td>编排目录下的测试子目录</td><td><code>tests/orchestration/</code>、<code>tests/smoke/airflow_runtime_smoke.py</code></td></tr>
-      <tr><td>部署与 CI 测试</td><td>部署目录下的测试子目录</td><td><code>tests/deploy/</code>、<code>tests/ci/</code>、<code>tests/docs/</code>、<code>tests/smoke/</code></td></tr>
-      <tr><td>CI/CD 逻辑</td><td>工作流里的内联脚本、GitHub 工作流旁的脚本目录</td><td><code>cicd/</code>：<code>build/</code>、<code>airflow/</code>、<code>lint/</code>、<code>stacks/</code>，共用 <code>cicd/lib.sh</code></td></tr>
-      <tr><td>项目文档</td><td>根目录 README 与 CHANGELOG、原部署文档目录、编排目录下的 Airflow README</td><td><code>docs/README.md</code>、<code>docs/CHANGELOG.md</code>、<code>docs/guides/</code>、<code>docs/reports/</code></td></tr>
-      <tr><td>架构设计</td><td>原 docs 目录下的架构说明、数据处理契约与工程开发文档</td><td><code>design/</code>：architecture、data-contracts、build-and-quality、decisions</td></tr>
-      <tr><td>评估与云成本</td><td>根目录的项目评估页面与云部署费用页面</td><td>本报告（两份合并为一份）</td></tr>
+      <tr><td>代码、配置与文档</td><td>仓库 <code>main</code> 分支</td><td><span class="tag ok">已审阅</span> 关键路径逐项核对，文档与代码一致性由 <code>tests/docs</code> 检查</td></tr>
+      <tr><td>本机构建与测试</td><td>Windows 11 · JDK 25.0.4.1；WSL Ubuntu · Python 3.12</td><td><span class="tag ok">本轮重跑</span> Maven 全量构建、pyright、ShellCheck、全部脚本与文档测试</td></tr>
+      <tr><td>Airflow 运行环境</td><td>WSL 虚拟环境 · Airflow 3.3.2 与官方 constraints</td><td><span class="tag ok">本轮重跑</span> 安装脚本、安全下限检查与 16 项 DAG 契约测试</td></tr>
+      <tr><td>Linux CI</td><td>GitHub Actions · ubuntu-24.04</td><td><span class="tag warn">未运行</span> 额度不足；最近一次全部通过的是 2026-09-25 的提交 <code>4111189</code></td></tr>
+      <tr><td>依赖版本</td><td>Maven Central、PyPI、npm、Docker Hub、GitHub 发布页</td><td><span class="tag ok">2026-09-26 核对</span></td></tr>
+      <tr><td>云平台价格</td><td>各厂商官方价格页、价格 API 与计费文档</td><td><span class="tag info">快照</span> 2026-09-19 核验，本轮未重新核价（<a href="pricing-evidence.md">价格依据</a>）</td></tr>
     </tbody>
   </table>
   </div>
-
-  <h3>2.2 清理掉的过时内容</h3>
-  <ul>
-    <li>根目录的云部署费用页面：内容并入本报告第八节。</li>
-    <li>原工程报告目录：工程开发文档与 Maven 构建说明中仍然成立的内容移入 <code>design/</code>；2026-09-19 与 2026-09-25 两份复盘记录已被本报告、CHANGELOG 与 git 历史取代。</li>
-    <li>构建中不再使用的配置：maven-failsafe-plugin（项目没有 <code>*IT</code> 测试）、<code>release-artifacts</code> 与 <code>dependency-audit</code> 两个 profile、source 与 javadoc 插件版本。</li>
-    <li>过时的 JVM 参数：<code>-Djdk.reflect.useDirectMethodHandle=false</code>，以及指向 JDK 25 中已不存在的 <code>sun.security.action</code> 包的 <code>--add-opens</code>。</li>
-    <li><code>.gitignore</code> 中的 IDE 模板残留规则（例如 <code>!.mvn/</code>、针对 <code>src/test</code> 的反向规则）。</li>
-  </ul>
-
-  <h3>2.3 告警清理</h3>
-  <div class="table-wrap">
-  <table>
-    <thead><tr><th>来源</th><th>本轮前的现象</th><th>处理方式</th></tr></thead>
-    <tbody>
-      <tr><td>javac</td><td>未启用全部 lint，序列化与弃用告警不可见</td><td><code>-Xlint:all</code> 加 <code>failOnWarning</code>。修复发现的问题：<code>DataCraftException</code> 增加 <code>@Serial serialVersionUID</code>；<code>SftpClient</code> 改用 <code>setPassword(byte[])</code>，用完即清零副本</td></tr>
-      <tr><td>scalac</td><td>模式匹配不完备的告警不会使构建失败</td><td>增加 <code>-Werror</code>；<code>CliParser</code> 按第一个 <code>=</code> 的位置拆分 <code>--param</code></td></tr>
-      <tr><td>maven-shade</td><td>MANIFEST、NOTICE、LICENSE 等资源重叠告警；NOTICE 只保留第一份</td><td>过滤输入清单，由 ManifestResourceTransformer 写入 Main-Class、Multi-Release 与版本信息；合并 NOTICE；保留一份相同的 Apache-2.0 LICENSE</td></tr>
-      <tr><td>Maven 进程 JVM</td><td>Spotless 与 zinc 触发 <code>sun.misc.Unsafe</code> 与本地访问告警</td><td><code>.mvn/jvm.config</code> 显式允许</td></tr>
-      <tr><td>Spark 测试 JVM</td><td>同类告警，外加已删除包的 <code>--add-opens</code></td><td>与 Spark 4.2 启动器的 JavaModuleOptions 对齐</td></tr>
-      <tr><td>测试日志</td><td>JUL 与 Log4j 2 在测试中输出大量日志</td><td>默认静默；排查时用 <code>-Ddatacraft.test.log.level=info</code> 打开</td></tr>
-      <tr><td>SLF4J</td><td>嵌入式 SFTP 服务器提示找不到日志实现</td><td>测试依赖 slf4j-nop 2.0.20</td></tr>
-      <tr><td>SFTP 测试服务器</td><td>Windows 上 NIO2/IOCP 的停机竞态打印未捕获异常</td><td>改用基于 selector 的 MINA 传输（sshd-mina，仅测试）</td></tr>
-      <tr><td>测试跳过与取消</td><td>Windows 跳过 7 项、取消 7 项；Linux 跳过 6 项</td><td>JUnit <code>@Tag</code> 与 ScalaTest <code>Tag</code> 标注 <code>posix-only</code> 或 <code>windows-only</code>，按操作系统自动激活的 profile 排除另一平台的测试</td></tr>
-      <tr><td>Python</td><td>可选值未判空、覆盖方法签名不一致、DAG 依赖写成裸表达式</td><td><code>pyrightconfig.json</code>；修复类型问题；DAG 用 <code>airflow.sdk.chain()</code> 声明依赖；CI 增加 pyright 1.1.414 门禁（warning 也失败）</td></tr>
-      <tr><td>Shell 脚本</td><td>ShellCheck 门禁只拦 error 级别；工作流里的内联脚本不在检查范围内</td><td>逻辑移入 <code>cicd/</code> 后全部 20 个脚本纳入检查；门禁收紧到 warning 级别，当前 0 问题</td></tr>
-      <tr><td>JDK 版本提示</td><td>本机 JDK 25.0.2 触发 Enforcer 的版本提示</td><td>本机已升级到 25.0.4.1，版本下限改为强制要求；构建不再输出任何警告</td></tr>
-      <tr><td>仍存在（上游）</td><td>Airflow 3.3.2 读取 <code>.airflowignore</code> 时，其自身代码触发 pathspec 1.1.1 的 DeprecationWarning（版本由官方 constraints 固定）</td><td>不影响行为；只能改用 regexp 忽略语法规避，收益不抵配置改动，等待 Airflow 上游修复</td></tr>
-    </tbody>
-  </table>
-  </div>
-
-  <h3>2.4 依赖版本</h3>
-  <p>核对日期 2026-09-26，来源为 Maven Central、PyPI、Docker Hub 与 GitHub 发布页。</p>
-  <div class="table-wrap">
-  <table>
-    <thead><tr><th>组件</th><th>原版本</th><th>当前版本</th><th>说明</th></tr></thead>
-    <tbody>
-      <tr><td>spotless-maven-plugin</td><td class="money">3.10.0</td><td class="money">3.10.3</td><td></td></tr>
-      <tr><td>maven-compiler-plugin</td><td class="money">3.15.0</td><td class="money">3.16.0</td><td></td></tr>
-      <tr><td>maven-surefire-plugin</td><td class="money">3.5.6</td><td class="money">3.6.0</td><td></td></tr>
-      <tr><td>maven-install-plugin、maven-deploy-plugin</td><td class="money">3.1.4</td><td class="money">3.2.0</td><td></td></tr>
-      <tr><td>scalatest</td><td class="money">3.2.19</td><td class="money">3.2.20</td><td></td></tr>
-      <tr><td>slf4j-api、slf4j-nop</td><td class="money">—</td><td class="money">2.0.20</td><td>新增，仅测试</td></tr>
-      <tr><td>sshd-mina</td><td class="money">—</td><td class="money">2.19.0</td><td>新增，仅测试</td></tr>
-      <tr><td>CI Node.js</td><td class="money">22</td><td class="money">24</td><td>当前 Active LTS</td></tr>
-      <tr><td>CI Python（Airflow 与脚本作业）</td><td class="money">3.12</td><td class="money">3.13</td><td>与 <code>apache/airflow:3.3.2</code> 镜像一致，使用 constraints-3.13</td></tr>
-      <tr><td>pyright</td><td class="money">—</td><td class="money">1.1.414</td><td>新增的 Python 类型检查门禁，npm 最新版（2026-09-09）</td></tr>
-      <tr><td>JDK 下限（Enforcer）</td><td class="money">[25,)</td><td class="money">[25.0.4.1,)</td><td>原先低于 25.0.3 只警告，现为强制要求；25.0.4.1 是 2026-08-18 的 OpenJDK 带外安全更新，容器冒烟也断言镜像 JRE 不低于此版本</td></tr>
-    </tbody>
-  </table>
-  </div>
-  <p class="small muted"><strong>已是最新、未改动：</strong>Java 25 字节码目标、Spark 4.2.0 与 pyspark 4.2.0、Scala 2.13.18、Jackson 2.22.3、JUnit 6.1.3、JSch 2.28.7、Apache MINA SSHD 2.19.0、scopt 4.1.0、Checkstyle 14.1.0、google-java-format 1.36.1、scalafmt 3.11.5、scala-maven-plugin 4.9.10、scalatest-maven-plugin 2.2.0、Maven 3.9.16、Maven Wrapper 3.3.4、Airflow 3.3.2（fab 3.9.0、sftp 6.0.1、ssh 6.0.1、standard 1.19.0）、6 个 GitHub Actions（固定到最新标签的提交 SHA），基础镜像 <code>eclipse-temurin:25-jre</code>（25.0.4.1+1）、<code>postgres:18</code>（18.6）、<code>redis:8</code>（8.10.2）；Node 24（Active LTS）。<br>
-  <strong>有意不升级：</strong>Jackson 3.x（Spark 4.2 固定 Jackson 2，混用只增加冲突）；Spark 4.3.0（仅有 RC）；Maven 4（尚未 GA）；PostgreSQL 19（仅有 beta）；Temurin 26（非 LTS，Spark 4.2 支持到 Java 25）。</p>
+  <p><strong>评分方法：</strong>12 个维度各按 1–5 分评定，每项评分都列出可核对的依据；综合评分是 12 个维度的算术平均。评分是评估者的判断，依据与数字分开列出，便于复核。</p>
+  <p><strong>不在范围内：</strong>没有购买或部署任何付费云资源，没有连接真实的生产数据库、SFTP 账号或 Spark 集群，也没有做性能基准测试；涉及这些方面的结论都标为“未验证”。</p>
 </section>
 
 <section id="architecture" aria-labelledby="h-architecture">
-  <h2 id="h-architecture">三、架构与模块职责</h2>
-  <h3>3.1 执行主干</h3>
-<pre><code>HTTP (datacraft-api)      CLI (datacraft-cli)      Airflow DAG (BashOperator)
-        \                        |                         /
-         \                       |      java -jar / spark-submit --class Runner
-          +------------&gt; JobExecutionEngine (datacraft-engine) &lt;--------+
-                                 |  catalog = JvmJobs + SparkJobs + BuiltInJobs
-             +-------------------+----------------------+
-             |                   |                      |
-     BuiltInJobs [engine]   JvmJobs [jobs]        SparkJobs [spark]
-      echo, noop            csv-profile,           spark-version,
-                            file-checksum          csv-to-parquet, row-count
-                                 |
-                        datacraft-io (StorageService, CsvFiles, SFTP)</code></pre>
-  <p>“一个契约、一个引擎、多种入口”是本项目最大的优点：新作业只需实现 <code>DataJob</code> 并注册，就能同时在 CLI、API 与 Airflow 中使用。引擎对所有非虚拟机级错误给出统一的 FAILED 结果；作业名必须是单个 URL 路径段，且不能与 CLI 控制命令同名；Spark 作业在纯 JVM 环境中返回带 <code>spark-submit</code> 提示的失败结果，而不是崩溃。</p>
+  <h2 id="h-architecture">三、技术架构</h2>
 
-  <h3>3.2 模块职责与依赖范围</h3>
+  <h3>3.1 运行时视图：一次作业如何执行</h3>
+  <figure class="fig">
+    <div class="canvas">
+      <svg class="dg" viewBox="0 0 960 452" role="img" aria-label="三种调用方经 CLI 或 HTTP 入口进入同一个 JobExecutionEngine，引擎从作业目录选出内置、纯 JVM 或 Spark 作业执行，文件读写都限制在数据根之内">
+        <defs>
+          <marker id="f1-ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="ah" d="M0,0 L10,5 L0,10 z"/></marker>
+        </defs>
+        <text class="h" x="86" y="20" text-anchor="middle">调用方</text>
+        <text class="h" x="341" y="20" text-anchor="middle">入口</text>
+        <text class="h" x="601" y="20" text-anchor="middle">执行核心</text>
+        <text class="h" x="855" y="20" text-anchor="middle">作业实现</text>
+
+        <rect class="n" x="16" y="56" width="140" height="48" rx="6"/>
+        <text class="t" x="86" y="77" text-anchor="middle">命令行 / 脚本</text>
+        <text class="s" x="86" y="94" text-anchor="middle">终端或 cron</text>
+        <rect class="n" x="16" y="176" width="140" height="48" rx="6"/>
+        <text class="t" x="86" y="197" text-anchor="middle">Airflow DAG 任务</text>
+        <text class="s" x="86" y="214" text-anchor="middle">BashOperator</text>
+        <rect class="n" x="16" y="308" width="140" height="48" rx="6"/>
+        <text class="t" x="86" y="329" text-anchor="middle">HTTP 客户端</text>
+        <text class="s" x="86" y="346" text-anchor="middle">curl · 健康检查</text>
+
+        <rect class="n" x="256" y="48" width="170" height="64" rx="6"/>
+        <text class="t" x="341" y="70" text-anchor="middle">datacraft-cli</text>
+        <text class="s" x="341" y="87" text-anchor="middle">Runner · 组合根</text>
+        <text class="s" x="341" y="103" text-anchor="middle">退出码 0 / 1 / 2</text>
+        <rect class="n" x="256" y="300" width="170" height="64" rx="6"/>
+        <text class="t" x="341" y="322" text-anchor="middle">datacraft-api</text>
+        <text class="s" x="341" y="339" text-anchor="middle">EngineHttpServer</text>
+        <text class="s" x="341" y="355" text-anchor="middle">200 · 4xx · 500</text>
+
+        <rect class="n n-core" x="516" y="150" width="170" height="120" rx="8"/>
+        <text class="t" x="601" y="175" text-anchor="middle">JobExecutionEngine</text>
+        <text class="s" x="601" y="193" text-anchor="middle">datacraft-engine</text>
+        <text class="s" x="601" y="216" text-anchor="middle">作业目录 · 7 个作业</text>
+        <text class="s" x="601" y="234" text-anchor="middle">异常 → FAILED 结果</text>
+        <text class="s" x="601" y="252" text-anchor="middle">仅 VM 错误上抛</text>
+
+        <rect class="n" x="766" y="40" width="178" height="48" rx="6"/>
+        <text class="t" x="855" y="61" text-anchor="middle">BuiltInJobs · engine</text>
+        <text class="s" x="855" y="78" text-anchor="middle">echo · noop</text>
+        <rect class="n" x="766" y="132" width="178" height="52" rx="6"/>
+        <text class="t" x="855" y="154" text-anchor="middle">JvmJobs · jobs</text>
+        <text class="s" x="855" y="172" text-anchor="middle">csv-profile · file-checksum</text>
+        <rect class="n" x="766" y="224" width="178" height="64" rx="6"/>
+        <text class="t" x="855" y="246" text-anchor="middle">SparkJobs · spark</text>
+        <text class="s" x="855" y="263" text-anchor="middle">csv-to-parquet · row-count</text>
+        <text class="s" x="855" y="279" text-anchor="middle">spark-version</text>
+
+        <rect class="n" x="516" y="330" width="170" height="52" rx="6"/>
+        <text class="t" x="601" y="352" text-anchor="middle">datacraft-io</text>
+        <text class="s" x="601" y="370" text-anchor="middle">StorageService · CsvFiles</text>
+        <rect class="n" x="766" y="330" width="178" height="52" rx="6"/>
+        <text class="t" x="855" y="352" text-anchor="middle">Spark 运行时</text>
+        <text class="s" x="855" y="370" text-anchor="middle">provided · spark-submit</text>
+        <rect class="n n-soft" x="516" y="404" width="428" height="36" rx="6"/>
+        <text class="s" x="730" y="427" text-anchor="middle">数据根卷 DATACRAFT_DATA_ROOT · 作业路径必须位于其内</text>
+
+        <line class="e" x1="156" y1="80" x2="254" y2="80" marker-end="url(#f1-ah)"/>
+        <text class="el" x="206" y="72" text-anchor="middle">--command</text>
+        <line class="e" x1="156" y1="200" x2="254" y2="102" marker-end="url(#f1-ah)"/>
+        <text class="el" x="198" y="140" text-anchor="end">java -jar</text>
+        <text class="el" x="198" y="154" text-anchor="end">spark-submit</text>
+        <line class="e" x1="156" y1="332" x2="254" y2="332" marker-end="url(#f1-ah)"/>
+        <text class="el" x="206" y="324" text-anchor="middle">POST …/runs</text>
+        <line class="e" x1="341" y1="112" x2="341" y2="298" marker-end="url(#f1-ah)"/>
+        <text class="el" x="349" y="202">serve-api</text>
+        <text class="el" x="349" y="216">同一作业目录</text>
+        <line class="e" x1="426" y1="90" x2="514" y2="188" marker-end="url(#f1-ah)"/>
+        <text class="el" x="478" y="130">execute</text>
+        <line class="e" x1="426" y1="322" x2="514" y2="232" marker-end="url(#f1-ah)"/>
+        <text class="el" x="478" y="292">execute</text>
+        <line class="e" x1="686" y1="180" x2="764" y2="66" marker-end="url(#f1-ah)"/>
+        <line class="e" x1="686" y1="205" x2="764" y2="158" marker-end="url(#f1-ah)"/>
+        <line class="e" x1="686" y1="235" x2="764" y2="256" marker-end="url(#f1-ah)"/>
+        <text class="el" x="726" y="203" text-anchor="middle">run()</text>
+        <line class="e" x1="766" y1="176" x2="688" y2="328" marker-end="url(#f1-ah)"/>
+        <text class="el" x="700" y="296" text-anchor="end">读文件</text>
+        <line class="e" x1="855" y1="288" x2="855" y2="328" marker-end="url(#f1-ah)"/>
+        <text class="el" x="863" y="313">SparkSession</text>
+        <line class="e" x1="601" y1="382" x2="601" y2="402" marker-end="url(#f1-ah)"/>
+        <line class="e" x1="855" y1="382" x2="855" y2="402" marker-end="url(#f1-ah)"/>
+      </svg>
+    </div>
+    <figcaption>图 1　三种调用方最终都调用同一个 <code>JobExecutionEngine</code>。Airflow 任务启动的是同一个 CLI jar（纯 JVM 作业用 <code>java -jar</code>，Spark 作业用 <code>spark-submit</code>），<code>serve-api</code> 把同一份作业目录交给 HTTP 服务。引擎把作业抛出的任何异常转成 FAILED 结果；CLI 把结果映射为退出码，HTTP 映射为状态码。</figcaption>
+  </figure>
   <div class="table-wrap">
   <table>
-    <caption>除组合根 datacraft-cli 外，每个模块的 POM 都有 Enforcer 规则 <code>enforce-module-boundaries</code>：依赖了允许范围之外的项目模块（或在非 Spark 模块中引入 Spark）会使 <code>validate</code> 阶段失败。负向检查已验证：给 datacraft-api 加入 datacraft-io 依赖，构建立即失败并指向设计文档。</caption>
+    <caption>同一个结果在三种入口上的表现。完整的参数、消息与状态码约定见 <a href="../../design/data-contracts.md">数据契约</a>。</caption>
+    <thead><tr><th>结果</th><th>CLI（<code>--json</code> / <code>--result-file</code>）</th><th>HTTP API</th><th>Airflow</th></tr></thead>
+    <tbody>
+      <tr><td>SUCCEEDED</td><td>退出码 0，打印结果行</td><td>200 与结果 JSON</td><td>任务成功，结果写入 XCom</td></tr>
+      <tr><td>FAILED（含参数被拒、缺少 Spark 运行时）</td><td>退出码 1，仍打印 FAILED 结果</td><td>500 与同样的结果 JSON</td><td>任务失败，按默认配置重试 1 次</td></tr>
+      <tr><td>用法错误（未知命令或作业、参数格式错误、<code>--config</code> 不可读）</td><td>退出码 2，错误写到 stderr</td><td>400 <code>invalid_request</code>、404 <code>unknown_job</code></td><td>任务失败</td></tr>
+      <tr><td>浏览器跨源运行请求</td><td>—</td><td>403 <code>cross_origin_forbidden</code></td><td>—</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <h3>3.2 模块分层与依赖约束</h3>
+  <figure class="fig">
+    <div class="canvas">
+      <svg class="dg" viewBox="0 0 960 396" role="img" aria-label="八个模块分四层：接口层依赖处理层与核心层，处理层依赖 engine 与 io，所有库模块依赖 common；engine 依赖 io 这类越界依赖会让构建失败">
+        <defs>
+          <marker id="f2-ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="ah" d="M0,0 L10,5 L0,10 z"/></marker>
+          <marker id="f2-ban" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="ah-ban" d="M0,0 L10,5 L0,10 z"/></marker>
+        </defs>
+        <text class="h" x="16" y="56">接口层</text>
+        <text class="h" x="16" y="156">处理层</text>
+        <text class="h" x="16" y="256">核心与 IO</text>
+        <text class="h" x="16" y="356">基础</text>
+
+        <rect class="n" x="120" y="28" width="170" height="48" rx="6"/>
+        <text class="t" x="205" y="49" text-anchor="middle">datacraft-cli</text>
+        <text class="s" x="205" y="66" text-anchor="middle">组合根 · 依赖全部模块</text>
+        <rect class="n" x="740" y="28" width="170" height="48" rx="6"/>
+        <text class="t" x="825" y="49" text-anchor="middle">datacraft-api</text>
+        <text class="s" x="825" y="66" text-anchor="middle">HTTP 接口</text>
+
+        <rect class="n" x="330" y="128" width="170" height="48" rx="6"/>
+        <text class="t" x="415" y="149" text-anchor="middle">datacraft-jobs</text>
+        <text class="s" x="415" y="166" text-anchor="middle">纯 JVM 作业</text>
+        <rect class="n" x="560" y="128" width="170" height="48" rx="6"/>
+        <text class="t" x="645" y="149" text-anchor="middle">datacraft-spark</text>
+        <text class="s" x="645" y="166" text-anchor="middle">Spark 作业 · Spark provided</text>
+
+        <rect class="n" x="120" y="228" width="170" height="48" rx="6"/>
+        <text class="t" x="205" y="249" text-anchor="middle">datacraft-config</text>
+        <text class="s" x="205" y="266" text-anchor="middle">配置加载</text>
+        <rect class="n" x="330" y="228" width="170" height="48" rx="6"/>
+        <text class="t" x="415" y="249" text-anchor="middle">datacraft-io</text>
+        <text class="s" x="415" y="266" text-anchor="middle">存储与传输端口</text>
+        <rect class="n n-core" x="560" y="228" width="170" height="48" rx="6"/>
+        <text class="t" x="645" y="249" text-anchor="middle">datacraft-engine</text>
+        <text class="s" x="645" y="266" text-anchor="middle">DataJob · 执行引擎</text>
+
+        <rect class="n" x="415" y="328" width="170" height="48" rx="6"/>
+        <text class="t" x="500" y="349" text-anchor="middle">datacraft-common</text>
+        <text class="s" x="500" y="366" text-anchor="middle">异常 · 生命周期标签</text>
+
+        <line class="e" x1="290" y1="52" x2="738" y2="52" marker-end="url(#f2-ah)"/>
+        <line class="e" x1="270" y1="76" x2="378" y2="126" marker-end="url(#f2-ah)"/>
+        <line class="e" x1="290" y1="68" x2="578" y2="126" marker-end="url(#f2-ah)"/>
+        <line class="e" x1="205" y1="76" x2="205" y2="226" marker-end="url(#f2-ah)"/>
+        <line class="e" x1="800" y1="76" x2="716" y2="226" marker-end="url(#f2-ah)"/>
+        <line class="e" x1="480" y1="176" x2="578" y2="226" marker-end="url(#f2-ah)"/>
+        <line class="e" x1="415" y1="176" x2="415" y2="226" marker-end="url(#f2-ah)"/>
+        <line class="e" x1="645" y1="176" x2="645" y2="226" marker-end="url(#f2-ah)"/>
+        <line class="e" x1="250" y1="276" x2="438" y2="326" marker-end="url(#f2-ah)"/>
+        <line class="e" x1="450" y1="276" x2="478" y2="326" marker-end="url(#f2-ah)"/>
+        <line class="e" x1="620" y1="276" x2="562" y2="326" marker-end="url(#f2-ah)"/>
+        <line class="ban" x1="560" y1="252" x2="503" y2="252" marker-end="url(#f2-ban)"/>
+        <text class="ban-t" x="531" y="244" text-anchor="middle">✕ 禁止</text>
+      </svg>
+    </div>
+    <figcaption>图 2　实线箭头表示允许的依赖（A → B 即 A 依赖 B）。所有库模块都可以依赖 <code>datacraft-common</code>，图中只画出 config、io、engine 三条；<code>datacraft-cli</code> 作为组合根依赖全部模块，图中只画出它直接装配的四条。红色虚线是越界依赖的例子：<code>datacraft-engine</code> 依赖 <code>datacraft-io</code> 会在构建的 <code>validate</code> 阶段失败，并提示去看设计文档中的模块职责。</figcaption>
+  </figure>
+  <div class="table-wrap">
+  <table>
+    <caption>除组合根外，每个模块的 POM 都有 Enforcer 规则 <code>enforce-module-boundaries</code>。负向检查已实际验证：给 datacraft-api 加入 datacraft-io 依赖，构建立即失败。</caption>
     <thead><tr><th>分组</th><th>模块</th><th>职责</th><th>可依赖的项目模块</th></tr></thead>
     <tbody>
       <tr><td rowspan="3">core</td><td>datacraft-common</td><td>共享异常、生命周期标签、应用信息</td><td>无</td></tr>
@@ -464,71 +558,151 @@
       <tr><td>datacraft-engine</td><td><code>DataJob</code> 契约、作业目录、<code>JobExecutionEngine</code>、内置作业</td><td>common</td></tr>
       <tr><td>io</td><td>datacraft-io</td><td>存储与传输端口：<code>StorageService</code>、本地文件、CSV、SFTP</td><td>common</td></tr>
       <tr><td rowspan="2">processing</td><td>datacraft-jobs</td><td>纯 JVM 小文件作业：<code>csv-profile</code>、<code>file-checksum</code></td><td>common、engine、io</td></tr>
-      <tr><td>datacraft-spark</td><td>Spark 作业：<code>csv-to-parquet</code>、<code>row-count</code>、<code>spark-version</code>；Spark 为 <code>provided</code></td><td>common、engine</td></tr>
+      <tr><td>datacraft-spark</td><td>Spark 作业：<code>csv-to-parquet</code>、<code>row-count</code>、<code>spark-version</code>（Spark 为 <code>provided</code>）</td><td>common、engine</td></tr>
       <tr><td rowspan="2">interfaces</td><td>datacraft-api</td><td>HTTP API（JDK 内置 HttpServer）</td><td>common、engine</td></tr>
-      <tr><td>datacraft-cli</td><td>进程入口与组合根：命令行、<code>serve-api</code>、瘦 jar 打包</td><td>全部（组合根，不设规则）</td></tr>
+      <tr><td>datacraft-cli</td><td>进程入口与组合根：命令行、<code>serve-api</code>、瘦 jar 打包</td><td>全部（不设规则）</td></tr>
     </tbody>
   </table>
   </div>
-  <p>Spark 以 <code>provided</code> 作用域引入，CLI 瘦 jar 约 9 MB（本机构建 9,315,807 字节），Spark 作业通过 <code>spark-submit</code> 运行并继承其 <code>--master</code>。需要在笔记本上直接运行 Spark 时使用 <code>bundled-spark</code> profile。</p>
+
+  <h3>3.3 数据处理与数据根约束</h3>
+  <ul>
+    <li><strong>两类计算，各守其位：</strong>Spark 作业处理大文件，Spark 以 <code>provided</code> 作用域引入并由 <code>spark-submit</code> 提供，CLI 瘦 jar 因此只有约 9 MB；纯 JVM 作业处理小文件，不需要 Spark，可以在只含 JRE 的 API 镜像中运行。<code>csv-profile</code> 读取前检查文件大小（默认上限 64 MiB）与堆内存预算，超出时提示改用 Spark 的 <code>row-count</code>。</li>
+    <li><strong>数据根约束：</strong>设置 <code>DATACRAFT_DATA_ROOT</code> 后，纯 JVM 作业的输入必须严格位于数据根之内，并通过以数据根真实路径为根的 <code>LocalStorageService</code> 读取，拒绝指向根外的符号链接与目录联接；Spark 转换的输入输出同样受约束，并拒绝 glob 字符与输入输出重叠。API 镜像与部署栈中的 Airflow 服务都设置了数据根，API 以只读方式挂载数据卷。</li>
+    <li><strong>先校验、后启动：</strong>Spark 作业在启动会话之前完成参数校验，参数名只差大小写也会被拒绝；CSV 与 JSON 以 FAILFAST 方式读取，质量门槛（例如 <code>expectedRows</code>）不符即失败，不会静默退回默认值。</li>
+    <li><strong>边界：</strong>这是应用层防护，不是操作系统沙箱，硬链接和并发的恶意改动无法检测，数据根仍需要文件系统权限配合；<code>row-count</code>、<code>spark-version</code>、<code>echo</code>、<code>noop</code> 不受数据根约束。</li>
+  </ul>
+
+  <h3>3.4 部署拓扑</h3>
+  <figure class="fig">
+    <div class="canvas">
+      <svg class="dg" viewBox="0 0 960 380" role="img" aria-label="单机 Docker Compose：Airflow 五个服务、PostgreSQL 与 datacraft-api 在同一主机上，端口只绑定 127.0.0.1，运维者经 SSH 隧道访问；数据卷对 Airflow 读写、对 API 只读，数据库备份可选地同步到 R2">
+        <defs>
+          <marker id="f3-ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="ah" d="M0,0 L10,5 L0,10 z"/></marker>
+        </defs>
+        <rect class="n" x="16" y="150" width="150" height="56" rx="6"/>
+        <text class="t" x="91" y="173" text-anchor="middle">运维者</text>
+        <text class="m" x="91" y="191" text-anchor="middle">ssh -L 8080 · 8088</text>
+
+        <rect class="grp" x="216" y="12" width="584" height="356" rx="10"/>
+        <text class="h" x="232" y="34">云主机 · 单机 Docker Compose</text>
+        <rect class="grp" x="236" y="50" width="320" height="196" rx="8"/>
+        <text class="s" x="248" y="70">Airflow 3.3.2 · datacraft/airflow 镜像</text>
+        <rect class="n" x="248" y="84" width="144" height="44" rx="6"/>
+        <text class="t" x="320" y="103" text-anchor="middle">api-server</text>
+        <text class="m" x="320" y="120" text-anchor="middle">127.0.0.1:8080</text>
+        <rect class="n" x="400" y="84" width="144" height="44" rx="6"/>
+        <text class="t" x="472" y="103" text-anchor="middle">scheduler</text>
+        <text class="s" x="472" y="120" text-anchor="middle">LocalExecutor</text>
+        <rect class="n" x="248" y="136" width="144" height="44" rx="6"/>
+        <text class="t" x="320" y="163" text-anchor="middle">dag-processor</text>
+        <rect class="n" x="400" y="136" width="144" height="44" rx="6"/>
+        <text class="t" x="472" y="163" text-anchor="middle">triggerer</text>
+        <rect class="n" x="248" y="188" width="296" height="44" rx="6"/>
+        <text class="t" x="396" y="207" text-anchor="middle">airflow-init</text>
+        <text class="s" x="396" y="224" text-anchor="middle">一次性：迁移元数据库、创建管理员</text>
+
+        <rect class="n" x="600" y="60" width="180" height="46" rx="6"/>
+        <text class="t" x="690" y="80" text-anchor="middle">postgres:18</text>
+        <text class="s" x="690" y="97" text-anchor="middle">Airflow 元数据库</text>
+        <rect class="n n-soft" x="600" y="122" width="180" height="32" rx="6"/>
+        <text class="s" x="690" y="143" text-anchor="middle">卷 postgres-db</text>
+        <rect class="n n-core" x="600" y="190" width="180" height="60" rx="6"/>
+        <text class="t" x="690" y="210" text-anchor="middle">datacraft-api</text>
+        <text class="s" x="690" y="227" text-anchor="middle">datacraft/jvm · uid 10001</text>
+        <text class="m" x="690" y="243" text-anchor="middle">127.0.0.1:8088</text>
+
+        <rect class="n n-soft" x="248" y="292" width="296" height="44" rx="6"/>
+        <text class="s" x="396" y="318" text-anchor="middle">卷 airflow-logs</text>
+        <rect class="n n-soft" x="600" y="292" width="180" height="44" rx="6"/>
+        <text class="t" x="690" y="311" text-anchor="middle">卷 datacraft-data</text>
+        <text class="m" x="690" y="327" text-anchor="middle">/opt/datacraft/data</text>
+
+        <rect class="n" x="830" y="60" width="114" height="56" rx="6"/>
+        <text class="t" x="887" y="82" text-anchor="middle">Cloudflare R2</text>
+        <text class="s" x="887" y="100" text-anchor="middle">备份（可选）</text>
+
+        <line class="e" x1="166" y1="178" x2="214" y2="178" marker-end="url(#f3-ah)"/>
+        <text class="el" x="190" y="170" text-anchor="middle">SSH</text>
+        <line class="e" x1="556" y1="83" x2="598" y2="83" marker-end="url(#f3-ah)"/>
+        <text class="el" x="577" y="76" text-anchor="middle">元数据</text>
+        <line class="e" x1="690" y1="106" x2="690" y2="120" marker-end="url(#f3-ah)"/>
+        <line class="e" x1="396" y1="246" x2="396" y2="290" marker-end="url(#f3-ah)"/>
+        <text class="el" x="404" y="272">日志</text>
+        <line class="e" x1="540" y1="246" x2="638" y2="290" marker-end="url(#f3-ah)"/>
+        <text class="el" x="534" y="266" text-anchor="end">任务读写</text>
+        <line class="e" x1="690" y1="250" x2="690" y2="290" marker-end="url(#f3-ah)"/>
+        <text class="el" x="698" y="275">只读 :ro</text>
+        <line class="e" x1="780" y1="83" x2="828" y2="83" marker-end="url(#f3-ah)"/>
+        <text class="el" x="815" y="76" text-anchor="middle">备份</text>
+      </svg>
+    </div>
+    <figcaption>图 3　单机部署的网络与数据边界。所有服务在同一台主机上，Airflow UI 与 API 的端口只绑定 127.0.0.1，主机对公网只开放受限的 SSH，运维者通过 SSH 端口转发访问。LocalExecutor 在 scheduler 容器内以子进程运行任务，任务调用 <code>java -jar</code> 或 <code>spark-submit</code>（<code>local[2]</code>）并读写数据卷；API 对同一数据卷只读。数据库备份可以用 <code>pg_dump</code> 生成后同步到 R2。</figcaption>
+  </figure>
+  <p><strong>Swarm 模板：</strong>多机部署使用 CeleryExecutor 与 Redis，但所有服务都固定在 <code>DATACRAFT_DATA_NODE</code> 这一台数据节点上，因为数据卷是节点本地卷；API 不发布端口，只在覆盖网络内可达。在配置共享存储、加密覆盖网络与 Redis 认证之前，它不是高可用方案。</p>
+
+  <h3>3.5 构建与 CI/CD 流水线</h3>
+  <p>Maven 反应堆由根 POM 统一管理版本与质量门禁，<code>./mvnw verify</code> 依次执行 Enforcer（JDK 25.0.4.1 以上、Maven 3.9 以上、插件版本固定、禁止 POM 仓库、禁止有漏洞的 Jackson、模块边界）、编译（javac <code>-Xlint:all</code> 与 <code>failOnWarning</code>，scalac <code>-Werror</code>）、Spotless 与 Checkstyle、JUnit 与 ScalaTest，以及瘦 jar 打包。GitHub 只从 <code>.github/workflows</code> 读取工作流，因此 <code>ci.yml</code> 只负责触发条件、运行环境、固定版本的工具链与作业编排，每一步都调用 <code>cicd/</code> 下的脚本或 <code>tests/</code> 下的测试入口。</p>
+  <div class="table-wrap">
+  <table>
+    <caption><code>tests/ci/test_workflow.py</code> 保证工作流里不再出现多行内联逻辑，工作流引用的脚本都存在，<code>cicd/</code> 里的每个文件都有用途且没有被 git 忽略。</caption>
+    <thead><tr><th>作业</th><th>执行的脚本与测试</th><th>证明什么</th></tr></thead>
+    <tbody>
+      <tr><td class="nowrap"><code>build</code></td><td><code>cicd/build/check-maven-wrapper.sh</code> → <code>./mvnw verify</code> → <code>check_test_counts.py</code> → <code>check-spark-suite.sh</code> → <code>smoke-cli-jar.sh</code> → <code>check-jar-contents.sh</code> → <code>check-cli-exit-codes.sh</code></td><td>Wrapper 拒绝错误的校验和；完整门禁通过；每个模块的执行测试数不低于下限；Spark 真的在 JDK 25 上启动；jar 不依赖 Spark 即可运行；Multi-Release 清单、JSch 新算法可用、Jackson 版本一致；退出码契约</td></tr>
+      <tr><td class="nowrap"><code>dags</code></td><td><code>cicd/airflow/install-airflow.sh</code> → <code>check_security_floor.py</code> → <code>tests/orchestration</code> → <code>tests/smoke/airflow_runtime_smoke.py</code></td><td>官方 constraints 下的 Airflow 3.3.2；FAB 等安全版本下限；DAG 契约；三条流水线用构建产物真实运行</td></tr>
+      <tr><td class="nowrap"><code>scripts</code></td><td><code>cicd/lint/check-actions-pinned.sh</code>、<code>check-shell-scripts.sh</code>、<code>tests/deploy</code>、<code>tests/ci</code>、<code>tests/docs</code>、计算器测试、pyright 1.1.414</td><td>Actions 固定到提交 SHA；所有 Shell 脚本在 warning 级别 0 问题；部署、CI/CD 与文档测试；Python 零诊断</td></tr>
+      <tr><td class="nowrap"><code>compose</code></td><td><code>cicd/stacks/check-stack-files.sh</code></td><td>Compose 文件与 Swarm 栈都能插值，缺少任一必需机密时拒绝插值</td></tr>
+      <tr><td class="nowrap"><code>containers</code></td><td><code>tests/smoke/container_smoke.sh</code>、<code>compose_smoke.sh</code></td><td>镜像构建、非 root 的 API、镜像内真实流水线、完整 Compose 栈与元数据备份恢复</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <h3>3.6 架构评价</h3>
+  <div class="table-wrap">
+  <table>
+    <thead><tr><th>设计决策</th><th>收益</th><th>代价与限制</th><th>依据</th></tr></thead>
+    <tbody>
+      <tr><td>单一 <code>DataJob</code> 契约与统一引擎</td><td>三种入口行为一致；失败一律成为 FAILED 结果；参数校验只写一次</td><td>HTTP 同步执行，长作业占用请求；停机时仍在运行的作业最多等待 8 秒；<code>Lifecycle</code> 目前只是标签</td><td>引擎 31 项、CLI 23 项、API 12 项测试；决策 1</td></tr>
+      <tr><td>Spark 作为 provided 依赖</td><td>jar 约 9 MB；API 镜像不含 Spark；Spark 依赖版本由运行时决定</td><td>Spark 作业必须经 <code>spark-submit</code>；只验证过 local 模式，集群需要共享路径与可达端口</td><td>CI 退出码检查；决策 2</td></tr>
+      <tr><td>纯 JVM 小文件作业与数据根约束</td><td>小任务无需 Spark；未认证 API 下文件访问仍被限制在只读数据根</td><td>应用层防护，不是操作系统沙箱</td><td>数据根测试；决策 3</td></tr>
+      <tr><td>构建强制的模块边界与零警告</td><td>越界依赖和新警告在本地即失败，架构不会悄悄退化</td><td>增删模块时要同步维护规则与测试下限</td><td>负向检查；决策 9、10</td></tr>
+      <tr><td>单机 Compose 优先</td><td>成本最低、运维最简单，CI 中真实启动并做备份恢复</td><td>没有高可用；Swarm 只是模板</td><td>Compose 冒烟测试；决策 6</td></tr>
+      <tr><td>无认证 API 加回环绑定</td><td>部署简单；浏览器跨源请求被拒</td><td>对外暴露前必须加认证网关</td><td>Origin 检查测试；决策 5</td></tr>
+      <tr><td>CI/CD 逻辑独立到 <code>cicd/</code></td><td>检查可在本机复现，ShellCheck 覆盖全部流水线脚本</td><td>需要 Docker 的检查在本机仍无法运行</td><td>本机实跑结果（4.4）；决策 10</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <p class="small muted">每条决策的背景与后果见 <a href="../../design/decisions.md">架构决策记录</a>；完整的架构说明见 <a href="../../design/architecture.md">架构说明</a>，构建规则见 <a href="../../design/build-and-quality.md">构建与质量</a>。</p>
 </section>
 
-<section id="requirements" aria-labelledby="h-requirements">
-  <h2 id="h-requirements">四、需求符合度</h2>
+<section id="quality" aria-labelledby="h-quality">
+  <h2 id="h-quality">四、质量与验证</h2>
+
+  <h3>4.1 需求符合度</h3>
   <div class="table-wrap">
   <table>
     <thead><tr><th>需求</th><th>实现</th><th>证据</th><th>状态</th></tr></thead>
     <tbody>
-      <tr><td>Maven 多模块、严格边界</td><td>8 个模块分 4 组，每个模块的项目依赖由 Enforcer 规则限定</td><td>负向检查在 <code>validate</code> 阶段失败；reactor 环检测保护 common</td><td><span class="tag ok">满足</span></td></tr>
-      <tr><td>按职责组织工程目录</td><td><code>modules/</code> 四组、<code>tests/</code>、<code>docs/</code>、<code>design/</code></td><td>文档与测试的存放位置由 <code>tests/docs</code> 一致性测试检查</td><td><span class="tag ok">本轮满足</span></td></tr>
-      <tr><td>Java 与 Scala 混合</td><td>Java：common、config、io、engine、jobs、api；Scala：spark、cli</td><td>同一 reactor 构建，Spotless 统一格式</td><td><span class="tag ok">满足</span></td></tr>
-      <tr><td>Spark 承担重量级计算</td><td><code>csv-to-parquet</code>、<code>row-count</code>、<code>spark-version</code></td><td>Linux CI 真实启动 SparkSession 并断言无取消</td><td><span class="tag ok">满足</span></td></tr>
-      <tr><td>纯 JVM 覆盖小场景</td><td><code>datacraft-jobs</code>：<code>csv-profile</code>、<code>file-checksum</code></td><td>67 项模块测试；打包 jar 实测退出码 0 与 1</td><td><span class="tag ok">满足</span></td></tr>
-      <tr><td>同一引擎服务 CLI 与 HTTP</td><td><code>DataJob</code> → <code>JobExecutionEngine</code>，失败边界统一</td><td>CLI 23 项、API 12 项、引擎 31 项测试</td><td><span class="tag ok">满足</span></td></tr>
-      <tr><td>可复用配置与 IO 端口</td><td><code>DataCraftConfig</code>、<code>StorageService</code>、<code>RemoteFileTransfer</code></td><td>纯 JVM 作业经 <code>LocalStorageService</code> 访问数据根；SFTP 客户端有嵌入式服务器测试</td><td><span class="tag ok">满足</span></td></tr>
-      <tr><td>Airflow 3.x 编排</td><td>3 个 DAG，Airflow 3.3.2 与官方 constraints；依赖用 <code>chain()</code> 声明</td><td>16 项契约测试；CI 在真实 Airflow 中执行三条流水线</td><td><span class="tag ok">满足</span></td></tr>
-      <tr><td>单机 Compose / 多机 Swarm</td><td>Compose 为主；Swarm 固定单数据节点</td><td>Compose 在 CI 真实启动并做备份恢复；Swarm 仅 <code>stack config</code> 与静态测试</td><td><span class="tag warn">部分</span></td></tr>
-      <tr><td>云部署评估与成本</td><td>11 个平台、两个地域、按需与常开比较，附计算器（第八节）</td><td>价格核验日 2026-09-19；计算器 6 项测试</td><td><span class="tag ok">满足</span></td></tr>
-      <tr><td>零告警构建</td><td>javac、scalac 告警即失败；pyright 与 ShellCheck 门禁；JDK 下限强制</td><td>本机 JDK 25.0.4.1 全量构建 0 警告；pyright、ShellCheck 0 问题</td><td><span class="tag ok">本轮满足</span></td></tr>
-      <tr><td>CI/CD 逻辑独立</td><td><code>cicd/</code> 按作业分组；工作流只做编排</td><td><code>tests/ci/test_workflow.py</code> 检查；<code>cicd/build</code> 与 <code>cicd/lint</code> 已在本机实跑</td><td><span class="tag ok">本轮满足</span></td></tr>
-      <tr><td>在线 API 的访问控制</td><td>回环绑定、Origin 403、数据根约束、非回环绑定必须设置数据根</td><td>无认证层，属于已记录的设计边界</td><td><span class="tag warn">部分</span></td></tr>
+      <tr><td>Maven 多模块、严格边界</td><td>8 个模块分 4 组，项目依赖由 Enforcer 规则限定</td><td>越界依赖在 <code>validate</code> 阶段失败；reactor 环检测保护 common</td><td><span class="tag ok">满足</span></td></tr>
+      <tr><td>按职责组织工程目录</td><td><code>modules/</code>、<code>tests/</code>、<code>cicd/</code>、<code>docs/</code>、<code>design/</code></td><td>文档、测试的存放位置与过时路径由 <code>tests/docs</code> 检查；流水线结构由 <code>tests/ci</code> 检查</td><td><span class="tag ok">满足</span></td></tr>
+      <tr><td>Java 与 Scala 混合</td><td>Java：common、config、io、engine、jobs、api；Scala：spark、cli</td><td>同一反应堆构建，Spotless 统一格式</td><td><span class="tag ok">满足</span></td></tr>
+      <tr><td>Spark 承担重量级计算</td><td><code>csv-to-parquet</code>、<code>row-count</code>、<code>spark-version</code></td><td>真实 SparkSession 测试，CI 断言没有取消</td><td><span class="tag ok">满足</span></td></tr>
+      <tr><td>纯 JVM 覆盖小场景</td><td><code>csv-profile</code>、<code>file-checksum</code></td><td>67 项模块测试；打包 jar 实测退出码 0 与 1</td><td><span class="tag ok">满足</span></td></tr>
+      <tr><td>同一引擎服务 CLI、HTTP 与 Airflow</td><td><code>DataJob</code> → <code>JobExecutionEngine</code></td><td>CLI、API、引擎测试与 DAG 契约测试</td><td><span class="tag ok">满足</span></td></tr>
+      <tr><td>Airflow 3.x 编排</td><td>3 个 DAG，依赖用 <code>chain()</code> 声明</td><td>16 项契约测试；CI 在真实 Airflow 中运行三条流水线</td><td><span class="tag ok">满足</span></td></tr>
+      <tr><td>单机 Compose 与多机 Swarm</td><td>Compose 为主，Swarm 固定单数据节点</td><td>Compose 在 CI 真实启动并做备份恢复；Swarm 仅配置校验与静态测试</td><td><span class="tag warn">部分</span></td></tr>
+      <tr><td>云部署评估与成本</td><td>11 个平台、两个地域、成本模型与计算器（第六章）</td><td>价格快照 2026-09-19；计算器 6 项测试</td><td><span class="tag ok">满足</span></td></tr>
+      <tr><td>零警告构建</td><td>编译、类型检查、Shell 检查的警告都会使门禁失败</td><td>本机全量构建 0 警告；pyright、ShellCheck 0 问题</td><td><span class="tag ok">满足</span></td></tr>
+      <tr><td>在线 API 的访问控制</td><td>回环绑定、Origin 检查、数据根约束</td><td>没有认证层，属于已记录的设计边界</td><td><span class="tag warn">部分</span></td></tr>
     </tbody>
   </table>
   </div>
-</section>
 
-<section id="scores" aria-labelledby="h-scores">
-  <h2 id="h-scores">五、分维度评分</h2>
-  <p>评分是评估者依据代码、测试与运行证据作出的判断（1–5 分），数值依次为 2026-09-25 审计前、审计后与当前。综合评分为 12 个维度的平均值：3.2 → 4.3 → 4.3。</p>
-  <div class="legend" aria-hidden="true"><span style="--swatch: var(--bar-prev)">2026-09-25 审计前</span><span style="--swatch: var(--bar)">当前</span></div>
-  <div class="table-wrap">
-  <table>
-    <thead><tr><th>维度</th><th>评分</th><th>主要依据</th></tr></thead>
-    <tbody>
-      <tr><td>架构与模块边界</td><td><div class="score"><div class="track"><span class="prev" style="width:80%"></span><span class="now" style="width:90%"></span></div><b>4.0 → 4.5 → 4.5</b></div></td><td>全部库模块的依赖范围由构建强制（此前只有 engine）；目录按职责分组</td></tr>
-      <tr><td>执行引擎与失败语义</td><td><div class="score"><div class="track"><span class="prev" style="width:60%"></span><span class="now" style="width:90%"></span></div><b>3.0 → 4.5 → 4.5</b></div></td><td>Error 不再逃逸引擎；失败日志含堆栈；失败路径有完整测试</td></tr>
-      <tr><td>配置加载</td><td><div class="score"><div class="track"><span class="prev" style="width:60%"></span><span class="now" style="width:90%"></span></div><b>3.0 → 4.5 → 4.5</b></div></td><td>BOM、原样值、带文件名的错误；<code>--config</code> 错误退出码 2</td></tr>
-      <tr><td>本地 IO 与 SFTP</td><td><div class="score"><div class="track"><span class="prev" style="width:60%"></span><span class="now" style="width:80%"></span></div><b>3.0 → 4.0 → 4.0</b></div></td><td>junction、通配符、原子下载已修复；SFTP 测试服务器在 Windows 上不再残留异常；真实第三方 SFTP 未验证</td></tr>
-      <tr><td>Spark 数据处理</td><td><div class="score"><div class="track"><span class="prev" style="width:70%"></span><span class="now" style="width:90%"></span></div><b>3.5 → 4.5 → 4.5</b></div></td><td>先校验后启动会话；路径保护；测试 JVM 参数与 Spark 4.2 启动器一致</td></tr>
-      <tr><td>CLI 与 HTTP 接口</td><td><div class="score"><div class="track"><span class="prev" style="width:60%"></span><span class="now" style="width:90%"></span></div><b>3.0 → 4.5 → 4.5</b></div></td><td>退出码可测试；输出跨平台字节一致；JSON 404、HEAD、排空停机</td></tr>
-      <tr><td>Airflow 编排</td><td><div class="score"><div class="track"><span class="prev" style="width:70%"></span><span class="now" style="width:90%"></span></div><b>3.5 → 4.5 → 4.5</b></div></td><td>路径约束、SFTP 主机密钥守卫、具名配置错误；依赖用 <code>chain()</code> 声明</td></tr>
-      <tr><td>容器与部署</td><td><div class="score"><div class="track"><span class="prev" style="width:60%"></span><span class="now" style="width:80%"></span></div><b>3.0 → 4.0 → 4.0</b></div></td><td>缺失密钥即失败、非 root API、Swarm 初始化服务；Swarm 仍缺真实多节点验证</td></tr>
-      <tr><td>构建与供应链</td><td><div class="score"><div class="track"><span class="prev" style="width:60%"></span><span class="now" style="width:90%"></span></div><b>3.0 → 4.5 → 4.5</b></div></td><td>零告警门禁；JDK 下限强制；版本逐项核对为最新；Wrapper 校验和、Actions 固定 SHA；仍无持续漏洞扫描</td></tr>
-      <tr><td>测试与 CI</td><td><div class="score"><div class="track"><span class="prev" style="width:70%"></span><span class="now" style="width:90%"></span></div><b>3.5 → 4.5 → 4.5</b></div></td><td>测试集中到 <code>tests/</code>；平台标签取代跳过；每模块执行下限；CI 逻辑移入 <code>cicd/</code> 可本机运行；本轮 CI 因额度不足未运行</td></tr>
-      <tr><td>文档</td><td><div class="score"><div class="track"><span class="prev" style="width:60%"></span><span class="now" style="width:90%"></span></div><b>3.0 → 4.0 → 4.5</b></div></td><td>文档与设计分目录；单一评估报告；链接可达性与存放位置有测试；中英文文档仍并存</td></tr>
-      <tr><td>安全</td><td><div class="score"><div class="track"><span class="prev" style="width:50%"></span><span class="now" style="width:70%"></span></div><b>2.5 → 3.5 → 3.5</b></div></td><td>多层防护已就位；API 仍无认证，机密在 Airflow 容器间共享</td></tr>
-    </tbody>
-  </table>
-  </div>
-</section>
-
-<section id="evidence" aria-labelledby="h-evidence">
-  <h2 id="h-evidence">六、质量门禁与验证证据</h2>
-  <h3>6.1 JVM 测试用例</h3>
+  <h3>4.2 测试体系</h3>
   <div class="table-wrap">
   <table>
     <caption>Linux 与 Windows 的执行数不同，是因为按平台标签排除了另一平台的测试，而不是跳过。CI 用 <code>cicd/build/check_test_counts.py</code> 按 Linux 执行数检查每个模块的下限。</caption>
-    <thead><tr><th>模块</th><th class="num">用例</th><th class="num">Linux CI 执行</th><th class="num">Windows 本机执行</th><th>平台标签</th></tr></thead>
+    <thead><tr><th>JVM 模块</th><th class="num">用例</th><th class="num">Linux 执行</th><th class="num">Windows 执行</th><th>平台标签</th></tr></thead>
     <tbody>
       <tr><td>datacraft-common</td><td class="num">7</td><td class="num">7</td><td class="num">7</td><td>—</td></tr>
       <tr><td>datacraft-config</td><td class="num">12</td><td class="num">12</td><td class="num">12</td><td>—</td></tr>
@@ -542,39 +716,69 @@
     <tfoot><tr><th>合计</th><td class="num">262</td><td class="num">256</td><td class="num">248</td><td>两个平台均 0 跳过、0 取消</td></tr></tfoot>
   </table>
   </div>
+  <div class="table-wrap">
+  <table>
+    <thead><tr><th>其他套件</th><th>位置</th><th class="num">数量</th><th>运行环境</th></tr></thead>
+    <tbody>
+      <tr><td>部署脚本与模板</td><td><code>tests/deploy</code></td><td class="num">45</td><td>Python 标准库；部分用例需要 POSIX（Linux 或 WSL）</td></tr>
+      <tr><td>CI/CD 脚本与工作流结构</td><td><code>tests/ci</code></td><td class="num">19</td><td>Python 标准库；2 项需要 POSIX bash</td></tr>
+      <tr><td>文档一致性</td><td><code>tests/docs/test_docs_consistency.py</code></td><td class="num">13</td><td>Python 标准库</td></tr>
+      <tr><td>费用计算器</td><td><code>tests/docs/cloud-costs.test.cjs</code></td><td class="num">6</td><td>Node</td></tr>
+      <tr><td>DAG 契约</td><td><code>tests/orchestration</code></td><td class="num">16</td><td>Airflow 3.3.2</td></tr>
+      <tr><td>运行时与容器冒烟</td><td><code>tests/smoke</code></td><td class="num">3 个脚本</td><td>Airflow、Java 与 pyspark；Docker</td></tr>
+    </tbody>
+  </table>
+  </div>
 
-  <h3>6.2 本机门禁（Windows 11 · JDK 25.0.4.1 · Maven 3.9.16）</h3>
-  <ul id="local-gates">
-    <li><code>./mvnw -B -ntp -o spotless:apply verify</code>：8 个模块全部成功，包括格式、Checkstyle、Enforcer（JDK 下限与模块边界）、编译（告警即失败）、测试与打包；共执行 248 项 JVM 测试，0 失败、0 跳过、0 取消；输出 623 行，<strong>0 条</strong> <code>[WARNING]</code> 或 JVM 警告。把 JDK 下限临时改为 <code>[25.0.4.2,)</code> 时构建按预期失败，说明第四位版本号也参与比较。</li>
-    <li><code>cicd/build</code> 脚本（Git Bash）：<code>check-maven-wrapper.sh</code>（错误的 SHA-256 被拒绝）、<code>check-spark-suite.sh</code>、<code>smoke-cli-jar.sh</code>、<code>check-jar-contents.sh</code>、<code>check-cli-exit-codes.sh</code> 全部通过；<code>check_test_counts.py</code> 在 Windows 报告上按预期指出 jobs 与 spark 低于 Linux 下限。</li>
-    <li><code>cicd/lint</code> 脚本（WSL，ShellCheck 0.11.0）：20 个 shell 脚本通过 <code>bash -n</code> 与 warning 级别的 ShellCheck；所有 Action 均固定到提交 SHA。</li>
-    <li><code>npx --yes pyright@1.1.414 --warnings</code>（warning 也使其失败）：0 errors、0 warnings、0 informations。</li>
-    <li>WSL Ubuntu（Python 3.12，DeprecationWarning 视为错误）：<code>tests/deploy</code> 45 项、<code>tests/ci</code> 19 项、<code>tests/docs</code> 13 项全部通过；在 Windows（Python 3.14）上 <code>tests/docs</code> 通过，<code>tests/ci</code> 17 项通过、2 项需要 POSIX bash 的检查按设计跳过。</li>
-    <li id="airflow-gate"><code>cicd/airflow</code> 脚本（WSL，Python 3.12 虚拟环境）：<code>install-airflow.sh</code> 按 constraints-3.12 安装 Airflow 3.3.2 与各 provider，再装入 pyspark 4.2.0，<code>pip check</code> 无冲突；<code>check_security_floor.py</code> 通过；随后 <code>tests/orchestration</code> 16 项 DAG 契约测试全部通过，<code>from airflow.sdk import chain</code> 可用。</li>
-    <li>Node：<code>node --test tests/docs/cloud-costs.test.cjs</code> 6 项通过。</li>
+  <h3>4.3 质量门禁</h3>
+  <div class="table-wrap">
+  <table>
+    <thead><tr><th>警告来源</th><th>处理方式</th><th>由谁强制</th></tr></thead>
+    <tbody>
+      <tr><td>javac</td><td><code>-Xlint:all</code>，<code>failOnWarning</code></td><td>构建失败</td></tr>
+      <tr><td>scalac</td><td><code>-deprecation -feature -unchecked -Xlint -Werror</code></td><td>构建失败</td></tr>
+      <tr><td>格式与导入</td><td>Spotless、Checkstyle 14.1.0</td><td>构建失败</td></tr>
+      <tr><td>构建环境、插件版本、依赖</td><td>Enforcer 规则（含 JDK 25.0.4.1 下限与模块边界）</td><td>构建失败</td></tr>
+      <tr><td>打包</td><td>过滤依赖清单、合并 NOTICE、保留一份 LICENSE、合并服务描述、不打包 <code>module-info.class</code></td><td>配置；CI 检查清单与 <code>module-info.class</code></td></tr>
+      <tr><td>JVM 运行时警告</td><td><code>.mvn/jvm.config</code>；Spark 测试 JVM 参数与 Spark 4.2 启动器对齐</td><td>配置</td></tr>
+      <tr><td>测试日志噪声</td><td>测试中默认静默；SFTP 测试服务器改用 MINA 传输</td><td>配置</td></tr>
+      <tr><td>跳过与取消的测试</td><td>平台标签与按操作系统激活的 profile</td><td>CI 只统计实际执行的测试，并在 Spark 套件被取消时失败</td></tr>
+      <tr><td>Python</td><td><code>pyrightconfig.json</code>，pyright 1.1.414 <code>--warnings</code></td><td>CI；<code>make typecheck</code></td></tr>
+      <tr><td>Shell</td><td>ShellCheck warning 级别覆盖全部脚本</td><td>CI；<code>make lint</code></td></tr>
+      <tr><td>流水线逻辑</td><td>工作流中不允许多行 <code>run:</code>，逻辑必须放在 <code>cicd/</code></td><td><code>tests/ci/test_workflow.py</code></td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <h3>4.4 本轮验证证据</h3>
+  <ul>
+    <li><strong>Maven 全量构建</strong>（Windows 11 · JDK 25.0.4.1 · Maven 3.9.16）：<code>./mvnw -B -ntp -o spotless:apply verify</code> 8 个模块全部成功；执行 248 项 JVM 测试，0 失败、0 跳过、0 取消；输出 623 行，<strong>0 条</strong> <code>[WARNING]</code> 或 JVM 警告。把 JDK 下限临时改为 <code>[25.0.4.2,)</code> 时构建按预期失败，说明第四位版本号也参与比较。</li>
+    <li><strong><code>cicd/build</code> 脚本</strong>（Git Bash）：<code>check-maven-wrapper.sh</code>（错误的 SHA-256 被拒绝）、<code>check-spark-suite.sh</code>、<code>smoke-cli-jar.sh</code>、<code>check-jar-contents.sh</code>、<code>check-cli-exit-codes.sh</code> 全部通过；<code>check_test_counts.py</code> 在 Windows 报告上按预期指出 jobs 与 spark 低于 Linux 下限。</li>
+    <li><strong><code>cicd/airflow</code> 脚本</strong>（WSL，Python 3.12 虚拟环境）：<code>install-airflow.sh</code> 按 constraints-3.12 安装 Airflow 3.3.2 与各 provider，再装入 pyspark 4.2.0，<code>pip check</code> 无冲突；<code>check_security_floor.py</code> 通过；随后 16 项 DAG 契约测试全部通过。</li>
+    <li><strong><code>cicd/lint</code> 脚本</strong>（WSL，ShellCheck 0.11.0）：20 个 Shell 脚本通过 <code>bash -n</code> 与 warning 级别的 ShellCheck；所有 Action 都固定到提交 SHA。</li>
+    <li><strong>类型检查与脚本测试：</strong><code>npx --yes pyright@1.1.414 --warnings</code> 0 errors、0 warnings、0 informations；WSL 中 <code>tests/deploy</code> 45 项、<code>tests/ci</code> 19 项、<code>tests/docs</code> 13 项全部通过（DeprecationWarning 视为错误）；计算器 6 项 Node 测试通过。</li>
   </ul>
-<pre class="reactor"><code>[INFO] Reactor Summary for datacraft-lab 0.1.0-SNAPSHOT:
+<pre class="reactor"><code id="reactor">[INFO] Reactor Summary for datacraft-lab 0.1.0-SNAPSHOT:
 [INFO]
-[INFO] datacraft-lab ...................................... SUCCESS [  2.910 s]
-[INFO] datacraft-common ................................... SUCCESS [  2.365 s]
-[INFO] datacraft-config ................................... SUCCESS [  1.422 s]
-[INFO] datacraft-io ....................................... SUCCESS [  4.940 s]
-[INFO] datacraft-engine ................................... SUCCESS [  1.536 s]
-[INFO] datacraft-jobs ..................................... SUCCESS [  2.414 s]
-[INFO] datacraft-spark .................................... SUCCESS [ 17.690 s]
-[INFO] datacraft-api ...................................... SUCCESS [  2.298 s]
-[INFO] datacraft-cli ...................................... SUCCESS [  4.501 s]
+[INFO] datacraft-lab ...................................... SUCCESS [  2.714 s]
+[INFO] datacraft-common ................................... SUCCESS [  2.417 s]
+[INFO] datacraft-config ................................... SUCCESS [  1.471 s]
+[INFO] datacraft-io ....................................... SUCCESS [  5.007 s]
+[INFO] datacraft-engine ................................... SUCCESS [  1.721 s]
+[INFO] datacraft-jobs ..................................... SUCCESS [  3.298 s]
+[INFO] datacraft-spark .................................... SUCCESS [ 18.403 s]
+[INFO] datacraft-api ...................................... SUCCESS [  2.557 s]
+[INFO] datacraft-cli ...................................... SUCCESS [  4.605 s]
 [INFO] ------------------------------------------------------------------------
 [INFO] BUILD SUCCESS
-[INFO] Total time:  40.351 s   (2026-09-26 14:27 JST, Windows 11, JDK 25.0.4.1, 0 warnings)</code></pre>
+[INFO] Total time:  42.516 s   (Windows 11, JDK 25.0.4.1, 0 warnings)</code></pre>
 
-  <h3>6.3 Linux CI（GitHub Actions，ubuntu-24.04）</h3>
-  <p>CI 有五个作业：构建与验证（含真实 Spark、每模块执行下限、jar 清单与退出码冒烟）、Airflow 契约与真实流水线、脚本与文档测试（含 ShellCheck 与 pyright）、Compose/Swarm 配置校验、镜像构建与容器/Compose 冒烟。工作流只负责编排，每一步调用 <code>cicd/</code> 下的脚本或 <code>tests/</code> 下的测试入口；<code>cicd/build</code>、<code>cicd/lint</code> 与 <code>cicd/airflow</code> 已在本机实跑，需要 Docker 的 <code>cicd/stacks</code> 与 <code>tests/smoke</code> 只能在 CI 上运行。</p>
-  <p id="ci-status">最近一次通过的 CI：提交 <code>4111189</code> 的 <a href="https://github.com/liluyang1999/datacraft-lab/actions/runs/36142294607">运行 36142294607</a>，五个作业全部成功（2026-09-25）。GitHub Actions 当前额度不足，本轮推送不会触发 CI；本轮 Linux 端的镜像构建、容器与 Compose 冒烟以及 Stack 文件校验没有重新运行，额度恢复后可通过 <code>workflow_dispatch</code> 手动触发一次完整验证。</p>
+  <h3>4.5 CI 状态</h3>
+  <p>最近一次全部通过的 CI 是提交 <code>4111189</code> 的 <a href="https://github.com/liluyang1999/datacraft-lab/actions/runs/36142294607">运行 36142294607</a>（2026-09-25，五个作业全部成功）。GitHub Actions 当前额度不足，之后的推送不会触发 CI。本轮的 <code>cicd/build</code>、<code>cicd/lint</code> 与 <code>cicd/airflow</code> 已在本机实跑；需要 Docker 的 <code>cicd/stacks</code> 与容器、Compose 冒烟测试以及真实 Airflow 端到端流水线只能在 CI 上运行，本轮没有复验。额度恢复后，可以通过 <code>workflow_dispatch</code> 手动触发一次完整验证。</p>
 </section>
 
 <section id="security" aria-labelledby="h-security">
-  <h2 id="h-security">七、安全评估</h2>
+  <h2 id="h-security">五、安全评估</h2>
   <div class="table-wrap">
   <table>
     <thead><tr><th>攻击面</th><th>风险</th><th>当前防护</th><th>残余</th></tr></thead>
@@ -583,8 +787,8 @@
       <tr><td>作业路径参数</td><td>覆盖写删除任意目录；通配符越界读取</td><td>Spark 转换与纯 JVM 作业受 <code>DATACRAFT_DATA_ROOT</code> 约束；拒绝 glob 字符；Airflow 参数模式校验</td><td><span class="tag info">低</span> <code>row-count</code> 只读且不受约束；远程存储白名单未设计</td></tr>
       <tr><td>Airflow 任务参数</td><td>Shell 注入、模板注入</td><td>参数经环境变量逐项引用；<code>template_ext</code> 为空；参数键白名单</td><td><span class="tag ok">低</span></td></tr>
       <tr><td>SFTP</td><td>中间人攻击、误删或误覆盖</td><td>JVM 客户端严格校验主机密钥；Airflow 下载要求 <code>host_key</code>；字面路径；原子下载；密码字节用后清零</td><td><span class="tag info">低</span> 需要对真实服务器验收</td></tr>
-      <tr><td>部署机密</td><td>弱默认值、泄露到进程参数或镜像</td><td>独立随机生成与强度预检；<code>${VAR:?}</code> 缺失即失败；密码经 stdin 传递；<code>.dockerignore</code> 排除机密</td><td><span class="tag warn">中</span> 所有 Airflow 容器共享机密，DAG、CLI 与 Spark 属于管理员级可信代码</td></tr>
-      <tr><td>供应链</td><td>被篡改的构建工具或依赖</td><td>Wrapper SHA-256 校验；Actions 固定 SHA；禁用旧版 Jackson；官方 constraints；构建前拉取基础镜像</td><td><span class="tag info">低</span> 无持续漏洞扫描；基础镜像未固定 digest</td></tr>
+      <tr><td>部署机密</td><td>弱默认值、泄露到进程参数或镜像</td><td>独立随机生成与强度预检；缺失即拒绝启动；密码经 stdin 传递；<code>.dockerignore</code> 排除机密</td><td><span class="tag warn">中</span> 所有 Airflow 容器共享机密，DAG、CLI 与 Spark 属于管理员级可信代码</td></tr>
+      <tr><td>构建与供应链</td><td>被篡改的构建工具或依赖、带漏洞的 JDK</td><td>Wrapper SHA-256 校验；Actions 固定 SHA；禁用旧版 Jackson；官方 constraints；构建前拉取基础镜像；JDK 25.0.4.1 强制下限</td><td><span class="tag info">低</span> 无持续漏洞扫描；基础镜像未固定 digest</td></tr>
       <tr><td>Swarm 网络</td><td>未加密覆盖网络、Redis 无密码</td><td>有状态服务固定在数据节点；文档要求防火墙限制 2377、7946、4789 端口</td><td><span class="tag warn">中</span> 扩展到多机前需要加密与认证设计</td></tr>
     </tbody>
   </table>
@@ -592,50 +796,98 @@
 </section>
 
 <section id="cloud" aria-labelledby="h-cloud">
-  <h2 id="h-cloud">八、云平台抉择</h2>
-  <p>比较对象是运行本项目单机栈（Airflow + PostgreSQL + Spark <code>local[2]</code> + JVM API）的约 8 GB 内存主机，地域为用户指定的东京与新加坡。价格为 2026-09-19 核验的税前公开价（美元），不计新用户赠金、限时促销与长期承诺折扣。本节只做预算比较，不是性能排名：相同内存或同为“2 核”不代表相同吞吐。</p>
+  <h2 id="h-cloud">六、云平台抉择分析</h2>
 
-  <h3>8.1 结论</h3>
+  <h3>6.1 决策问题与约束</h3>
+  <p>要回答的问题是：在用户指定的东京与新加坡两个地域，用哪家云平台运行本项目的单机栈最划算、风险最低。约束如下：</p>
+  <ul>
+    <li><strong>工作负载：</strong>一台 Linux 主机运行 Docker Compose，内含 Airflow（LocalExecutor）、PostgreSQL、Spark <code>local[2]</code> 与 JVM API，默认只并发 1 个 Airflow 任务。规划起点为 8 GB 内存、至少 64 GB SSD；这是规划值，尚未用真实数据测出最低配置。</li>
+    <li><strong>两种用法：</strong>常开（按年均 730 小时/月计）与按需（约 60 小时/月，用完即停）。</li>
+    <li><strong>计价口径：</strong>2026-09-19 核验的税前公开价（美元），不计新用户赠金、限时促销、承诺折扣、税费、汇兑与人工；主机与磁盘保留整月；公网出站不超过 100 GB/月（含备份上传）；示例备份为 R2 Standard 上月均 20 GB，扣除账户免费 10 GB 后为 $0.15/月。</li>
+    <li><strong>完整价与下限：</strong>套餐价已包含磁盘、公网地址与流量的平台给出完整月费；EC2、GCP、Azure 与 Hetzner 的磁盘、公网地址、流量等取决于尚未确定的选项，只给出已知部分并标注“≥”，不把未核实的费用当作零。</li>
+  </ul>
+
+  <h3>6.2 结论</h3>
   <div class="choices">
-    <article class="choice primary">
-      <p class="when">常开 · 每月 ≥ 227.5 小时</p>
-      <p class="price">$10.15<small> / 月</small></p>
-      <h3>腾讯云 Lighthouse 入门型</h3>
-      <p>2 核 / 8 GB / 80 GB SSD，套餐 $10，另计示例备份 $0.15。东京与新加坡同价，含 30 Mbps 与 2,560 GB/月流量。关机不减费。</p>
-      <p><a href="https://www-sg.tencentcloud.com/zh/document/product/1103/47794">官方套餐价格</a></p>
-    </article>
     <article class="choice">
-      <p class="when">按需 · 每月约 60 小时</p>
-      <p class="price">$4.79<small> / 月</small></p>
-      <h3>Oracle OCI A1</h3>
-      <p>2 OCPU / 8 GB：算力 $1.92，64 GB Balanced 磁盘保留整月 $2.72，备份 $0.15。按无免费额度计算；ARM 需要实机验收。</p>
+      <p class="when">按需 · 每月少于 227.5 小时</p>
+      <p class="price">$4.79<small> / 月（60 小时）</small></p>
+      <h4 style="--swatch: var(--s-oci)">Oracle OCI A1</h4>
+      <p>2 OCPU / 8 GB（ARM）：算力 $0.032/小时，64 GB Balanced 磁盘保留整月 $2.72，备份 $0.15。停止实例即停止算力计费。前提是 ARM 实机验收通过、主区域有容量。</p>
       <p><a href="https://www.oracle.com/cloud/compute/arm/">算力价格</a> · <a href="https://www.oracle.com/cloud/price-list/">存储价目</a></p>
     </article>
     <article class="choice">
-      <p class="when">必须使用 AWS</p>
+      <p class="when">常开 · 每月 227.5 小时以上</p>
+      <p class="price">$10.15<small> / 月</small></p>
+      <h4 style="--swatch: var(--s-tc)">腾讯云 Lighthouse 入门型</h4>
+      <p>2 核 / 8 GB / 80 GB SSD（x86），套餐 $10 已含 30 Mbps 与 2,560 GB/月流量，另计备份 $0.15。东京与新加坡同价；关机不减费。</p>
+      <p><a href="https://www-sg.tencentcloud.com/zh/document/product/1103/47794">官方套餐价格</a></p>
+    </article>
+    <article class="choice">
+      <p class="when">组织要求使用 AWS</p>
       <p class="price">$44.15<small> / 月</small></p>
-      <h3>AWS Lightsail 8 GB</h3>
-      <p>IPv4 套餐 $44，含 160 GB SSD 与 5 TB 流量，加备份 $0.15。预算清楚；EC2 t4g.large 仅算力就不低于 $61.90。</p>
+      <h4>AWS Lightsail 8 GB</h4>
+      <p>IPv4 套餐 $44，含 160 GB SSD 与 5 TB 流量，加备份 $0.15。预算透明；同为 AWS 的 EC2 t4g.large 仅算力就超过 $60/月。</p>
       <p><a href="https://aws.amazon.com/lightsail/pricing/">官方套餐价格</a></p>
     </article>
   </div>
 
-  <h3>8.2 选型规则</h3>
+  <h3>6.3 候选平台与价格</h3>
   <div class="table-wrap">
   <table>
-    <thead><tr><th>情况</th><th>选择</th><th class="num">月费用</th><th>前提与理由</th></tr></thead>
+    <caption>两列金额只含主机套餐费或算力费，不含备份；按需场景的资源保留整月。标 * 的行还须加上右列所列费用，不能当作完整总价。价格来源、SKU 与算式见 <a href="pricing-evidence.md">价格依据</a>。</caption>
+    <thead><tr><th>平台 / 机型</th><th>地域</th><th class="num">60 小时</th><th class="num">730 小时</th><th>已含资源 / 另需计费</th></tr></thead>
     <tbody>
-      <tr><td>每月运行少于 227.5 小时，可以接受 ARM</td><td>OCI A1 按需，用完即停</td><td class="num money">$2.87 + $0.032/小时</td><td>停止实例后暂停算力计费，磁盘与备份整月保留；需确认 ARM 实机运行、容量与账户额度</td></tr>
-      <tr><td>常开，或每月运行 227.5 小时以上</td><td>腾讯云 Lighthouse 入门型</td><td class="num money">$10.15</td><td>包月套餐不随运行时长变化；80 GB 不够时换 120 GB 通用型（$14.65，含备份）</td></tr>
-      <tr><td>组织要求使用 AWS</td><td>Lightsail 8 GB</td><td class="num money">$44.15</td><td>EC2 还需另计 EBS、公网 IPv4、流量与可能的 CPU 积分</td></tr>
-      <tr><td>希望托管 Airflow</td><td>不采用</td><td class="num">—</td><td>MWAA 与 Google 托管 Airflow 要计控制面、工作节点、数据库与网络费用，且与现有 JVM/Spark 命令不直接兼容</td></tr>
-      <tr><td>考虑 Cloudflare</td><td>只用 R2 存备份</td><td class="num money">$0.15</td><td>Workers/Pages 不能运行 JVM + PostgreSQL + Airflow；Containers 需要重新适配有状态栈</td></tr>
+      <tr><td><a href="https://www-sg.tencentcloud.com/zh/document/product/1103/47794">腾讯云 Lighthouse 入门型 2 核 8 GB</a></td><td>东京 / 新加坡</td><td class="num money" data-plan="tencent" data-run="60">$10.00</td><td class="num money" data-plan="tencent" data-run="730">$10.00</td><td>80 GB SSD、2,560 GB/月、30 Mbps；关机仍付套餐费；库存以下单页为准</td></tr>
+      <tr><td><a href="https://www.oracle.com/cloud/compute/arm/">OCI A1 2 OCPU 8 GB</a> *</td><td>东京 / 新加坡</td><td class="num money" data-plan="oracle" data-run="60">$1.92</td><td class="num money" data-plan="oracle" data-run="730">$23.36</td><td>$0.032/小时；另加 64 GB Balanced 磁盘 $2.72/月；未扣免费额度；ARM 待实机验收</td></tr>
+      <tr><td><a href="https://aws.amazon.com/lightsail/pricing/">AWS Lightsail 2 vCPU 8 GB</a></td><td>东京 / 新加坡</td><td class="num money" data-plan="lightsail" data-run="60">$44.00</td><td class="num money" data-plan="lightsail" data-run="730">$44.00</td><td>IPv4、160 GB SSD、5 TB/月；IPv6-only 为 $40，但须先验证镜像仓库、依赖与 SFTP 可达</td></tr>
+      <tr><td><a href="https://api.vultr.com/v2/plans">Vultr vc2-4c-8gb</a></td><td>东京 / 新加坡</td><td class="num money" data-plan="vultr" data-run="60">$40.00</td><td class="num money" data-plan="vultr" data-run="730">$40.00</td><td>4 vCPU、160 GB SSD、4,096 GB 流量；$0.055/小时，$40/月封顶；关机仍收费</td></tr>
+      <tr><td><a href="https://www.digitalocean.com/pricing/droplets">DigitalOcean Basic 8 GiB</a></td><td>新加坡</td><td class="num money" data-plan="digitalocean" data-run="60">$48.00</td><td class="num money" data-plan="digitalocean" data-run="730">$48.00</td><td>4 vCPU、160 GiB SSD、5,000 GiB；$0.07143/小时，$48/月封顶；东京不在官方地区表中</td></tr>
+      <tr><td><a href="https://www.akamai.com/cloud/pricing">Akamai Linode 8 GB</a></td><td>东京 / 新加坡</td><td class="num money" data-plan="linode" data-run="60">$48.00</td><td class="num money" data-plan="linode" data-run="730">$48.00</td><td>4 vCPU、160 GB、5 TB；$0.072/小时，$48/月封顶；保留实例继续计费</td></tr>
+      <tr><td><a href="https://docs.hetzner.com/general/infrastructure-and-availability/price-adjustment/">Hetzner CPX32</a> *</td><td>新加坡</td><td class="num money" data-plan="hetzner" data-run="60">$57.99</td><td class="num money" data-plan="hetzner" data-run="730">$57.99</td><td>2026-06-15 调价后的美元月上限；IPv4、VAT、备份与超额流量另计；欧洲低价不适用新加坡</td></tr>
+      <tr><td><a href="https://aws.amazon.com/ec2/pricing/on-demand/">EC2 t4g.large</a> *</td><td>东京<br>新加坡</td><td class="num money"><span data-plan="awsTokyo" data-run="60">$5.18</span><br><span data-plan="awsSingapore" data-run="60">$5.09</span></td><td class="num money"><span data-plan="awsTokyo" data-run="730">$63.07</span><br><span data-plan="awsSingapore" data-run="730">$61.90</span></td><td>$0.0864 / $0.0848 每小时；另加 EBS、公网 IPv4、备份、流量及可能的 Unlimited CPU 积分</td></tr>
+      <tr><td><a href="https://cloud.google.com/products/compute/pricing/general-purpose">GCP e2-standard-2</a> *</td><td>东京<br>新加坡</td><td class="num money"><span data-plan="gcpTokyo" data-run="60">$5.16</span><br><span data-plan="gcpSingapore" data-run="60">$4.96</span></td><td class="num money"><span data-plan="gcpTokyo" data-run="730">$62.75</span><br><span data-plan="gcpSingapore" data-run="730">$60.35</span></td><td>$0.08596572 / $0.08266614 每小时；另加持久磁盘、外部 IP、流量与备份；未使用页面默认的美国价格</td></tr>
+      <tr><td><a href="https://learn.microsoft.com/en-us/rest/api/cost-management/retail-prices/azure-retail-prices">Azure B2as v2</a> *</td><td>Japan East<br>Southeast Asia</td><td class="num money"><span data-plan="azureTokyo" data-run="60">$5.88</span><br><span data-plan="azureSingapore" data-run="60">$5.66</span></td><td class="num money"><span data-plan="azureTokyo" data-run="730">$71.54</span><br><span data-plan="azureSingapore" data-run="730">$68.91</span></td><td>Linux 按需；64 GiB E6 LRS 磁盘基础费另加 $4.80/月；磁盘操作、公网 IP、流量与备份另计</td></tr>
+      <tr><td><a href="https://www.alibabacloud.com/en/product/swas/pricing?_p_lc=1">阿里云轻量 / ECS</a></td><td>东京 / 新加坡</td><td colspan="2">待当前可售 SKU 报价</td><td>公开页仍有 8 GB $35/月参考，但 2026-04-20 有一批旧套餐停售，不能把旧展示价当作可买价</td></tr>
+      <tr><td><a href="https://www.huaweicloud.com/intl/en-us/product/flexus/pricing.html">华为云 Flexus L / X</a></td><td>优先查新加坡</td><td colspan="2">待控制台报价</td><td>L 为套餐、X 可按需；没有取得可复核的当前 8 GB 完整报价，不列入排名</td></tr>
     </tbody>
   </table>
   </div>
-  <p class="small muted">两者持平点：OCI 月费 = $0.032 × 小时 + $2.72 + 备份，腾讯云 = $10 + 备份，因此在 (10 − 2.72) ÷ 0.032 = 227.5 小时/月 相等，与备份量无关。前提是两边任务耗时相同；若某平台实测更慢，应以实测总时长重算。</p>
 
-  <h3>8.3 月费用计算器</h3>
+  <h3>6.4 成本模型与盈亏平衡</h3>
+  <p>包月套餐的月费与运行时长无关；按需平台的月费是固定部分加上随小时线性增长的部分。以 OCI A1 为例：月费 = $0.032 × 小时 + $2.72（磁盘）+ 备份，而腾讯云 = $10 + 备份，两者在 (10 − 2.72) ÷ 0.032 = <strong>227.5 小时/月</strong> 持平。备份费同时加在两边，不影响交点。</p>
+  <figure class="fig">
+    <div class="canvas">
+      <div class="chart-wrap">
+        <svg class="lc" id="be-svg" viewBox="0 0 880 320" tabindex="0" role="img" aria-label="月费随每月运行小时变化：OCI A1 从 2.87 美元线性上升，在 227.5 小时与腾讯云 10.15 美元持平，到 744 小时约 26.68 美元，始终低于 Lightsail 的 44.15 美元；EC2 仅算力在约 116 小时后就超过腾讯云"></svg>
+        <div class="tip" id="be-tip" role="status" hidden></div>
+      </div>
+    </div>
+    <div class="legend" aria-hidden="true">
+      <span class="line" style="--swatch: var(--s-oci)">OCI A1（按需）</span>
+      <span class="line" style="--swatch: var(--s-tc)">腾讯云 Lighthouse 入门型</span>
+      <span class="line" style="--swatch: var(--mark-ctx)">AWS Lightsail 8 GB</span>
+      <span class="line" style="--swatch: var(--mark-faint)">EC2 t4g.large 东京，仅已知部分（≥）</span>
+    </div>
+    <figcaption>图 4　每月月费随运行小时的变化（东京价格，含 20 GB 备份）。竖线标出按需 60 小时与常开 730 小时两个场景。悬停或聚焦图表后用左右方向键可查看任意小时数下各方案的月费。</figcaption>
+    <noscript><p class="small">启用 JavaScript 后显示此图；下表列出了图中的关键交点。</p></noscript>
+  </figure>
+  <div class="table-wrap">
+  <table>
+    <caption>交点按“两边备份相同”计算。标“≥”的一侧还有未核定费用，真实交点会更早出现。</caption>
+    <thead><tr><th>比较</th><th class="num">交点（小时/月）</th><th>含义</th></tr></thead>
+    <tbody>
+      <tr><td>OCI A1 与腾讯云入门型</td><td class="num">227.5</td><td>少于这个时长选 OCI，多于这个时长选腾讯云</td></tr>
+      <tr><td>OCI A1 与 Lightsail 8 GB</td><td class="num">1,290</td><td>超过一个月的最大时长 744 小时，OCI 在任何用法下都更便宜</td></tr>
+      <tr><td>EC2 t4g.large（仅算力）与腾讯云：东京 / 新加坡</td><td class="num">≤ 115.7 / ≤ 117.9</td><td>EC2 只算算力，超过约 116 小时就贵于腾讯云的完整月费</td></tr>
+      <tr><td>GCP e2-standard-2（仅算力）与腾讯云：东京 / 新加坡</td><td class="num">≤ 116.3 / ≤ 121.0</td><td>与 EC2 相近</td></tr>
+      <tr><td>Azure B2as v2（算力加 E6 磁盘）与腾讯云：东京 / 新加坡</td><td class="num">≤ 53.1 / ≤ 55.1</td><td>固定磁盘费使 Azure 更早超过腾讯云</td></tr>
+      <tr><td>EC2 t4g.large 东京（仅算力）与 OCI A1</td><td class="num">50</td><td>50 小时以下 EC2 的已知部分低于 OCI 的完整月费，但 EC2 还有 EBS、公网 IPv4 等未计费用，本报告不据此排名</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <h3>6.5 月费用计算器</h3>
   <div class="calc">
     <div class="controls">
       <div class="field">
@@ -665,84 +917,138 @@
       <div class="bar-row axis-row" aria-hidden="true"><span></span><span class="bar-axis" id="calc-axis"></span><span></span></div>
     </div>
     <div class="legend" aria-hidden="true">
-      <span style="--swatch: var(--bar)">当前条件下最低的完整月费</span>
-      <span style="--swatch: var(--bar-prev)">完整月费</span>
-      <span style="--swatch: repeating-linear-gradient(135deg, var(--hatch) 0 3px, transparent 3px 7px)">已知费用下限（另有未核定附加费）</span>
+      <span style="--swatch: var(--s-oci)">OCI A1</span>
+      <span style="--swatch: var(--s-tc)">腾讯云入门型</span>
+      <span style="--swatch: var(--mark-ctx)">其他平台完整月费</span>
+      <span style="--swatch: var(--mark-faint)">已知费用下限（≥，另有未核定费用）</span>
     </div>
-    <noscript><p class="small">启用 JavaScript 后可调整条件；默认场景的结果见上方结论与下方价格表。</p></noscript>
+    <div class="tip" id="calc-tip" role="status" hidden></div>
+    <noscript><p class="small">启用 JavaScript 后可调整条件；默认场景的结果见 6.2 与 6.3。</p></noscript>
   </div>
-  <p class="small muted">假设：同一主机与磁盘保留整月；公网总出站不超过 100 GB/月（含备份上传）；不购买额外快照、监控、域名、负载均衡或 NAT；R2 免费额度未被其他项目占用。730 小时是年度平均月小时数，实际月份为 672–744 小时。计算使用定点十进制，只在显示时四舍五入到美分；未核实的附加费不会按零计入，因此 EC2、GCP、Azure 与 Hetzner 只显示已知部分并标注“≥”。阿里云与华为云暂无可复核的当前报价，不参与计算。</p>
+  <p class="small muted">悬停或用 Tab 键聚焦某一行，可以看到月费的组成（套餐或算力、磁盘、备份）。计算使用定点十进制，只在显示时四舍五入到美分；730 小时是年均月小时数，实际月份为 672–744 小时。阿里云与华为云暂无可复核的当前报价，不参与计算。</p>
 
-  <h3>8.4 各平台价格明细</h3>
+  <h3>6.6 定性因素</h3>
   <div class="table-wrap">
   <table>
-    <caption>两列金额只含主机套餐费或算力费，不含备份；按需场景的资源保留整月。标 * 的行还须加上右列所列费用，不能当作完整总价。</caption>
-    <thead><tr><th>平台 / 机型</th><th>地域</th><th class="num">60 小时</th><th class="num">730 小时</th><th>已含资源 / 另需计费</th></tr></thead>
+    <thead><tr><th>平台</th><th>CPU 架构</th><th>计费方式</th><th>关机是否停费</th><th>已含公网出站</th><th>主要风险</th></tr></thead>
     <tbody>
-      <tr><td><a href="https://www-sg.tencentcloud.com/zh/document/product/1103/47794">腾讯云 Lighthouse 入门型 2 核 8 GB</a></td><td>东京 / 新加坡</td><td class="num money" data-plan="tencent" data-run="60">$10.00</td><td class="num money" data-plan="tencent" data-run="730">$10.00</td><td>80 GB SSD、2,560 GB/月、30 Mbps；关机仍付套餐费；库存以下单页为准</td></tr>
-      <tr><td><a href="https://www.oracle.com/cloud/compute/arm/">OCI A1 2 OCPU 8 GB</a> *</td><td>东京 / 新加坡</td><td class="num money" data-plan="oracle" data-run="60">$1.92</td><td class="num money" data-plan="oracle" data-run="730">$23.36</td><td>$0.032/小时；另加 64 GB Balanced 磁盘 $2.72/月；未扣免费额度；ARM 待实机验收</td></tr>
-      <tr><td><a href="https://aws.amazon.com/lightsail/pricing/">AWS Lightsail 2 vCPU 8 GB</a></td><td>东京 / 新加坡</td><td class="num money" data-plan="lightsail" data-run="60">$44.00</td><td class="num money" data-plan="lightsail" data-run="730">$44.00</td><td>IPv4、160 GB SSD、5 TB/月；IPv6-only 为 $40，但须先验证镜像仓库、依赖与 SFTP 可达</td></tr>
-      <tr><td><a href="https://api.vultr.com/v2/plans">Vultr vc2-4c-8gb</a></td><td>东京 / 新加坡</td><td class="num money" data-plan="vultr" data-run="60">$40.00</td><td class="num money" data-plan="vultr" data-run="730">$40.00</td><td>4 vCPU、160 GB SSD、4,096 GB 流量；$0.055/小时，$40/月封顶；关机仍收费</td></tr>
-      <tr><td><a href="https://www.digitalocean.com/pricing/droplets">DigitalOcean Basic 8 GiB</a></td><td>新加坡</td><td class="num money" data-plan="digitalocean" data-run="60">$48.00</td><td class="num money" data-plan="digitalocean" data-run="730">$48.00</td><td>4 vCPU、160 GiB SSD、5,000 GiB；$0.07143/小时，$48/月封顶；东京不在官方地区表中</td></tr>
-      <tr><td><a href="https://www.akamai.com/cloud/pricing">Akamai Linode 8 GB</a></td><td>东京 / 新加坡</td><td class="num money" data-plan="linode" data-run="60">$48.00</td><td class="num money" data-plan="linode" data-run="730">$48.00</td><td>4 vCPU、160 GB、5 TB；$0.072/小时，$48/月封顶；保留实例继续计费</td></tr>
-      <tr><td><a href="https://docs.hetzner.com/general/infrastructure-and-availability/price-adjustment/">Hetzner CPX32</a> *</td><td>新加坡</td><td class="num money" data-plan="hetzner" data-run="60">$57.99</td><td class="num money" data-plan="hetzner" data-run="730">$57.99</td><td>2026-06-15 调价后的美元月上限；IPv4、VAT、备份与超额流量另计；欧洲低价不适用新加坡</td></tr>
-      <tr><td><a href="https://aws.amazon.com/ec2/pricing/on-demand/">EC2 t4g.large</a> *</td><td>东京<br>新加坡</td><td class="num money"><span data-plan="awsTokyo" data-run="60">$5.18</span><br><span data-plan="awsSingapore" data-run="60">$5.09</span></td><td class="num money"><span data-plan="awsTokyo" data-run="730">$63.07</span><br><span data-plan="awsSingapore" data-run="730">$61.90</span></td><td>$0.0864 / $0.0848 每小时；另加 EBS、公网 IPv4、备份、流量及可能的 Unlimited CPU 积分</td></tr>
-      <tr><td><a href="https://cloud.google.com/products/compute/pricing/general-purpose">GCP e2-standard-2</a> *</td><td>东京<br>新加坡</td><td class="num money"><span data-plan="gcpTokyo" data-run="60">$5.16</span><br><span data-plan="gcpSingapore" data-run="60">$4.96</span></td><td class="num money"><span data-plan="gcpTokyo" data-run="730">$62.75</span><br><span data-plan="gcpSingapore" data-run="730">$60.35</span></td><td>$0.08596572 / $0.08266614 每小时；另加持久磁盘、外部 IP、流量与备份；未使用页面默认的美国价格</td></tr>
-      <tr><td><a href="https://learn.microsoft.com/en-us/rest/api/cost-management/retail-prices/azure-retail-prices">Azure B2as v2</a> *</td><td>Japan East<br>Southeast Asia</td><td class="num money"><span data-plan="azureTokyo" data-run="60">$5.88</span><br><span data-plan="azureSingapore" data-run="60">$5.66</span></td><td class="num money"><span data-plan="azureTokyo" data-run="730">$71.54</span><br><span data-plan="azureSingapore" data-run="730">$68.91</span></td><td>Linux 按需；64 GiB E6 LRS 磁盘基础费另加 $4.80/月；磁盘操作、公网 IP、流量与备份另计</td></tr>
-      <tr><td><a href="https://www.alibabacloud.com/en/product/swas/pricing?_p_lc=1">阿里云轻量 / ECS</a></td><td>东京 / 新加坡</td><td colspan="2">待当前可售 SKU 报价</td><td>公开页仍有 8 GB $35/月参考，但 2026-04-20 有一批旧套餐停售，不能把旧展示价当作可买价</td></tr>
-      <tr><td><a href="https://www.huaweicloud.com/intl/en-us/product/flexus/pricing.html">华为云 Flexus L / X</a></td><td>优先查新加坡</td><td colspan="2">待控制台报价</td><td>L 为套餐、X 可按需；没有取得可复核的当前 8 GB 完整报价，不列入排名</td></tr>
+      <tr><td>腾讯云 Lighthouse 入门型</td><td>x86</td><td>包月套餐</td><td>否</td><td>2,560 GB/月（30 Mbps）</td><td>国际站账户与中国站不通用；库存以下单页为准</td></tr>
+      <tr><td>Oracle OCI A1</td><td>ARM（Ampere）</td><td>按小时，磁盘整月</td><td>是（算力）</td><td>亚太每月前 10 TB 免费</td><td>ARM 镜像与作业需实机验收；主区域容量可能不足</td></tr>
+      <tr><td>AWS Lightsail 8 GB</td><td>x86</td><td>包月套餐</td><td>否</td><td>5 TB/月</td><td>价格约为腾讯云的 4 倍</td></tr>
+      <tr><td>Vultr vc2-4c-8gb</td><td>x86</td><td>按小时，$40 封顶</td><td>否</td><td>4,096 GB</td><td>保留实例即收费</td></tr>
+      <tr><td>AWS EC2 t4g.large</td><td>ARM（Graviton2）</td><td>按量，磁盘等另计</td><td>是（stop 后停算力）</td><td>按量计费</td><td>附加费项多；突发型实例可能产生 CPU 积分费</td></tr>
+      <tr><td>GCP e2-standard-2</td><td>x86</td><td>按量，磁盘等另计</td><td>是（stop 后停算力）</td><td>按量计费</td><td>附加费项多</td></tr>
+      <tr><td>Azure B2as v2</td><td>x86（AMD）</td><td>按量，磁盘另计</td><td>仅解除分配后停算力</td><td>按量计费</td><td>系统内关机不等于解除分配，仍会计费</td></tr>
     </tbody>
   </table>
   </div>
-  <p class="small muted">EC2、GCP、Azure 的附加费取决于磁盘性能、出站目的地与 IP 保留方式，采购前应导出各自官方计算器的明细。腾讯云国际站与中国站、阿里云国际站与国内站的账户、币种和套餐不能混用。价格来源、SKU 与算式见 <a href="pricing-evidence.md">价格依据</a>。</p>
 
-  <h3>8.5 必须正确计算的计费规则</h3>
+  <h3>6.7 敏感性分析</h3>
+  <div class="table-wrap">
+  <table>
+    <thead><tr><th>变量</th><th>基线</th><th>变化</th><th>对结论的影响</th></tr></thead>
+    <tbody>
+      <tr><td>每月运行小时</td><td>60 / 730</td><td>0–744</td><td>少于 227.5 小时选 OCI，多于则选腾讯云；OCI 在任何时长下都低于 Lightsail</td></tr>
+      <tr><td>月均备份容量</td><td>20 GB（$0.15）</td><td>100 GB 为 $1.35；每天保留一份 20 GB、共 30 份约 600 GB，为 $8.85</td><td>同时加到所有方案上，不改变排序；但 600 GB 时备份费接近腾讯云套餐本身，需要控制保留策略</td></tr>
+      <tr><td>公网出站</td><td>≤ 100 GB/月</td><td>超过套餐额度</td><td>腾讯云超出部分东京 $0.13/GB、新加坡 $0.081/GB；Lightsail 超出 $0.14 / $0.12；OCI 亚太前 10 TB 免费；按量平台另算</td></tr>
+      <tr><td>OCI Always Free 额度</td><td>不计</td><td>额度、主区域与容量都满足</td><td>按文档额度（每月 1,500 OCPU 小时、9,000 GB 内存小时、主区域 200 GB 块存储），2 OCPU / 8 GB 常开也在额度内，月费可降到约 $0.15；但容量不足、闲置回收与主区域限制使它不能作为唯一方案</td></tr>
+      <tr><td>各平台性能差异</td><td>视为相同耗时</td><td>某平台慢 X%</td><td>按需方案的运行小时按实测放大后重算交点；包月方案不受影响</td></tr>
+      <tr><td>税费与汇率</td><td>不计</td><td>按账户所在地</td><td>各方案按同一比例上调，不改变排序</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <h3>6.8 选型规则与不采用的方案</h3>
+  <div class="table-wrap">
+  <table>
+    <thead><tr><th>情况</th><th>选择</th><th class="num">月费用</th><th>前提与理由</th></tr></thead>
+    <tbody>
+      <tr><td>每月运行少于 227.5 小时，可以接受 ARM</td><td>OCI A1 按需，用完即停</td><td class="num money">$2.87 + $0.032/小时</td><td>停止实例后暂停算力计费，磁盘与备份整月保留；需确认 ARM 实机运行、容量与账户额度</td></tr>
+      <tr><td>常开，或每月运行 227.5 小时以上</td><td>腾讯云 Lighthouse 入门型</td><td class="num money">$10.15</td><td>包月套餐不随运行时长变化；80 GB 不够时换 120 GB 通用型（$14.65，含备份）</td></tr>
+      <tr><td>组织要求使用 AWS</td><td>Lightsail 8 GB</td><td class="num money">$44.15</td><td>EC2 还需另计 EBS、公网 IPv4、流量与可能的 CPU 积分</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <div class="table-wrap">
+  <table>
+    <thead><tr><th>不采用的方案</th><th>原因</th></tr></thead>
+    <tbody>
+      <tr><td><a href="https://aws.amazon.com/managed-workflows-for-apache-airflow/pricing/">AWS MWAA</a>、<a href="https://cloud.google.com/products/managed-service-for-apache-airflow/pricing">Google 托管 Airflow</a></td><td>常驻环境要计控制面、工作节点、数据库与网络费用；MWAA Serverless 按任务计费，但现有的 JVM 与 <code>spark-submit</code> 命令与其托管任务模型不直接兼容。当前规模看不到能抵消迁移与维护成本的收益。</td></tr>
+      <tr><td>Cloudflare Workers、Pages、Containers</td><td>Workers 与 Pages 不能运行 JVM、PostgreSQL 与 Airflow；Containers 能运行 Linux 容器，但生命周期与存储模型需要重新设计，不是现有有状态栈的直接替换。项目未配置 S3A，<code>s3://</code> 路径不算已支持的 Spark 数据路径，R2 只用于备份。</td></tr>
+      <tr><td>Savings Plans、Reserved Instances、承诺使用折扣</td><td>先观察稳定的利用率；承诺费不会因为偶尔关机而消失。</td></tr>
+      <tr><td>多机 Swarm 高可用</td><td>当前 Swarm 使用节点本地卷并固定数据节点，不是多主机高可用；需要共享存储、加密覆盖网络与 Redis 认证后再考虑。</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <h3>6.9 计费规则要点</h3>
   <ul>
-    <li><strong>Oracle 免费额度：</strong><a href="https://docs.oracle.com/en-us/iaas/Content/FreeTier/freetier_topic-Always_Free_Resources.htm">Always Free 文档</a>列出每月 1,500 OCPU 小时、9,000 GB 内存小时与主区域 200 GB 块存储；付费租户价目说明另列 3,000 / 18,000。按账户类型与控制台剩余额度核对，不能一律承诺免费；低利用率实例可能被回收，容量也可能不足。</li>
-    <li><strong>停机：</strong>OCI Standard 停止后暂停算力计费；EC2 stop、GCP stop、Azure deallocate 停止按需算力费，磁盘等资源继续收费，Azure 仅在系统内关机不等于解除分配。腾讯云轻量、Lightsail、Vultr、DigitalOcean、Linode 与 Hetzner 保留实例会继续收费；删除重建能改变计费时长，但需要另算镜像、磁盘、恢复时间与数据一致性。</li>
-    <li><strong>R2 备份：</strong><a href="https://developers.cloudflare.com/r2/pricing/">Standard</a> 为 $0.015/GB-month，账户免费 10 GB-month；写入类请求免费 100 万次、读取类 1,000 万次，超出按完整单位向上取整。20 GB 是所有保留版本的月均总量；每天保留一份 20 GB 完整备份、共 30 份，约需 600 GB。</li>
-    <li><strong>出站流量：</strong>R2 自身免出站，不代表来源云免费。腾讯云套餐外东京 $0.13/GB、新加坡 $0.081/GB；Lightsail 超额东京 $0.14、新加坡 $0.12；OCI 亚太每月前 10 TB 免费。上传备份也计入来源云流量。</li>
-    <li><strong>持久数据：</strong>OCI 磁盘容量 $0.0255/GB-month，Balanced 10 VPU 另加 $0.017，合计 $0.0425；64 GB 保留整月为 $2.72。快照不自动免费，也不等于一致性的数据库备份。</li>
-    <li><strong>网络结构：</strong>低成本起步不加付费 NAT、负载均衡与跨区数据库；保留公网地址用于出站与受限 SSH，应用端口只绑定回环。可用 SSH 转发访问；Cloudflare Tunnel 仍需要可用的出站网络。</li>
+    <li><strong>停机：</strong>OCI Standard 停止后暂停算力计费；EC2 stop、GCP stop 与 Azure 解除分配停止按需算力费，磁盘等资源继续收费。腾讯云轻量、Lightsail、Vultr、DigitalOcean、Linode 与 Hetzner 保留实例会继续收费；删除重建可以改变计费时长，但需要另算镜像、磁盘、恢复时间与数据一致性。</li>
+    <li><strong>R2 备份：</strong><a href="https://developers.cloudflare.com/r2/pricing/">Standard</a> 为 $0.015/GB-month，账户免费 10 GB-month；写入类请求免费 100 万次、读取类 1,000 万次，超出按完整计费单位向上取整。20 GB 指所有保留版本的月均总量。</li>
+    <li><strong>出站流量：</strong>R2 自身不收出站费，不代表来源云免费；上传备份也计入来源云的出站流量。</li>
+    <li><strong>持久数据：</strong>OCI 磁盘容量 $0.0255/GB-month，Balanced 10 VPU 另加 $0.017，合计 $0.0425；快照不自动免费，也不等于一致性的数据库备份。</li>
+    <li><strong>网络结构：</strong>低成本起步不加付费 NAT、负载均衡与跨区数据库；保留公网地址用于出站与受限 SSH，应用端口只绑定回环。</li>
   </ul>
 
-  <h3>8.6 不采用的方案</h3>
-  <div class="table-wrap">
-  <table>
-    <thead><tr><th>方案</th><th>不采用的原因</th></tr></thead>
-    <tbody>
-      <tr><td><a href="https://aws.amazon.com/managed-workflows-for-apache-airflow/pricing/">AWS MWAA</a>、<a href="https://cloud.google.com/products/managed-service-for-apache-airflow/pricing">Google 托管 Airflow</a></td><td>常驻环境要计控制面、工作节点、数据库与网络费用；MWAA Serverless 另按任务计费，但现有本地 JVM/Spark 命令与其托管任务模型不直接兼容。当前规模没有证明迁移与维护成本值得。</td></tr>
-      <tr><td>Cloudflare Workers / Pages / Containers</td><td>Workers/Pages 不能运行 JVM + PostgreSQL + Airflow；Containers 能运行 Linux 容器，但生命周期与存储模型需要重新适配，不是现有有状态栈的直接替换。项目未配置 S3A，<code>s3://</code> 路径不算已支持的 Spark 数据路径。</td></tr>
-      <tr><td>Savings Plans、Reserved Instances、CUD</td><td>先观察稳定利用率；承诺费不会因为偶尔关机而消失。</td></tr>
-      <tr><td>多机 Swarm 高可用</td><td>默认 Swarm 使用本地卷并固定数据节点，仍不是多主机高可用；需要共享存储、加密覆盖网络与 Redis 认证后再考虑。</td></tr>
-    </tbody>
-  </table>
-  </div>
-
-  <h3>8.7 部署步骤与验收边界</h3>
-  <p>从单机 Docker Compose（LocalExecutor）开始：并发 1 个 Airflow 任务、Spark <code>local[2]</code>、DAG 解析进程 1 个、API worker 1 个。8 GB 内存与至少 64 GB SSD 是规划起点，不是用实际数据测出的最低配置；上线前先看峰值内存、磁盘、任务耗时与源数据网络，再调大并发。</p>
+  <h3>6.10 上线路径与验收条件</h3>
+  <p>从单机 Docker Compose 开始：并发 1 个 Airflow 任务、Spark <code>local[2]</code>、DAG 解析进程 1 个、API 服务器 worker 1 个。</p>
 <pre><code>python3 deploy/scripts/deployment_env.py init   # 生成独立随机机密，不覆盖已有文件
 bash deploy/scripts/build-images.sh              # 拉取基础镜像并构建（DAG 与 jar 均打入镜像）
 bash deploy/scripts/compose-up.sh                # 预检机密与端口后启动并等待健康</code></pre>
+  <p><strong>购买前须完成的验收：</strong></p>
+  <ol>
+    <li>在目标账户与地域确认可售库存和实际报价（腾讯云国际站；OCI 主区域的 A1 容量）。</li>
+    <li>从数据源所在网络分别测试到东京与新加坡的延迟与下载速度，按数据源位置选择地域。</li>
+    <li>选 OCI 时，在 arm64 主机上构建镜像并运行容器冒烟测试，确认镜像与 Spark 作业可用。</li>
+    <li>用真实数据量运行三条 DAG，记录峰值内存、磁盘占用与任务耗时，确认 8 GB / 64 GB 的规划足够；按需方案用实测耗时重算交点。</li>
+    <li>完成一次备份与恢复演练：<code>pg_dump</code> 到 R2，再恢复到独立数据库。</li>
+    <li>主机只开放受限 SSH；应用端口保持回环绑定；机密由 <code>deployment_env.py init</code> 生成。</li>
+  </ol>
   <div class="box">
     <span class="box-label">验收边界</span>
-    <p>部署脚本已准备好，但没有购买或上线任何云资源。真实云账号权限、库存、网络延迟、用户数据下的性能与 ARM 主机运行都未验证；当前容器运行证据来自 Linux amd64 的 CI，镜像提供 arm64 清单也不能代替 ARM 实机测试。升级既有部署时注意：核心机密缺失会直接拒绝启动；DAG 不再绑定挂载，<code>git pull</code> 后要重建镜像；SFTP 连接必须配置 <code>host_key</code>。完整步骤见 <a href="../guides/deployment.md">部署教程</a>。</p>
+    <p>部署脚本已经就绪，但没有购买或上线任何云资源。真实云账号权限、库存、网络延迟、用户数据下的性能与 ARM 主机运行都未验证；当前容器运行证据来自 Linux amd64 的 CI，镜像提供 arm64 清单也不能代替 ARM 实机测试。升级既有部署时注意：核心机密缺失会直接拒绝启动；DAG 不再绑定挂载，<code>git pull</code> 后要重建镜像；SFTP 连接必须配置 <code>host_key</code>。完整步骤见 <a href="../guides/deployment.md">部署教程</a>。</p>
+  </div>
+</section>
+
+<section id="scores" aria-labelledby="h-scores">
+  <h2 id="h-scores">七、分维度评分</h2>
+  <p>灰点是 2026-09-25 审计前的评分，青绿点是当前评分（1–5 分）；数值依次为审计前、审计后与当前。综合评分为 12 个维度的平均值：3.2 → 4.3 → 4.3。</p>
+  <div class="legend" aria-hidden="true"><span class="dot" style="--swatch: var(--mark-ctx)">2026-09-25 审计前</span><span class="dot" style="--swatch: var(--accent)">当前</span></div>
+  <div class="table-wrap">
+  <table>
+    <thead><tr><th>维度</th><th><div class="db-axis" aria-hidden="true"><span style="left:0%">1</span><span style="left:25%">2</span><span style="left:50%">3</span><span style="left:75%">4</span><span style="left:100%">5</span></div></th><th>评分</th><th>主要依据</th></tr></thead>
+    <tbody>
+      <tr><td>架构与模块边界</td><td><div class="db" role="img" aria-label="4.0 到 4.5"><span class="seg" style="left:75%;width:12.5%"></span><span class="pt prev" style="left:75%"></span><span class="pt now" style="left:87.5%"></span></div></td><td class="db-val">4.0 → 4.5 → 4.5</td><td>全部库模块的依赖范围由构建强制；目录按职责分组</td></tr>
+      <tr><td>执行引擎与失败语义</td><td><div class="db" role="img" aria-label="3.0 到 4.5"><span class="seg" style="left:50%;width:37.5%"></span><span class="pt prev" style="left:50%"></span><span class="pt now" style="left:87.5%"></span></div></td><td class="db-val">3.0 → 4.5 → 4.5</td><td>异常不再逃出引擎；失败日志含堆栈；失败路径有完整测试</td></tr>
+      <tr><td>配置加载</td><td><div class="db" role="img" aria-label="3.0 到 4.5"><span class="seg" style="left:50%;width:37.5%"></span><span class="pt prev" style="left:50%"></span><span class="pt now" style="left:87.5%"></span></div></td><td class="db-val">3.0 → 4.5 → 4.5</td><td>BOM、原样值、带文件名的错误；<code>--config</code> 错误退出码 2</td></tr>
+      <tr><td>本地 IO 与 SFTP</td><td><div class="db" role="img" aria-label="3.0 到 4.0"><span class="seg" style="left:50%;width:25%"></span><span class="pt prev" style="left:50%"></span><span class="pt now" style="left:75%"></span></div></td><td class="db-val">3.0 → 4.0 → 4.0</td><td>目录联接、通配符、原子下载已修复；真实第三方 SFTP 未验证</td></tr>
+      <tr><td>Spark 数据处理</td><td><div class="db" role="img" aria-label="3.5 到 4.5"><span class="seg" style="left:62.5%;width:25%"></span><span class="pt prev" style="left:62.5%"></span><span class="pt now" style="left:87.5%"></span></div></td><td class="db-val">3.5 → 4.5 → 4.5</td><td>先校验后启动会话；路径保护；测试 JVM 参数与 Spark 4.2 启动器一致</td></tr>
+      <tr><td>CLI 与 HTTP 接口</td><td><div class="db" role="img" aria-label="3.0 到 4.5"><span class="seg" style="left:50%;width:37.5%"></span><span class="pt prev" style="left:50%"></span><span class="pt now" style="left:87.5%"></span></div></td><td class="db-val">3.0 → 4.5 → 4.5</td><td>退出码与状态码契约可测试；输出跨平台字节一致</td></tr>
+      <tr><td>Airflow 编排</td><td><div class="db" role="img" aria-label="3.5 到 4.5"><span class="seg" style="left:62.5%;width:25%"></span><span class="pt prev" style="left:62.5%"></span><span class="pt now" style="left:87.5%"></span></div></td><td class="db-val">3.5 → 4.5 → 4.5</td><td>路径约束、SFTP 主机密钥守卫；依赖用 <code>chain()</code> 声明</td></tr>
+      <tr><td>容器与部署</td><td><div class="db" role="img" aria-label="3.0 到 4.0"><span class="seg" style="left:50%;width:25%"></span><span class="pt prev" style="left:50%"></span><span class="pt now" style="left:75%"></span></div></td><td class="db-val">3.0 → 4.0 → 4.0</td><td>缺失机密即拒绝启动、非 root API；Swarm 缺少真实多节点验证</td></tr>
+      <tr><td>构建与供应链</td><td><div class="db" role="img" aria-label="3.0 到 4.5"><span class="seg" style="left:50%;width:37.5%"></span><span class="pt prev" style="left:50%"></span><span class="pt now" style="left:87.5%"></span></div></td><td class="db-val">3.0 → 4.5 → 4.5</td><td>零警告门禁；JDK 下限强制；版本逐项核对为最新；仍无持续漏洞扫描</td></tr>
+      <tr><td>测试与 CI</td><td><div class="db" role="img" aria-label="3.5 到 4.5"><span class="seg" style="left:62.5%;width:25%"></span><span class="pt prev" style="left:62.5%"></span><span class="pt now" style="left:87.5%"></span></div></td><td class="db-val">3.5 → 4.5 → 4.5</td><td>平台标签取代跳过；每模块执行下限；CI 逻辑可本机复现；本轮 CI 未运行</td></tr>
+      <tr><td>文档</td><td><div class="db" role="img" aria-label="3.0 到 4.5"><span class="seg" style="left:50%;width:37.5%"></span><span class="pt prev" style="left:50%"></span><span class="pt now" style="left:87.5%"></span></div></td><td class="db-val">3.0 → 4.0 → 4.5</td><td>文档与设计分目录；单一评估报告；链接、存放位置与过时路径有测试</td></tr>
+      <tr><td>安全</td><td><div class="db" role="img" aria-label="2.5 到 3.5"><span class="seg" style="left:37.5%;width:25%"></span><span class="pt prev" style="left:37.5%"></span><span class="pt now" style="left:62.5%"></span></div></td><td class="db-val">2.5 → 3.5 → 3.5</td><td>多层防护已就位；API 仍无认证，机密在 Airflow 容器间共享</td></tr>
+    </tbody>
+  </table>
   </div>
 </section>
 
 <section id="risks" aria-labelledby="h-risks">
-  <h2 id="h-risks">九、残余风险与路线图</h2>
+  <h2 id="h-risks">八、残余风险与路线图</h2>
   <div class="table-wrap">
   <table>
     <thead><tr><th>优先级</th><th>事项</th><th>影响</th><th>建议</th></tr></thead>
     <tbody>
       <tr><td><span class="tag risk">P1</span></td><td>API 无认证</td><td>误暴露即可被任意调用</td><td>保持回环绑定；需要远程访问时在前面加认证网关</td></tr>
       <tr><td><span class="tag risk">P1</span></td><td>Swarm 未在真实多节点验证</td><td>初始化服务、健康检查与节点排空只做过静态与桩测试</td><td>扩展到多机前先配置共享存储、加密覆盖网络与 Redis 认证，并做一次演练</td></tr>
-      <tr><td><span class="tag warn">P2</span></td><td>本轮 CI 未运行</td><td>Actions 额度不足；镜像构建、容器与 Compose 冒烟、Stack 文件校验以及新的工作流本身没有在 Linux 上执行过</td><td>额度恢复后手动触发一次 <code>workflow_dispatch</code>；在此之前以本机验证为准</td></tr>
-      <tr><td><span class="tag info">P3</span></td><td>可选 Spark 镜像的 JDK</td><td>可选的 <code>datacraft/spark</code> 镜像继承上游 <code>apache/spark:4.2.0</code> 的 JDK 25.0.3+9，低于 25.0.4.1（没有服务使用它）</td><td>上游 Spark 镜像更新后再重建；本机与运行镜像已是 25.0.4.1</td></tr>
+      <tr><td><span class="tag warn">P2</span></td><td>本轮 CI 未运行</td><td>镜像构建、容器与 Compose 冒烟、Stack 文件校验以及新的工作流本身没有在 Linux 上执行过</td><td>额度恢复后手动触发一次 <code>workflow_dispatch</code>；在此之前以本机验证为准</td></tr>
       <tr><td><span class="tag warn">P2</span></td><td>Spark 4.2.0 自带依赖的公告</td><td>Jackson 2.21.2、Netty、Jetty 有公告，当前配置下不可达</td><td>不发布 Spark UI 与 RPC 端口；Spark 4.2.1 发布后升级</td></tr>
       <tr><td><span class="tag warn">P2</span></td><td>机密在 Airflow 容器间共享</td><td>任一任务代码都能读取全部机密</td><td>视为可信代码边界；多租户前再做机密隔离</td></tr>
       <tr><td><span class="tag warn">P2</span></td><td>无持续依赖与漏洞监控</td><td>固定 SHA 的 Actions 与依赖会逐渐过时</td><td>经所有者同意后启用 Dependabot 与定期 SCA 扫描；基础镜像固定 digest</td></tr>
+      <tr><td><span class="tag info">P3</span></td><td>Airflow 上游的弃用提示</td><td>Airflow 3.3.2 读取 <code>.airflowignore</code> 时，其自身代码触发 pathspec 1.1.1 的 DeprecationWarning，不影响行为</td><td>等待 Airflow 上游修复；改用 regexp 忽略语法的收益不抵配置改动</td></tr>
+      <tr><td><span class="tag info">P3</span></td><td>可选 Spark 镜像的 JDK</td><td>可选的 <code>datacraft/spark</code> 镜像继承上游 <code>apache/spark:4.2.0</code> 的 JDK 25.0.3+9，低于 25.0.4.1（没有服务使用它）</td><td>上游 Spark 镜像更新后再重建；本机与运行镜像已是 25.0.4.1</td></tr>
       <tr><td><span class="tag info">P3</span></td><td>Spark 会话锁无超时；<code>durationMillis</code> 含排队时间；Lifecycle 仅为标签</td><td>当前部署拓扑下不触发</td><td>引入 HTTP 侧 Spark 服务或多租户时再处理</td></tr>
       <tr><td><span class="tag info">路线图</span></td><td>功能扩展</td><td>—</td><td>更多纯 JVM 作业与流式 CSV 解析；配置化作业目录；对象存储版 <code>StorageService</code>（S3A）；docker secrets；云端、ARM 与真实 SFTP 服务器验收</td></tr>
     </tbody>
@@ -750,9 +1056,98 @@ bash deploy/scripts/compose-up.sh                # 预检机密与端口后启�
   </div>
 </section>
 
-<section id="audit" aria-labelledby="h-audit">
-  <h2 id="h-audit">十、附录：2026-09-25 审计与修复</h2>
-  <p>上一轮从 11 个维度审查全部代码与部署（引擎、IO、Spark、CLI/API、Airflow、部署、构建与 CI、文档、依赖与漏洞、需求覆盖、安全），提出 137 项发现；每项由另一方尝试反驳并复现，驳回 3 项、确认 134 项（中 23、低 99、信息 12），去重后约 100 个独立问题。问题归并为 13 个文件互不重叠的工作包，在独立 worktree 中先写在旧代码上失败的回归测试再修复，经独立审查与集成后审查（确认 14 项，其中 3 项会导致 CI 失败）后推送，CI 五个作业全部通过。</p>
+<section id="appendix-round" aria-labelledby="h-appendix-round">
+  <h2 id="h-appendix-round">附录 A　本轮整理明细（2026-09-26）</h2>
+
+  <h3>A.1 工程目录</h3>
+<pre class="tree"><code>datacraft-lab/
+├── pom.xml  mvnw  mvnw.cmd  .mvn/  Makefile    构建入口（Wrapper 固定 Maven 3.9.16）
+├── pyrightconfig.json  config/checkstyle/       Python 类型检查、Checkstyle 规则
+├── .github/workflows/ci.yml                     CI 工作流：只负责触发、运行环境与作业编排
+├── cicd/                                        CI/CD 逻辑：build · airflow · lint · stacks
+├── modules/                                     JVM 源码模块，按职责分组
+│   ├── core/         datacraft-common · datacraft-config · datacraft-engine
+│   ├── io/           datacraft-io
+│   ├── processing/   datacraft-jobs（纯 JVM）· datacraft-spark（Spark）
+│   └── interfaces/   datacraft-api（HTTP）· datacraft-cli（进程入口）
+├── orchestration/airflow/                       DAG 与依赖清单
+├── deploy/                                      docker/ · compose/ · swarm/ · scripts/
+├── design/                                      架构与设计（英文）
+├── docs/                                        全部文档（README、CHANGELOG、guides/、reports/）
+└── tests/                                       全部测试
+    ├── jvm/&lt;artifactId&gt;/{java,scala}             各模块的 JVM 测试，由该模块的构建运行
+    ├── jvm/resources/                           共享测试资源（日志配置）
+    ├── orchestration/  smoke/                   Airflow DAG 契约测试、运行时与容器冒烟
+    └── deploy/  ci/  docs/                      部署脚本、CI/CD 脚本、文档与计算器测试</code></pre>
+  <div class="table-wrap">
+  <table>
+    <caption>模块按 artifactId 选择，例如 <code>./mvnw -pl :datacraft-cli -am package</code>；打包后的 CLI 位于 <code>modules/interfaces/datacraft-cli/target/datacraft-cli.jar</code>。逐个文件的原路径与新路径记录在 <a href="../CHANGELOG.md">CHANGELOG</a> 中。</caption>
+    <thead><tr><th>内容</th><th>原位置</th><th>现位置</th></tr></thead>
+    <tbody>
+      <tr><td>JVM 模块</td><td>仓库根目录 <code>datacraft-*</code></td><td><code>modules/core/</code>、<code>modules/io/</code>、<code>modules/processing/</code>、<code>modules/interfaces/</code></td></tr>
+      <tr><td>JVM 测试</td><td>各模块 <code>src/test/{java,scala}</code></td><td><code>tests/jvm/&lt;artifactId&gt;/{java,scala}</code>；根 POM 的 <code>testSourceDirectory</code> 指向这里</td></tr>
+      <tr><td>Airflow 测试</td><td>编排目录下的测试子目录</td><td><code>tests/orchestration/</code>、<code>tests/smoke/airflow_runtime_smoke.py</code></td></tr>
+      <tr><td>部署与 CI 测试</td><td>部署目录下的测试子目录</td><td><code>tests/deploy/</code>、<code>tests/ci/</code>、<code>tests/docs/</code>、<code>tests/smoke/</code></td></tr>
+      <tr><td>CI/CD 逻辑</td><td>工作流里的内联脚本、GitHub 工作流旁的脚本目录</td><td><code>cicd/</code>：<code>build/</code>、<code>airflow/</code>、<code>lint/</code>、<code>stacks/</code>，共用 <code>cicd/lib.sh</code></td></tr>
+      <tr><td>项目文档</td><td>根目录 README 与 CHANGELOG、原部署文档目录、编排目录下的 Airflow README</td><td><code>docs/README.md</code>、<code>docs/CHANGELOG.md</code>、<code>docs/guides/</code>、<code>docs/reports/</code></td></tr>
+      <tr><td>架构设计</td><td>原 docs 目录下的架构说明、数据处理契约与工程开发文档</td><td><code>design/</code>：architecture、data-contracts、build-and-quality、decisions</td></tr>
+      <tr><td>评估与云成本</td><td>根目录的项目评估页面与云部署费用页面</td><td>本报告（两份合并为一份）</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <h3>A.2 清理掉的过时内容</h3>
+  <ul>
+    <li>根目录的云部署费用页面：内容并入本报告第六章。</li>
+    <li>原工程报告目录：工程开发文档与 Maven 构建说明中仍然成立的内容移入 <code>design/</code>；2026-09-19 与 2026-09-25 两份复盘记录已被本报告、CHANGELOG 与 git 历史取代。</li>
+    <li>构建中不再使用的配置：maven-failsafe-plugin（项目没有 <code>*IT</code> 测试）、<code>release-artifacts</code> 与 <code>dependency-audit</code> 两个 profile、source 与 javadoc 插件版本，以及单独的 JDK 版本警告规则（已改为强制下限）。</li>
+    <li>过时的 JVM 参数：<code>-Djdk.reflect.useDirectMethodHandle=false</code>，以及指向 JDK 25 中已不存在的 <code>sun.security.action</code> 包的 <code>--add-opens</code>。</li>
+    <li><code>.gitignore</code> 中的 IDE 模板残留规则；其中未锚定的 <code>build/</code> 曾让 <code>cicd/build/</code> 被 git 忽略，现在只匹配根目录，并有回归测试。</li>
+  </ul>
+
+  <h3>A.3 警告清理</h3>
+  <div class="table-wrap">
+  <table>
+    <thead><tr><th>来源</th><th>本轮前的现象</th><th>处理方式</th></tr></thead>
+    <tbody>
+      <tr><td>javac</td><td>未启用全部 lint，序列化与弃用警告不可见</td><td><code>-Xlint:all</code> 加 <code>failOnWarning</code>；<code>DataCraftException</code> 增加 <code>@Serial serialVersionUID</code>；<code>SftpClient</code> 改用 <code>setPassword(byte[])</code>，用完即清零副本</td></tr>
+      <tr><td>scalac</td><td>模式匹配不完备的警告不会使构建失败</td><td>增加 <code>-Werror</code>；<code>CliParser</code> 按第一个 <code>=</code> 的位置拆分 <code>--param</code></td></tr>
+      <tr><td>maven-shade</td><td>清单、NOTICE、LICENSE 等资源重叠警告；NOTICE 只保留第一份</td><td>过滤依赖清单，由 ManifestResourceTransformer 写入主类、Multi-Release 与版本信息；合并 NOTICE；保留一份相同的 Apache-2.0 LICENSE</td></tr>
+      <tr><td>Maven 进程与 Spark 测试 JVM</td><td><code>sun.misc.Unsafe</code> 与本地访问警告；已删除包的 <code>--add-opens</code></td><td><code>.mvn/jvm.config</code>；Spark 测试 JVM 参数与 Spark 4.2 启动器对齐</td></tr>
+      <tr><td>测试日志与 SLF4J</td><td>测试中大量日志输出；嵌入式 SFTP 服务器提示找不到日志实现</td><td>默认静默，排查时用 <code>-Ddatacraft.test.log.level=info</code> 打开；测试依赖 slf4j-nop 2.0.20</td></tr>
+      <tr><td>SFTP 测试服务器</td><td>Windows 上 NIO2/IOCP 的停机竞态打印未捕获异常</td><td>改用基于 selector 的 MINA 传输（sshd-mina，仅测试）</td></tr>
+      <tr><td>测试跳过与取消</td><td>Windows 跳过 7 项、取消 7 项；Linux 跳过 6 项</td><td>JUnit <code>@Tag</code> 与 ScalaTest <code>Tag</code> 标注平台，按操作系统自动激活的 profile 排除另一平台的测试</td></tr>
+      <tr><td>Python 与 Shell</td><td>可选值未判空、方法签名不一致、DAG 依赖写成裸表达式；ShellCheck 只拦 error，工作流内联脚本不在检查范围</td><td><code>pyrightconfig.json</code> 与类型修复，DAG 用 <code>airflow.sdk.chain()</code>，pyright 门禁；逻辑移入 <code>cicd/</code> 后全部 20 个脚本在 warning 级别 0 问题</td></tr>
+      <tr><td>JDK 版本提示</td><td>本机 JDK 25.0.2 触发 Enforcer 的版本提示</td><td>本机升级到 25.0.4.1，版本下限改为强制要求；构建不再输出任何警告</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <h3>A.4 依赖版本</h3>
+  <div class="table-wrap">
+  <table>
+    <caption>核对日期 2026-09-26，来源为 Maven Central、PyPI、npm、Docker Hub 与 GitHub 发布页。</caption>
+    <thead><tr><th>组件</th><th>原版本</th><th>当前版本</th><th>说明</th></tr></thead>
+    <tbody>
+      <tr><td>spotless-maven-plugin</td><td class="money">3.10.0</td><td class="money">3.10.3</td><td></td></tr>
+      <tr><td>maven-compiler-plugin</td><td class="money">3.15.0</td><td class="money">3.16.0</td><td></td></tr>
+      <tr><td>maven-surefire-plugin</td><td class="money">3.5.6</td><td class="money">3.6.0</td><td></td></tr>
+      <tr><td>maven-install-plugin、maven-deploy-plugin</td><td class="money">3.1.4</td><td class="money">3.2.0</td><td></td></tr>
+      <tr><td>scalatest</td><td class="money">3.2.19</td><td class="money">3.2.20</td><td></td></tr>
+      <tr><td>slf4j-api、slf4j-nop；sshd-mina</td><td class="money">—</td><td class="money">2.0.20；2.19.0</td><td>新增，仅测试</td></tr>
+      <tr><td>pyright</td><td class="money">—</td><td class="money">1.1.414</td><td>新增的类型检查门禁，npm 最新版</td></tr>
+      <tr><td>CI Node.js / Python</td><td class="money">22 / 3.12</td><td class="money">24 / 3.13</td><td>Node 当前 Active LTS；Python 与 <code>apache/airflow:3.3.2</code> 镜像一致</td></tr>
+      <tr><td>JDK 下限（Enforcer）</td><td class="money">[25,)</td><td class="money">[25.0.4.1,)</td><td>原先低于 25.0.3 只警告，现为强制要求；25.0.4.1 是 2026-08-18 的 OpenJDK 带外安全更新</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <p class="small muted"><strong>已是最新、未改动：</strong>Java 25 字节码目标、Spark 4.2.0 与 pyspark 4.2.0、Scala 2.13.18、Jackson 2.22.3、JUnit 6.1.3、JSch 2.28.7、Apache MINA SSHD 2.19.0、scopt 4.1.0、Checkstyle 14.1.0、google-java-format 1.36.1、scalafmt 3.11.5、scala-maven-plugin 4.9.10、scalatest-maven-plugin 2.2.0、Maven 3.9.16、Maven Wrapper 3.3.4、Airflow 3.3.2（fab 3.9.0、sftp 6.0.1、ssh 6.0.1、standard 1.19.0）、6 个 GitHub Actions（固定到最新标签的提交 SHA），基础镜像 <code>eclipse-temurin:25-jre</code>（25.0.4.1+1）、<code>postgres:18</code>（18.6）、<code>redis:8</code>。<br>
+  <strong>有意不升级：</strong>Jackson 3.x（Spark 4.2 固定 Jackson 2，混用只增加冲突）；Spark 4.3.0（仅有 RC）；Maven 4（尚未 GA）；PostgreSQL 19（仅有 beta）；Temurin 26（非 LTS，Spark 4.2 支持到 Java 25）。</p>
+</section>
+
+<section id="appendix-audit" aria-labelledby="h-appendix-audit">
+  <h2 id="h-appendix-audit">附录 B　2026-09-25 审计与修复</h2>
+  <p>上一轮从 11 个维度审查全部代码与部署（引擎、IO、Spark、CLI/API、Airflow、部署、构建与 CI、文档、依赖与漏洞、需求覆盖、安全），提出 137 项发现；每项由另一方尝试反驳并复现，驳回 3 项、确认 134 项（中 23、低 99、信息 12），去重后约 100 个独立问题。问题归并为 13 个文件互不重叠的工作包，先写在旧代码上失败的回归测试再修复，经独立审查与集成后审查（确认 14 项，其中 3 项会导致 CI 失败）后推送，CI 五个作业全部通过。</p>
   <div class="table-wrap">
   <table>
     <thead><tr><th>工作包</th><th>代表性问题（修复前）</th><th>处理</th></tr></thead>
@@ -765,8 +1160,8 @@ bash deploy/scripts/compose-up.sh                # 预检机密与端口后启�
       <tr><td class="nowrap">WP-06 Spark</td><td>参数错误在启动 Spark 后才报；HDFS 别名与 glob 绕过重叠检查</td><td>先校验后启动；PathGuards；<code>DATACRAFT_DATA_ROOT</code>；FAILFAST 计数</td></tr>
       <tr><td class="nowrap">WP-07 Airflow</td><td>触发参数中的路径不受限制；SFTP 默认不校验主机密钥</td><td>数据根参数模式；主机密钥守卫；字面参数；3.3.2</td></tr>
       <tr><td class="nowrap">WP-08 容器镜像</td><td>Airflow 3.3.1 / FAB 3.8.0 含认证类 CVE；API 镜像以 root 运行</td><td>3.3.2；UID 10001；<code>.dockerignore</code>；构建前拉取基础镜像</td></tr>
-      <tr><td class="nowrap">WP-09 Compose/Swarm</td><td>缺失密钥时回退弱默认值；管理员密码出现在进程参数</td><td><code>${VAR:?}</code> 失败即停；init 服务；密码经 stdin</td></tr>
-      <tr><td class="nowrap">WP-10 构建</td><td>瘦 jar 缺 <code>Multi-Release</code>，JSch 的 Ed25519/X25519 失效；Checkstyle 9.3 不认新语法；Wrapper 无校验</td><td>MR 清单；Checkstyle 14.1.0；禁用旧版 Jackson；Wrapper 3.3.4 + SHA-256</td></tr>
+      <tr><td class="nowrap">WP-09 Compose/Swarm</td><td>缺失密钥时回退弱默认值；管理员密码出现在进程参数</td><td>缺失即拒绝启动；init 服务；密码经 stdin</td></tr>
+      <tr><td class="nowrap">WP-10 构建</td><td>瘦 jar 缺 <code>Multi-Release</code>，JSch 的 Ed25519/X25519 失效；Checkstyle 9.3 不认新语法；Wrapper 无校验</td><td>Multi-Release 清单；Checkstyle 14.1.0；禁用旧版 Jackson；Wrapper 3.3.4 + SHA-256</td></tr>
       <tr><td class="nowrap">WP-11 CI</td><td>旧版 Actions 仅按标签固定；未断言各模块真的执行了测试</td><td>固定 SHA；ubuntu-24.04；执行数下限；jar 与退出码冒烟</td></tr>
       <tr><td class="nowrap">WP-12 文档</td><td>历史快照被当作当前报告；机器相关路径、错误归因</td><td>统一报告；勘误；文档一致性测试</td></tr>
       <tr><td class="nowrap">WP-13 纯 JVM 作业</td><td>“纯 JVM 覆盖小场景”只有库，没有作业</td><td><code>csv-profile</code>、<code>file-checksum</code>；数据根约束；堆内存预算</td></tr>
@@ -775,8 +1170,8 @@ bash deploy/scripts/compose-up.sh                # 预检机密与端口后启�
   </div>
 </section>
 
-<section id="history" aria-labelledby="h-history">
-  <h2 id="h-history">十一、演进历程</h2>
+<section id="appendix-history" aria-labelledby="h-appendix-history">
+  <h2 id="h-appendix-history">附录 C　演进历程</h2>
   <ol class="timeline">
     <li><time datetime="2025-05-25">2025-05-25</time>项目初始化，合并早期 data-harvester 仓库。</li>
     <li><time datetime="2026-04-08">2026-04-08</time>代码质量初步改进。</li>
@@ -784,12 +1179,12 @@ bash deploy/scripts/compose-up.sh                # 预检机密与端口后启�
     <li><time datetime="2026-08-23">2026-08-23 – 24</time>首份综合复盘；修复并扩展 CI；升级到 JDK 25、Spark 4.2.0、Scala 2.13.18；重做云厂商评估。</li>
     <li><time datetime="2026-09-19">2026-09-19</time>数据处理与 Airflow 执行加固；经济型云部署准备与费用核验。</li>
     <li><time datetime="2026-09-25">2026-09-25</time>11 维审计与 13 个工作包、集成后审查、评估报告 v2.0。</li>
-    <li><time datetime="2026-09-26">2026-09-26</time>目录按职责重组、CI/CD 逻辑独立到 <code>cicd/</code>、告警清零、JDK 25.0.4.1 成为强制下限、依赖核对与升级、文档归档；评估报告 v3.1 合并云平台抉择。</li>
+    <li><time datetime="2026-09-26">2026-09-26</time>目录按职责重组、CI/CD 逻辑独立到 <code>cicd/</code>、警告清零、JDK 25.0.4.1 成为强制下限、依赖核对与升级、文档归档；评估报告 v4.0 按架构、质量、安全、云平台、风险重新组织。</li>
   </ol>
 </section>
 
-<section id="index" aria-labelledby="h-index">
-  <h2 id="h-index">十二、文档索引</h2>
+<section id="appendix-index" aria-labelledby="h-appendix-index">
+  <h2 id="h-appendix-index">附录 D　文档索引</h2>
   <ul class="docs-index">
     <li><a href="../README.md">项目首页</a> <code>docs/README.md</code><br><span class="small muted">概览、目录结构、快速开始、文档地图</span></li>
     <li><a href="../guides/usage.md">使用指南</a> <code>docs/guides/usage.md</code><br><span class="small muted">作业、CLI 参数与退出码、HTTP API</span></li>
@@ -799,10 +1194,10 @@ bash deploy/scripts/compose-up.sh                # 预检机密与端口后启�
     <li><a href="pricing-evidence.md">价格依据</a> <code>docs/reports/pricing-evidence.md</code><br><span class="small muted">价格来源、SKU、算式与核验范围</span></li>
     <li><a href="../CHANGELOG.md">变更记录</a> <code>docs/CHANGELOG.md</code><br><span class="small muted">逐项变更，含破坏性变更标注</span></li>
     <li><a href="../../design/README.md">设计文档索引</a> <code>design/README.md</code><br><span class="small muted">设计原则与各设计文档</span></li>
-    <li><a href="../../design/architecture.md">架构说明</a> <code>design/architecture.md</code><br><span class="small muted">执行主干、模块职责、部署拓扑</span></li>
+    <li><a href="../../design/architecture.md">架构说明</a> <code>design/architecture.md</code><br><span class="small muted">目录结构、模块职责、运行模型、部署拓扑</span></li>
     <li><a href="../../design/data-contracts.md">数据契约</a> <code>design/data-contracts.md</code><br><span class="small muted">参数、写入模式、路径约束、HTTP 状态码</span></li>
     <li><a href="../../design/build-and-quality.md">构建与质量</a> <code>design/build-and-quality.md</code><br><span class="small muted">版本管理、编译与格式、测试、打包、CI 门禁</span></li>
-    <li><a href="../../design/decisions.md">架构决策记录</a> <code>design/decisions.md</code><br><span class="small muted">包括云平台选择</span></li>
+    <li><a href="../../design/decisions.md">架构决策记录</a> <code>design/decisions.md</code><br><span class="small muted">十条决策，包括云平台选择与 CI/CD 独立</span></li>
   </ul>
 </section>
 
@@ -819,10 +1214,145 @@ bash deploy/scripts/compose-up.sh                # 预检机密与端口后启�
   "use strict";
   if (typeof CloudCosts === "undefined") return;
   const costs = CloudCosts;
+  const SVG_NS = "http://www.w3.org/2000/svg";
+  const dollars = (amount) => Number(amount) / 1e10;
+
+  function svg(name, attributes, parent) {
+    const node = document.createElementNS(SVG_NS, name);
+    for (const [key, value] of Object.entries(attributes)) node.setAttribute(key, String(value));
+    parent.append(node);
+    return node;
+  }
+  function label(x, y, content, className, parent, anchor) {
+    const node = svg("text", { x, y, class: className, "text-anchor": anchor || "start" }, parent);
+    node.textContent = content;
+    return node;
+  }
+  function tipRow(tip, key, name, value) {
+    const row = document.createElement("div");
+    row.className = "tip-r";
+    const swatch = document.createElement("span");
+    swatch.className = "key";
+    if (key) swatch.style.setProperty("--k", key);
+    const title = document.createElement("span");
+    title.textContent = name;
+    const amount = document.createElement("span");
+    amount.className = "v";
+    amount.textContent = value;
+    row.append(swatch, title, amount);
+    tip.append(row);
+  }
+  function tipHead(tip, content) {
+    const head = document.createElement("div");
+    head.className = "tip-h";
+    head.textContent = content;
+    tip.append(head);
+  }
+
+  for (const cell of document.querySelectorAll("[data-plan][data-run]")) {
+    cell.textContent = costs.usd(costs.compute(cell.dataset.plan, cell.dataset.run));
+  }
+
+  // ---- Figure 4: monthly cost against hours (Tokyo prices, 20 GB backup) ----
+  const chart = document.getElementById("be-svg");
+  const chartTip = document.getElementById("be-tip");
+  if (chart) {
+    const X0 = 56, X1 = 680, YB = 280, YT = 24, HMAX = 744, VMAX = 50, W = 880, BACKUP = "20";
+    const hx = (h) => X0 + (h / HMAX) * (X1 - X0);
+    const vy = (v) => YB - (v / VMAX) * (YB - YT);
+    const value = (id, h) => costs.lowerBound(id, String(h), BACKUP);
+    const series = [
+      { id: "oracle", name: "OCI A1（按需）", line: "ln-oci", key: "var(--s-oci)" },
+      { id: "tencent", name: "腾讯云 Lighthouse 入门型", line: "ln-tc", key: "var(--s-tc)" },
+      { id: "lightsail", name: "AWS Lightsail 8 GB", line: "ln-ctx", key: "var(--mark-ctx)" },
+      { id: "awsTokyo", name: "EC2 t4g.large 东京（仅算力）", line: "ln-faint", key: "var(--mark-faint)", partial: true },
+    ];
+    const layer = svg("g", {}, chart);
+    for (let v = 0; v <= VMAX; v += 10) {
+      svg("line", { x1: X0, x2: X1, y1: vy(v), y2: vy(v), class: "grid" }, layer);
+      label(X0 - 8, vy(v) + 4, `$${v}`, "tick", layer, "end");
+    }
+    for (let h = 0; h <= 700; h += 100) label(hx(h), YB + 18, String(h), "tick", layer, "middle");
+    label(X1, YB + 36, "运行小时 / 月", "axis-title", layer, "end");
+    label(X0 - 8, 12, "美元 / 月", "axis-title", layer, "end");
+    for (const [h, text, anchor] of [[60, "按需 60 小时", "start"], [730, "常开 730 小时", "end"]]) {
+      svg("line", { x1: hx(h), x2: hx(h), y1: YT, y2: YB, class: "ref" }, layer);
+      label(hx(h) + (anchor === "start" ? 4 : -4), YT - 8, text, "ref-t", layer, anchor);
+    }
+    for (const s of series) {
+      const points = [];
+      for (let h = 0; h <= HMAX; h += 2) {
+        const v = dollars(value(s.id, h));
+        if (v > VMAX) {
+          const previous = dollars(value(s.id, h - 2));
+          const exit = h - 2 + ((VMAX - previous) / (v - previous)) * 2;
+          points.push([hx(exit), YT]);
+          s.exit = exit;
+          break;
+        }
+        points.push([hx(h), vy(v)]);
+      }
+      svg("polyline", { points: points.map((p) => p.join(",")).join(" "), class: `ln ${s.line}` }, layer);
+    }
+    label(X1 + 8, vy(44.15) + 4, "Lightsail 8 GB · $44.15", "lab-2", layer);
+    label(X1 + 8, vy(dollars(value("oracle", HMAX))) + 4, "OCI A1", "lab-2", layer);
+    label(X1 + 8, vy(10.15) + 4, "腾讯云 Lighthouse · $10.15", "lab-2", layer);
+    const ec2 = series[3];
+    if (ec2.exit) label(hx(ec2.exit) + 6, YT + 14, "EC2 t4g.large 东京 ≥", "lab-2", layer);
+    const oci60 = dollars(value("oracle", 60));
+    const oci730 = dollars(value("oracle", 730));
+    svg("circle", { cx: hx(60), cy: vy(oci60), r: 4.5, class: "dot dot-oci" }, layer);
+    label(hx(60) + 9, vy(oci60) - 7, costs.usd(value("oracle", 60)), "lab", layer);
+    svg("circle", { cx: hx(730), cy: vy(oci730), r: 4.5, class: "dot dot-oci" }, layer);
+    label(hx(730) - 8, vy(oci730) + 20, costs.usd(value("oracle", 730)), "lab", layer, "end");
+    svg("circle", { cx: hx(227.5), cy: vy(10.15), r: 5, class: "dot dot-be" }, layer);
+    label(hx(227.5) + 9, vy(10.15) - 9, "持平 227.5 小时", "lab", layer);
+
+    const cross = svg("line", { x1: 0, x2: 0, y1: YT, y2: YB, class: "xh", visibility: "hidden" }, chart);
+    const hit = svg("rect", { x: X0, y: YT, width: X1 - X0, height: YB - YT, class: "hit" }, chart);
+    let current = null;
+    function show(hours) {
+      current = Math.max(0, Math.min(HMAX, Math.round(hours)));
+      const x = hx(current);
+      cross.setAttribute("x1", x);
+      cross.setAttribute("x2", x);
+      cross.setAttribute("visibility", "visible");
+      chartTip.replaceChildren();
+      tipHead(chartTip, `每月运行 ${current} 小时`);
+      for (const s of series) tipRow(chartTip, s.key, s.name, (s.partial ? "≥ " : "") + costs.usd(value(s.id, current)));
+      chartTip.hidden = false;
+      const box = chart.getBoundingClientRect();
+      const scale = box.width / W;
+      let left = x * scale + 14;
+      if (left + chartTip.offsetWidth > box.width) left = x * scale - chartTip.offsetWidth - 14;
+      chartTip.style.left = `${Math.max(0, left)}px`;
+      chartTip.style.top = `${YT * scale}px`;
+    }
+    function hide() {
+      cross.setAttribute("visibility", "hidden");
+      chartTip.hidden = true;
+    }
+    hit.addEventListener("pointermove", (event) => {
+      const box = chart.getBoundingClientRect();
+      const x = ((event.clientX - box.left) / box.width) * W;
+      show(((x - X0) / (X1 - X0)) * HMAX);
+    });
+    hit.addEventListener("pointerleave", hide);
+    chart.addEventListener("focus", () => show(current ?? 228));
+    chart.addEventListener("blur", hide);
+    chart.addEventListener("keydown", (event) => {
+      if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
+      event.preventDefault();
+      const step = (event.shiftKey ? 10 : 1) * (event.key === "ArrowLeft" ? -1 : 1);
+      show((current ?? 228) + step);
+    });
+  }
+
+  // ---- Calculator: monthly cost per plan ----
   const plans = [
-    { name: "腾讯云 Lighthouse 入门型", spec: "2 核 · 8 GB · 80 GB", tokyo: "tencent", singapore: "tencent" },
+    { name: "腾讯云 Lighthouse 入门型", spec: "2 核 · 8 GB · 80 GB", tokyo: "tencent", singapore: "tencent", entity: "tc" },
     { name: "腾讯云 Lighthouse 通用型", spec: "120 GB SSD 档", tokyo: "tencentGeneral", singapore: "tencentGeneral" },
-    { name: "Oracle OCI A1", spec: "2 OCPU · 8 GB · ARM", tokyo: "oracle", singapore: "oracle" },
+    { name: "Oracle OCI A1", spec: "2 OCPU · 8 GB · ARM", tokyo: "oracle", singapore: "oracle", entity: "oci" },
     { name: "AWS Lightsail", spec: "8 GB · IPv4", tokyo: "lightsail", singapore: "lightsail" },
     { name: "Vultr vc2-4c-8gb", spec: "4 vCPU · 8 GB", tokyo: "vultr", singapore: "vultr" },
     { name: "DigitalOcean Basic", spec: "4 vCPU · 8 GiB", singapore: "digitalocean" },
@@ -832,60 +1362,104 @@ bash deploy/scripts/compose-up.sh                # 预检机密与端口后启�
     { name: "GCP e2-standard-2", spec: "仅算力", tokyo: "gcpTokyo", singapore: "gcpSingapore" },
     { name: "Azure B2as v2", spec: "算力 + E6 磁盘", tokyo: "azureTokyo", singapore: "azureSingapore" },
   ];
+  const missing = {
+    awsTokyo: "EBS、公网 IPv4、流量与 CPU 积分", awsSingapore: "EBS、公网 IPv4、流量与 CPU 积分",
+    gcpTokyo: "持久磁盘、外部 IP 与流量", gcpSingapore: "持久磁盘、外部 IP 与流量",
+    azureTokyo: "磁盘操作、公网 IP 与流量", azureSingapore: "磁盘操作、公网 IP 与流量",
+    hetzner: "IPv4、VAT 与超额流量",
+  };
   const regionNames = { tokyo: "东京", singapore: "新加坡" };
+  const keys = { oci: "var(--s-oci)", tc: "var(--s-tc)" };
   const hours = document.getElementById("calc-hours");
   const backup = document.getElementById("calc-backup");
-  const chart = document.getElementById("calc-chart");
+  const list = document.getElementById("calc-chart");
   const axis = document.getElementById("calc-axis");
   const plot = document.getElementById("calc-plot");
   const summary = document.getElementById("calc-summary");
   const error = document.getElementById("calc-error");
-  const dollars = (amount) => Number(amount) / 1e10;
+  const calc = list.closest(".calc");
+  const calcTip = document.getElementById("calc-tip");
 
   function region() {
     const checked = document.querySelector('input[name="calc-region"]:checked');
     return checked ? checked.value : "tokyo";
   }
 
+  function showBreakdown(row, plan) {
+    const h = hours.value.trim();
+    const gb = backup.value.trim();
+    const rate = costs.rates[plan.id];
+    const key = keys[plan.entity] || (plan.complete ? "var(--mark-ctx)" : "var(--mark-faint)");
+    calcTip.replaceChildren();
+    tipHead(calcTip, `${plan.name} · ${plan.spec}`);
+    tipRow(calcTip, key, rate.monthly ? "套餐" : `算力 ${h} 小时`, costs.usd(costs.compute(plan.id, h)));
+    if (rate.disk && rate.disk !== "0") tipRow(calcTip, key, "磁盘（整月）", costs.usd(costs.decimal(rate.disk)));
+    tipRow(calcTip, key, `备份 R2（${gb} GB）`, costs.usd(costs.backup(gb)));
+    tipRow(calcTip, "", plan.complete ? "合计" : "已知部分合计", (plan.complete ? "" : "≥ ") + costs.usd(plan.amount));
+    if (!plan.complete) {
+      const note = document.createElement("div");
+      note.className = "tip-note";
+      note.textContent = `未含：${missing[plan.id] || "未核定的附加费"}`;
+      calcTip.append(note);
+    }
+    calcTip.hidden = false;
+    const track = row.querySelector(".bar-track");
+    calcTip.style.top = `${row.offsetTop + row.offsetHeight + 4}px`;
+    calcTip.style.left = `${Math.min(track.offsetLeft + row.offsetLeft, calc.clientWidth - calcTip.offsetWidth - 8)}px`;
+  }
+  function hideBreakdown() {
+    calcTip.hidden = true;
+  }
+
   function barRow(plan, top, best) {
     const row = document.createElement("li");
-    row.className = "bar-row" + (plan.complete ? "" : " is-partial") + (best ? " is-best" : "");
-    const label = document.createElement("span");
-    label.className = "bar-label";
+    row.className = "bar-row" + (plan.complete ? "" : " is-partial") + (plan.entity ? ` is-${plan.entity}` : "") + (best ? " is-best" : "");
+    row.tabIndex = 0;
+    row.setAttribute("aria-label", `${plan.name}：${plan.complete ? "" : "至少 "}${costs.usd(plan.amount)}`);
+    const name = document.createElement("span");
+    name.className = "bar-label";
     const spec = document.createElement("small");
     spec.textContent = plan.spec;
-    label.append(plan.name, spec);
+    name.append(plan.name, spec);
     const track = document.createElement("span");
     track.className = "bar-track";
     const bar = document.createElement("span");
     bar.className = "bar";
     bar.style.width = `${Math.min(100, (dollars(plan.amount) / top) * 100)}%`;
     track.append(bar);
-    const value = document.createElement("span");
-    value.className = "bar-value";
-    value.textContent = (plan.complete ? "" : "≥ ") + costs.usd(plan.amount);
-    row.append(label, track, value);
+    const amount = document.createElement("span");
+    amount.className = "bar-value";
+    if (best) {
+      const tag = document.createElement("span");
+      tag.className = "best-tag";
+      tag.textContent = "最低";
+      amount.append(tag);
+    }
+    amount.append((plan.complete ? "" : "≥ ") + costs.usd(plan.amount));
+    row.append(name, track, amount);
+    row.addEventListener("pointerenter", () => showBreakdown(row, plan));
+    row.addEventListener("pointerleave", hideBreakdown);
+    row.addEventListener("focus", () => showBreakdown(row, plan));
+    row.addEventListener("blur", hideBreakdown);
     return row;
   }
 
   function render() {
     error.textContent = "";
+    hideBreakdown();
     const where = region();
     let rows;
     try {
       rows = plans.filter((plan) => plan[where]).map((plan) => {
-        const rate = costs.rates[plan[where]];
-        return {
-          ...plan,
-          complete: rate.complete && rate.disk !== null,
-          amount: costs.lowerBound(plan[where], hours.value.trim(), backup.value.trim()),
-        };
+        const id = plan[where];
+        const rate = costs.rates[id];
+        return { ...plan, id, complete: rate.complete && rate.disk !== null, amount: costs.lowerBound(id, hours.value.trim(), backup.value.trim()) };
       });
     } catch (e) {
       if (!(e instanceof RangeError)) throw e;
       error.textContent = e.message;
       summary.textContent = "";
-      chart.replaceChildren();
+      list.replaceChildren();
       axis.replaceChildren();
       return;
     }
@@ -895,7 +1469,7 @@ bash deploy/scripts/compose-up.sh                # 预检机密与端口后启�
     const top = Math.max(step, Math.ceil(max / step) * step);
     plot.style.setProperty("--intervals", String(top / step));
     const best = rows.find((row) => row.complete);
-    chart.replaceChildren(...rows.map((row) => barRow(row, top, row === best)));
+    list.replaceChildren(...rows.map((row) => barRow(row, top, row === best)));
     axis.replaceChildren(...Array.from({ length: top / step + 1 }, (_, index) => {
       const tick = document.createElement("span");
       tick.style.left = `${((index * step) / top) * 100}%`;
@@ -903,19 +1477,13 @@ bash deploy/scripts/compose-up.sh                # 预检机密与端口后启�
       return tick;
     }));
     summary.textContent = best
-      ? `在${regionNames[where]}、每月运行 ${hours.value.trim()} 小时、备份 ${backup.value.trim()} GB 时，` +
-        `完整月费最低的是 ${best.name}：${costs.usd(best.amount)}。`
+      ? `在${regionNames[where]}、每月运行 ${hours.value.trim()} 小时、备份 ${backup.value.trim()} GB 时，完整月费最低的是 ${best.name}：${costs.usd(best.amount)}。`
       : "";
   }
 
-  for (const cell of document.querySelectorAll("[data-plan][data-run]")) {
-    cell.textContent = costs.usd(costs.compute(cell.dataset.plan, cell.dataset.run));
-  }
   hours.addEventListener("input", render);
   backup.addEventListener("input", render);
-  for (const radio of document.querySelectorAll('input[name="calc-region"]')) {
-    radio.addEventListener("change", render);
-  }
+  for (const radio of document.querySelectorAll('input[name="calc-region"]')) radio.addEventListener("change", render);
   for (const button of document.querySelectorAll("button[data-preset-hours]")) {
     button.addEventListener("click", () => {
       hours.value = button.dataset.presetHours;

@@ -64,8 +64,14 @@ action from developers or from scripts that drive the build.
   evaluation report and `pricing-evidence.md` (Chinese), with the calculator at
   `docs/reports/assets/cloud-costs.js` (both formerly in `docs/deployment/`).
 - The evaluation report moved from `PROJECT-REVIEW.html` to `docs/reports/evaluation-report.html`
-  and was rewritten as version 3.0, the single Chinese report: it also carries the cloud platform
-  decision and the interactive cost calculator from `CLOUD-DEPLOYMENT-ANALYSIS.html`.
+  and was rewritten as version 4.0, the single Chinese report, which absorbs the cloud platform
+  decision and the interactive cost calculator from `CLOUD-DEPLOYMENT-ANALYSIS.html`. It is
+  organised as executive summary, scope and method, technical architecture (inline diagrams of
+  the runtime view, the enforced module layers and the single-host deployment), quality and
+  verification, security, the cloud platform analysis (constraints, candidate prices, a
+  break-even chart with crossover hours, qualitative factors, sensitivity analysis, selection
+  rules and pre-purchase acceptance checks), scores and risks; this round's details and the
+  history are appendices.
 - `docs/reports/assets/cloud-costs.js` is a pure calculation module (a browser global
   `CloudCosts` and a CommonJS export); the report page owns all DOM wiring.
 - Dependency updates: spotless-maven-plugin 3.10.0 -> 3.10.3, maven-compiler-plugin 3.15.0 ->

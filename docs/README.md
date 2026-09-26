@@ -116,6 +116,6 @@ Swarm, is in Chinese: [guides/deployment.md](guides/deployment.md).
 | [guides/development.md](guides/development.md) | English | Prerequisites, build and test commands, test layout, CI and the `cicd/` scripts |
 | [guides/airflow.md](guides/airflow.md) | English | DAGs, Airflow configuration, SFTP connection, Airflow tests |
 | [guides/deployment.md](guides/deployment.md) | Chinese | Compose and Swarm deployment tutorial and operations |
-| [reports/evaluation-report.html](reports/evaluation-report.html) | Chinese | Consolidated evaluation report, including the cloud platform decision and a cost calculator |
+| [reports/evaluation-report.html](reports/evaluation-report.html) | Chinese | Consolidated evaluation report: architecture, quality evidence, security, the cloud platform decision with its cost model and calculator, scores and risks |
 | [reports/pricing-evidence.md](reports/pricing-evidence.md) | Chinese | Sources and calculations behind the cloud prices |
 | [CHANGELOG.md](CHANGELOG.md) | English | Change history |
