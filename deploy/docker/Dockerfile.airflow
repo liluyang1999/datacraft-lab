@@ -8,7 +8,7 @@
 #
 # Spark jobs run in local mode via spark-submit inside this image. For a real Spark cluster, set
 # DATACRAFT_SPARK_MASTER to the cluster URL; the driver then runs here in client mode, so the cluster
-# also needs data paths the driver and every executor can reach (orchestration/airflow/README.md).
+# also needs data paths the driver and every executor can reach (docs/guides/airflow.md).
 # No DAG or service runs the separate datacraft/spark image.
 
 # No default: build-images.sh passes the locally built builder. A bare name here would resolve to

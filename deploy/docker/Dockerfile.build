@@ -12,18 +12,19 @@ WORKDIR /workspace
 
 # 1) Copy only the POMs first so dependency resolution is cached independently of source changes.
 COPY pom.xml ./
-COPY datacraft-common/pom.xml datacraft-common/
-COPY datacraft-config/pom.xml datacraft-config/
-COPY datacraft-io/pom.xml datacraft-io/
-COPY datacraft-engine/pom.xml datacraft-engine/
-COPY datacraft-jobs/pom.xml datacraft-jobs/
-COPY datacraft-spark/pom.xml datacraft-spark/
-COPY datacraft-api/pom.xml datacraft-api/
-COPY datacraft-cli/pom.xml datacraft-cli/
-RUN mvn -B -ntp -pl datacraft-cli -am dependency:go-offline -DskipTests || true
+COPY modules/core/datacraft-common/pom.xml modules/core/datacraft-common/
+COPY modules/core/datacraft-config/pom.xml modules/core/datacraft-config/
+COPY modules/io/datacraft-io/pom.xml modules/io/datacraft-io/
+COPY modules/core/datacraft-engine/pom.xml modules/core/datacraft-engine/
+COPY modules/processing/datacraft-jobs/pom.xml modules/processing/datacraft-jobs/
+COPY modules/processing/datacraft-spark/pom.xml modules/processing/datacraft-spark/
+COPY modules/interfaces/datacraft-api/pom.xml modules/interfaces/datacraft-api/
+COPY modules/interfaces/datacraft-cli/pom.xml modules/interfaces/datacraft-cli/
+RUN mvn -B -ntp -pl :datacraft-cli -am dependency:go-offline || true
 
 # 2) Copy sources and build the shaded jar (Spark stays provided, so the jar is a few MB).
 COPY . .
-RUN mvn -B -ntp -pl datacraft-cli -am package -DskipTests \
+# Tests run in CI and locally from tests/; the image build skips compiling them (not in the context).
+RUN mvn -B -ntp -pl :datacraft-cli -am package -Dmaven.test.skip=true \
     && mkdir -p /dist \
-    && cp datacraft-cli/target/datacraft-cli.jar /dist/datacraft-cli.jar
+    && cp modules/interfaces/datacraft-cli/target/datacraft-cli.jar /dist/datacraft-cli.jar

@@ -21,6 +21,8 @@ jobs:
     name: Build & verify (JDK 25)
     runs-on: ubuntu-24.04
     timeout-minutes: 30
+    env:
+      CLI_JAR: modules/interfaces/datacraft-cli/target/datacraft-cli.jar
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
@@ -67,7 +69,7 @@ jobs:
       # none, so a renamed class, a provider mismatch or a misfiring cancel could silently shrink a
       # suite. Skipped, aborted and canceled tests do not count; floors are minimums.
       - name: Assert every module executed its tests
-        run: python3 -B .github/scripts/check_test_counts.py .
+        run: python3 -B tests/ci/check_test_counts.py .
 
       # SparkPipelineSpec boots a real SparkSession, so it is what proves Spark 4.2.0 actually
       # runs on JDK 25. It self-cancels on hosts that cannot open NIO selectors, and a canceled
@@ -75,7 +77,7 @@ jobs:
       # proven here. Fail loudly instead.
       - name: Assert the Spark suite really ran
         run: |
-          REPORT=datacraft-spark/target/surefire-reports/datacraft-spark-scalatest.txt
+          REPORT=modules/processing/datacraft-spark/target/surefire-reports/datacraft-spark-scalatest.txt
           test -f "$REPORT" || { echo "::error::scalatest report not found at $REPORT"; exit 1; }
           grep -q "SparkPipelineSpec" "$REPORT" || { echo "::error::SparkPipelineSpec never ran"; exit 1; }
           if ! grep -q "canceled 0," "$REPORT"; then
@@ -89,7 +91,7 @@ jobs:
       # (Spark is a provided dependency; these commands must not need it).
       - name: Smoke-test the CLI jar
         run: |
-          JAR=datacraft-cli/target/datacraft-cli.jar
+          JAR="$CLI_JAR"
           test -f "$JAR" || { echo "CLI jar missing at $JAR"; exit 1; }
           java -jar "$JAR" --command list-jobs
           java -jar "$JAR" --command echo --param message=ci
@@ -109,7 +111,7 @@ jobs:
       # as the fat jar's module descriptor. The probe exercises the algorithms from the jar itself.
       - name: Check the shaded jar is Multi-Release and exposes JSch's modern algorithms
         run: |
-          JAR=datacraft-cli/target/datacraft-cli.jar
+          JAR="$CLI_JAR"
           manifest=$(unzip -p "$JAR" META-INF/MANIFEST.MF | tr -d '\r')
           echo "$manifest"
           if ! grep -qx 'Multi-Release: true' <<<"$manifest"; then
@@ -119,13 +121,13 @@ jobs:
           if grep -E '(^|/)module-info\.class$' <<<"$entries"; then
             echo "::error::$JAR must not contain module-info.class entries"; exit 1
           fi
-          java -cp "$JAR" .github/scripts/JschAlgorithmsProbe.java
+          java -cp "$JAR" tests/ci/JschAlgorithmsProbe.java
 
       # pom.xml's jackson.version drives the Jackson BOM; the fat jar must bundle exactly that
       # jackson-core and jackson-databind, not an older copy shaded in from another dependency.
       - name: Check the shaded jar bundles the managed Jackson version
         run: |
-          JAR=datacraft-cli/target/datacraft-cli.jar
+          JAR="$CLI_JAR"
           expected=$(sed -n 's:^[[:space:]]*<jackson\.version>\([^<]*\)</jackson\.version>[[:space:]]*$:\1:p' pom.xml)
           if [ -z "$expected" ] || [ "$(wc -l <<<"$expected")" -ne 1 ]; then
             echo "::error::pom.xml must define exactly one jackson.version property"; exit 1
@@ -143,7 +145,7 @@ jobs:
       # still written, 2 = unknown command or bad arguments. Neither may be an uncaught exception.
       - name: Check CLI exit codes and failure results
         run: |
-          JAR=datacraft-cli/target/datacraft-cli.jar
+          JAR="$CLI_JAR"
           OUT="$RUNNER_TEMP/cli-exit-codes"
           mkdir -p "$OUT"
           expect_exit() {
@@ -182,7 +184,7 @@ jobs:
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: verified-cli
-          path: datacraft-cli/target/datacraft-cli.jar
+          path: ${{ env.CLI_JAR }}
           retention-days: 1
 
   dags:
@@ -197,15 +199,17 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
+      # apache/airflow:3.3.2 runs Python 3.13; the constraints file below names the same version
+      # (tests/docs checks that they agree).
       - name: Set up Python
         uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
-          python-version: "3.12"
+          python-version: "3.13"
 
       - name: Install constrained Airflow and providers
         run: |
           python -m pip install 'apache-airflow==3.3.2' -r orchestration/airflow/requirements.txt \
-            --constraint https://raw.githubusercontent.com/apache/airflow/constraints-3.3.2/constraints-3.12.txt
+            --constraint https://raw.githubusercontent.com/apache/airflow/constraints-3.3.2/constraints-3.13.txt
           python -m pip check
 
       - name: Set up the packaged job runtime
@@ -242,10 +246,10 @@ jobs:
           EOF
 
       - name: Verify real DAG parsing and task execution boundaries
-        run: python -B -m unittest discover -s orchestration/airflow/tests -v
+        run: python -B -m unittest discover -s tests/orchestration -v
 
       - name: Execute packaged engine, ETL retry and SFTP pipelines
-        run: python -B orchestration/airflow/tests/runtime_smoke.py --jar target/runtime/datacraft-cli.jar
+        run: python -B tests/smoke/airflow_runtime_smoke.py --jar target/runtime/datacraft-cli.jar
 
       - name: Remove isolated Airflow state
         if: always()
@@ -272,16 +276,16 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
-          python-version: "3.12"
+          python-version: "3.13"
 
       - name: Set up Node.js
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
-          node-version: "22"
+          node-version: "24"
 
       - name: Bash syntax check
         run: |
-          for f in deploy/scripts/*.sh deploy/tests/*.sh; do
+          for f in deploy/scripts/*.sh tests/smoke/*.sh; do
             echo "checking $f"
             bash -n "$f"
           done
@@ -291,7 +295,7 @@ jobs:
           if ! command -v shellcheck >/dev/null 2>&1; then
             sudo apt-get update -qq && sudo apt-get install -y -qq shellcheck
           fi
-          shellcheck --severity=error deploy/scripts/*.sh deploy/tests/*.sh
+          shellcheck --severity=error deploy/scripts/*.sh tests/smoke/*.sh
 
       - name: Record toolchain versions
         run: |
@@ -299,11 +303,22 @@ jobs:
           node --version
           shellcheck --version
 
-      - name: Verify initialization failure and retry behavior
-        run: python3 -B -m unittest discover -s deploy/tests -v
+      - name: Deployment script and template tests
+        run: python3 -B -m unittest discover -s tests/deploy -v
 
-      - name: Verify cloud cost calculations
-        run: node --test deploy/tests/cloud-costs.test.cjs
+      - name: CI tooling tests
+        run: python3 -B -m unittest discover -s tests/ci -v
+
+      - name: Documentation consistency tests
+        run: python3 -B -m unittest discover -s tests/docs -v
+
+      - name: Cloud cost calculator tests
+        run: node --test tests/docs/cloud-costs.test.cjs
+
+      # pyrightconfig.json analyses everything as Linux / Python 3.12; the Airflow-only imports are
+      # not reported here and are covered by the dags job, which installs Airflow.
+      - name: Python type check (pyright, zero diagnostics)
+        run: npx --yes pyright@1.1.410 --warnings
 
   compose:
     # Validates the deployment topology definitions only. Nothing is built or deployed.
@@ -366,6 +381,6 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Build images and run packaged API and Airflow pipelines
-        run: bash deploy/tests/container_smoke.sh
+        run: bash tests/smoke/container_smoke.sh
       - name: Verify the complete Compose stack and metadata backup recovery
-        run: bash deploy/tests/compose_smoke.sh
+        run: bash tests/smoke/compose_smoke.sh

@@ -1,16 +1,13 @@
-!.mvn/
+### Build output ###
 **/target/
-!**/src/main/**/target/
-!**/src/test/**/target/
+build/
+/dist/
 
-### IntelliJ IDEA ###
-/target/
+### IDEs ###
 /.idea/
 *.iws
 *.iml
 *.ipr
-
-### Eclipse ###
 .apt_generated
 .classpath
 .factorypath
@@ -18,18 +15,10 @@
 .settings
 .springBeans
 .sts4-cache
-
-### NetBeans ###
 /nbproject/private/
 /nbbuild/
-/dist/
 /nbdist/
 /.nb-gradle/
-build/
-!**/src/main/**/build/
-!**/src/test/**/build/
-
-### VS Code ###
 .vscode/
 
 ### datacraft runtime ###
@@ -47,7 +36,7 @@ build/
 **/.env
 !**/.env.example
 
-### Python (Airflow DAG tooling) ###
+### Python (Airflow DAG tooling and tests) ###
 .venv/
 __pycache__/
 *.py[cod]

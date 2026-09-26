@@ -21,21 +21,28 @@
         <tag>HEAD</tag>
     </scm>
 
+    <!-- Source modules are grouped by responsibility; design/architecture.md lists what each module
+         owns and which project modules it may depend on (enforced per module by the Enforcer). -->
     <modules>
-        <module>datacraft-common</module>
-        <module>datacraft-config</module>
-        <module>datacraft-io</module>
-        <module>datacraft-engine</module>
-        <module>datacraft-jobs</module>
-        <module>datacraft-spark</module>
-        <module>datacraft-api</module>
-        <module>datacraft-cli</module>
+        <module>modules/core/datacraft-common</module>
+        <module>modules/core/datacraft-config</module>
+        <module>modules/io/datacraft-io</module>
+        <module>modules/core/datacraft-engine</module>
+        <module>modules/processing/datacraft-jobs</module>
+        <module>modules/processing/datacraft-spark</module>
+        <module>modules/interfaces/datacraft-api</module>
+        <module>modules/interfaces/datacraft-cli</module>
     </modules>
 
     <properties>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
         <project.build.outputTimestamp>2026-01-01T00:00:00Z</project.build.outputTimestamp>
+
+        <!-- Repository root (the directory holding .mvn). Tests live outside the modules, in
+             tests/jvm/<artifactId>/{java,scala,resources}, so every module resolves them from here. -->
+        <datacraft.root>${maven.multiModuleProjectDirectory}</datacraft.root>
+        <datacraft.tests.dir>${datacraft.root}/tests/jvm/${project.artifactId}</datacraft.tests.dir>
 
         <java.version>25</java.version>
         <maven.compiler.release>${java.version}</maven.compiler.release>
@@ -49,31 +56,45 @@
              'bundled-spark' profile flips this to compile to produce a self-contained local jar. -->
         <spark.scope>provided</spark.scope>
 
-        <!-- JPMS openings Spark needs when embedded in a test JVM. spark-submit injects the
-             equivalent set automatically at runtime, so this is only required for tests. -->
-        <spark.test.jvm.args>-XX:+IgnoreUnrecognizedVMOptions --add-opens=java.base/java.lang=ALL-UNNAMED --add-opens=java.base/java.lang.invoke=ALL-UNNAMED --add-opens=java.base/java.lang.reflect=ALL-UNNAMED --add-opens=java.base/java.io=ALL-UNNAMED --add-opens=java.base/java.net=ALL-UNNAMED --add-opens=java.base/java.nio=ALL-UNNAMED --add-opens=java.base/java.util=ALL-UNNAMED --add-opens=java.base/java.util.concurrent=ALL-UNNAMED --add-opens=java.base/java.util.concurrent.atomic=ALL-UNNAMED --add-opens=java.base/jdk.internal.ref=ALL-UNNAMED --add-opens=java.base/sun.nio.ch=ALL-UNNAMED --add-opens=java.base/sun.nio.cs=ALL-UNNAMED --add-opens=java.base/sun.security.action=ALL-UNNAMED --add-opens=java.base/sun.util.calendar=ALL-UNNAMED -Djdk.reflect.useDirectMethodHandle=false -Dio.netty.tryReflectionSetAccessible=true</spark.test.jvm.args>
+        <!-- JVM options a test JVM that embeds Spark needs: the java.base opens and JDK 24+ access
+             flags from Spark 4.2's own launcher (org.apache.spark.launcher.JavaModuleOptions).
+             Left out: the sun.security.action open (JDK 25 no longer has the package), the
+             jdk.incubator.vector module (it prints an incubator warning), the Kerberos open and the
+             Netty allocator and TLS defaults, which the tests do not use. spark-submit applies the
+             launcher's full list at runtime. -->
+        <spark.test.jvm.args>-XX:+IgnoreUnrecognizedVMOptions --add-opens=java.base/java.lang=ALL-UNNAMED --add-opens=java.base/java.lang.invoke=ALL-UNNAMED --add-opens=java.base/java.lang.reflect=ALL-UNNAMED --add-opens=java.base/java.io=ALL-UNNAMED --add-opens=java.base/java.net=ALL-UNNAMED --add-opens=java.base/java.nio=ALL-UNNAMED --add-opens=java.base/java.util=ALL-UNNAMED --add-opens=java.base/java.util.concurrent=ALL-UNNAMED --add-opens=java.base/java.util.concurrent.atomic=ALL-UNNAMED --add-opens=java.base/jdk.internal.ref=ALL-UNNAMED --add-opens=java.base/sun.nio.ch=ALL-UNNAMED --add-opens=java.base/sun.nio.cs=ALL-UNNAMED --add-opens=java.base/sun.util.calendar=ALL-UNNAMED --sun-misc-unsafe-memory-access=allow --enable-native-access=ALL-UNNAMED -Dio.netty.tryReflectionSetAccessible=true</spark.test.jvm.args>
 
-        <!-- NIO selectors create an AF_UNIX wakeup socket in this directory. Some Windows profile
-             TEMP trees cannot host AF_UNIX sockets, which breaks HttpServer and Spark tests there;
-             the module build directory works on every OS. -->
-        <test.nio.jvm.args>-Djdk.net.unixdomain.tmpdir=${project.build.directory}</test.nio.jvm.args>
+        <!-- Options for every test JVM. NIO selectors create an AF_UNIX wakeup socket in
+             jdk.net.unixdomain.tmpdir: some Windows profile TEMP trees cannot host one, which breaks
+             HttpServer and Spark tests, so the module build directory is used on every OS. Logging
+             is quiet (tests assert the failures they provoke); datacraft.test.log.level=info turns
+             Spark's Log4j output back on. -->
+        <datacraft.test.log.level>off</datacraft.test.log.level>
+        <test.jvm.args>-Djdk.net.unixdomain.tmpdir=${project.build.directory} -Djava.util.logging.config.file=${datacraft.root}/tests/jvm/resources/logging.properties -Ddatacraft.test.log.level=${datacraft.test.log.level}</test.jvm.args>
+
+        <!-- Platform-specific tests are tagged: posix-only (symbolic links without privilege, '?'
+             in file names, Hadoop local writes without winutils) and windows-only (NTFS junctions).
+             The windows-host and posix-host profiles exclude the other platform's tag, so no test
+             reports as skipped or canceled; Linux CI runs every posix-only test. -->
+        <test.excluded.tags></test.excluded.tags>
 
         <!-- A module whose JUnit tests all vanish (renamed class, provider mismatch) fails instead of
-             passing green. Wired into surefire only: failsafe reads the bare failIfNoTests property
-             and no module has *IT classes. Modules tested through scalatest set this to false. An
-             ad-hoc multi-module -Dtest=... run also needs -Dsurefire.failIfNoTests=false (with
+             passing green. Modules tested through scalatest skip Surefire (surefire.skip). An ad-hoc
+             multi-module -Dtest=... run also needs -Dsurefire.failIfNoTests=false (with
              -Dsurefire.failIfNoSpecifiedTests=false) for modules without a matching test. -->
         <surefire.failIfNoTests>true</surefire.failIfNoTests>
+        <surefire.skip>false</surefire.skip>
 
         <jackson.version>2.22.3</jackson.version>
         <jsch.version>2.28.7</jsch.version>
         <junit.jupiter.version>6.1.3</junit.jupiter.version>
         <scala.maven.plugin.version>4.9.10</scala.maven.plugin.version>
-        <scalatest.version>3.2.19</scalatest.version>
+        <scalatest.version>3.2.20</scalatest.version>
         <scalatest.maven.plugin.version>2.2.0</scalatest.maven.plugin.version>
         <scopt.version>4.1.0</scopt.version>
-        <spotless.version>3.10.0</spotless.version>
+        <spotless.version>3.10.3</spotless.version>
         <sshd.version>2.19.0</sshd.version>
+        <slf4j.version>2.0.20</slf4j.version>
         <google.java.format.version>1.36.1</google.java.format.version>
         <!-- Checkstyle engine run by maven-checkstyle-plugin. The plugin's default engine (9.3)
              cannot parse Java 21/25 syntax such as record patterns, guarded switch labels and
@@ -81,19 +102,16 @@
         <checkstyle.version>14.1.0</checkstyle.version>
         <maven.clean.plugin.version>3.5.0</maven.clean.plugin.version>
         <maven.checkstyle.plugin.version>3.6.0</maven.checkstyle.plugin.version>
-        <maven.compiler.plugin.version>3.15.0</maven.compiler.plugin.version>
+        <maven.compiler.plugin.version>3.16.0</maven.compiler.plugin.version>
         <maven.dependency.plugin.version>3.11.0</maven.dependency.plugin.version>
-        <maven.deploy.plugin.version>3.1.4</maven.deploy.plugin.version>
+        <maven.deploy.plugin.version>3.2.0</maven.deploy.plugin.version>
         <maven.enforcer.plugin.version>3.6.3</maven.enforcer.plugin.version>
-        <maven.failsafe.plugin.version>3.5.6</maven.failsafe.plugin.version>
-        <maven.install.plugin.version>3.1.4</maven.install.plugin.version>
+        <maven.install.plugin.version>3.2.0</maven.install.plugin.version>
         <maven.jar.plugin.version>3.5.1</maven.jar.plugin.version>
-        <maven.javadoc.plugin.version>3.12.0</maven.javadoc.plugin.version>
         <maven.resources.plugin.version>3.5.0</maven.resources.plugin.version>
         <maven.shade.plugin.version>3.6.2</maven.shade.plugin.version>
         <maven.site.plugin.version>3.22.0</maven.site.plugin.version>
-        <maven.source.plugin.version>3.4.0</maven.source.plugin.version>
-        <maven.surefire.plugin.version>3.5.6</maven.surefire.plugin.version>
+        <maven.surefire.plugin.version>3.6.0</maven.surefire.plugin.version>
     </properties>
 
     <dependencyManagement>
@@ -154,10 +172,40 @@
                 <version>${sshd.version}</version>
                 <scope>test</scope>
             </dependency>
+            <!-- Selector-based transport for that test server: sshd's default NIO2 transport races its
+                 own executor shutdown against Windows IOCP completions and prints uncaught errors. -->
+            <dependency>
+                <groupId>org.apache.sshd</groupId>
+                <artifactId>sshd-mina</artifactId>
+                <version>${sshd.version}</version>
+                <scope>test</scope>
+            </dependency>
+            <!-- sshd logs through SLF4J; tests bind it to the no-op provider (one API line, 2.x). -->
+            <dependency>
+                <groupId>org.slf4j</groupId>
+                <artifactId>slf4j-api</artifactId>
+                <version>${slf4j.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.slf4j</groupId>
+                <artifactId>slf4j-nop</artifactId>
+                <version>${slf4j.version}</version>
+                <scope>test</scope>
+            </dependency>
         </dependencies>
     </dependencyManagement>
 
     <build>
+        <!-- scala-maven-plugin derives its test directory as ${project.build.testSourceDirectory}/../scala. -->
+        <testSourceDirectory>${datacraft.tests.dir}/java</testSourceDirectory>
+        <testResources>
+            <testResource>
+                <directory>${datacraft.tests.dir}/resources</directory>
+            </testResource>
+            <testResource>
+                <directory>${datacraft.root}/tests/jvm/resources</directory>
+            </testResource>
+        </testResources>
         <pluginManagement>
             <plugins>
                 <plugin>
@@ -181,6 +229,11 @@
                         <release>${maven.compiler.release}</release>
                         <parameters>${maven.compiler.parameters}</parameters>
                         <showWarnings>${maven.compiler.showWarnings}</showWarnings>
+                        <!-- Every javac lint category is on and any warning fails the build. -->
+                        <compilerArgs>
+                            <arg>-Xlint:all</arg>
+                        </compilerArgs>
+                        <failOnWarning>true</failOnWarning>
                     </configuration>
                 </plugin>
                 <plugin>
@@ -196,6 +249,8 @@
                             <arg>-feature</arg>
                             <arg>-unchecked</arg>
                             <arg>-Xlint</arg>
+                            <!-- Any scalac warning fails the build, like javac's failOnWarning. -->
+                            <arg>-Werror</arg>
                         </args>
                     </configuration>
                     <executions>
@@ -212,7 +267,8 @@
                     <artifactId>scalatest-maven-plugin</artifactId>
                     <version>${scalatest.maven.plugin.version}</version>
                     <configuration>
-                        <argLine>${test.nio.jvm.args}</argLine>
+                        <argLine>${test.jvm.args}</argLine>
+                        <tagsToExclude>${test.excluded.tags}</tagsToExclude>
                         <reportsDirectory>${project.build.directory}/surefire-reports</reportsDirectory>
                         <junitxml>.</junitxml>
                         <filereports>${project.artifactId}-scalatest.txt</filereports>
@@ -231,27 +287,12 @@
                     <artifactId>maven-surefire-plugin</artifactId>
                     <version>${maven.surefire.plugin.version}</version>
                     <configuration>
-                        <argLine>${test.nio.jvm.args}</argLine>
+                        <argLine>${test.jvm.args}</argLine>
+                        <excludedGroups>${test.excluded.tags}</excludedGroups>
                         <failIfNoTests>${surefire.failIfNoTests}</failIfNoTests>
+                        <skip>${surefire.skip}</skip>
                         <trimStackTrace>false</trimStackTrace>
                         <useModulePath>false</useModulePath>
-                        <excludes>
-                            <exclude>**/*IT.java</exclude>
-                            <exclude>**/*ITCase.java</exclude>
-                        </excludes>
-                    </configuration>
-                </plugin>
-                <plugin>
-                    <groupId>org.apache.maven.plugins</groupId>
-                    <artifactId>maven-failsafe-plugin</artifactId>
-                    <version>${maven.failsafe.plugin.version}</version>
-                    <configuration>
-                        <trimStackTrace>false</trimStackTrace>
-                        <useModulePath>false</useModulePath>
-                        <includes>
-                            <include>**/*IT.java</include>
-                            <include>**/*ITCase.java</include>
-                        </includes>
                     </configuration>
                 </plugin>
                 <plugin>
@@ -271,24 +312,6 @@
                     <groupId>org.apache.maven.plugins</groupId>
                     <artifactId>maven-shade-plugin</artifactId>
                     <version>${maven.shade.plugin.version}</version>
-                </plugin>
-                <plugin>
-                    <groupId>org.apache.maven.plugins</groupId>
-                    <artifactId>maven-source-plugin</artifactId>
-                    <version>${maven.source.plugin.version}</version>
-                    <configuration>
-                        <includePom>true</includePom>
-                    </configuration>
-                </plugin>
-                <plugin>
-                    <groupId>org.apache.maven.plugins</groupId>
-                    <artifactId>maven-javadoc-plugin</artifactId>
-                    <version>${maven.javadoc.plugin.version}</version>
-                    <configuration>
-                        <doclint>all,-missing</doclint>
-                        <quiet>true</quiet>
-                        <source>${maven.compiler.release}</source>
-                    </configuration>
                 </plugin>
                 <plugin>
                     <groupId>org.apache.maven.plugins</groupId>
@@ -327,7 +350,7 @@
                             <rules>
                                 <requireJavaVersion>
                                     <version>[25,)</version>
-                                    <message>datacraft-lab builds with JDK 25 or newer and targets Java 25 bytecode (25.0.3+ recommended: Spark 4.2.0 deprecates earlier Java 25 releases).</message>
+                                    <message>datacraft-lab builds with JDK 25 or newer and targets Java 25 bytecode (25.0.4.1+ recommended).</message>
                                 </requireJavaVersion>
                                 <requireMavenVersion>
                                     <version>[3.9.0,)</version>
@@ -361,25 +384,12 @@
                         <configuration>
                             <rules>
                                 <requireJavaVersion>
-                                    <version>[25.0.3,)</version>
+                                    <version>[25.0.4.1,)</version>
                                     <level>WARN</level>
-                                    <message>Spark 4.2.0 deprecates Java 25 releases older than 25.0.3; upgrade the JDK.</message>
+                                    <message>Use JDK 25.0.4.1 or newer: it carries the July/August 2026 security fixes, and Spark 4.2.0 deprecates Java 25 releases older than 25.0.3.</message>
                                 </requireJavaVersion>
                             </rules>
                         </configuration>
-                    </execution>
-                </executions>
-            </plugin>
-            <plugin>
-                <groupId>org.apache.maven.plugins</groupId>
-                <artifactId>maven-failsafe-plugin</artifactId>
-                <executions>
-                    <execution>
-                        <id>integration-tests</id>
-                        <goals>
-                            <goal>integration-test</goal>
-                            <goal>verify</goal>
-                        </goals>
                     </execution>
                 </executions>
             </plugin>
@@ -403,16 +413,20 @@
                                 <include>docs/**/*.css</include>
                                 <include>docs/**/*.html</include>
                                 <include>docs/**/*.md</include>
+                                <include>design/**/*.md</include>
                                 <include>orchestration/**/*.py</include>
+                                <include>tests/**/*.py</include>
+                                <include>tests/**/*.properties</include>
                             </includes>
                             <trimTrailingWhitespace />
                             <endWithNewline />
                         </format>
                     </formats>
                     <java>
+                        <!-- Module sources are checked in each module; the root project checks tests/. -->
                         <includes>
                             <include>src/main/java/**/*.java</include>
-                            <include>src/test/java/**/*.java</include>
+                            <include>tests/**/*.java</include>
                         </includes>
                         <googleJavaFormat>
                             <version>${google.java.format.version}</version>
@@ -422,7 +436,7 @@
                     <scala>
                         <includes>
                             <include>src/main/scala/**/*.scala</include>
-                            <include>src/test/scala/**/*.scala</include>
+                            <include>tests/**/*.scala</include>
                         </includes>
                         <scalafmt>
                             <version>3.11.5</version>
@@ -459,7 +473,7 @@
                         <sourceDirectory>${project.basedir}/src/main/java</sourceDirectory>
                     </sourceDirectories>
                     <testSourceDirectories>
-                        <testSourceDirectory>${project.basedir}/src/test/java</testSourceDirectory>
+                        <testSourceDirectory>${project.build.testSourceDirectory}</testSourceDirectory>
                     </testSourceDirectories>
                 </configuration>
                 <executions>
@@ -477,69 +491,34 @@
 
     <profiles>
         <profile>
+            <id>windows-host</id>
+            <activation>
+                <os>
+                    <family>windows</family>
+                </os>
+            </activation>
+            <properties>
+                <test.excluded.tags>posix-only</test.excluded.tags>
+            </properties>
+        </profile>
+        <profile>
+            <id>posix-host</id>
+            <activation>
+                <os>
+                    <family>!windows</family>
+                </os>
+            </activation>
+            <properties>
+                <test.excluded.tags>windows-only</test.excluded.tags>
+            </properties>
+        </profile>
+        <profile>
             <!-- Bundle Spark into the artifact for self-contained local runs (java -jar) instead of
                  spark-submit. Produces a large jar; intended only for laptop-scale experimentation. -->
             <id>bundled-spark</id>
             <properties>
                 <spark.scope>compile</spark.scope>
             </properties>
-        </profile>
-        <profile>
-            <id>release-artifacts</id>
-            <build>
-                <plugins>
-                    <plugin>
-                        <groupId>org.apache.maven.plugins</groupId>
-                        <artifactId>maven-source-plugin</artifactId>
-                        <executions>
-                            <execution>
-                                <id>attach-sources</id>
-                                <phase>verify</phase>
-                                <goals>
-                                    <goal>jar-no-fork</goal>
-                                </goals>
-                            </execution>
-                        </executions>
-                    </plugin>
-                    <plugin>
-                        <groupId>org.apache.maven.plugins</groupId>
-                        <artifactId>maven-javadoc-plugin</artifactId>
-                        <executions>
-                            <execution>
-                                <id>attach-javadocs</id>
-                                <phase>verify</phase>
-                                <goals>
-                                    <goal>jar</goal>
-                                </goals>
-                            </execution>
-                        </executions>
-                    </plugin>
-                </plugins>
-            </build>
-        </profile>
-        <profile>
-            <id>dependency-audit</id>
-            <build>
-                <plugins>
-                    <plugin>
-                        <groupId>org.apache.maven.plugins</groupId>
-                        <artifactId>maven-dependency-plugin</artifactId>
-                        <executions>
-                            <execution>
-                                <id>analyze-dependencies</id>
-                                <phase>verify</phase>
-                                <goals>
-                                    <goal>analyze-only</goal>
-                                </goals>
-                                <configuration>
-                                    <failOnWarning>false</failOnWarning>
-                                    <ignoreNonCompile>true</ignoreNonCompile>
-                                </configuration>
-                            </execution>
-                        </executions>
-                    </plugin>
-                </plugins>
-            </build>
         </profile>
     </profiles>
 </project>

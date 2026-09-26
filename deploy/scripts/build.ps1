@@ -9,15 +9,16 @@ if (-not $env:JAVA_HOME) {
 $repoRoot = Resolve-Path (Join-Path $PSScriptRoot '..\..')
 Push-Location $repoRoot
 try {
-    # Same order as build-jar.sh: Maven on PATH, else the bundled wrapper, else a clear error.
-    $mvn = if (Get-Command mvn -ErrorAction SilentlyContinue) { 'mvn' } else { Join-Path $repoRoot 'mvnw.cmd' }
-    if (-not (Get-Command $mvn -ErrorAction SilentlyContinue)) {
-        throw 'Maven not found. Install Maven 3.9+ or use the bundled mvnw.cmd.'
+    # Same order as build-jar.sh: the pinned, checksummed wrapper, else Maven on PATH.
+    $wrapper = Join-Path $repoRoot 'mvnw.cmd'
+    $mvn = if (Test-Path $wrapper) { $wrapper } elseif (Get-Command mvn -ErrorAction SilentlyContinue) { 'mvn' } else { $null }
+    if (-not $mvn) {
+        throw 'Maven not found: restore mvnw.cmd or install Maven 3.9+.'
     }
     Write-Host "[datacraft] Building CLI jar with $mvn..."
-    & $mvn -B -ntp -pl datacraft-cli -am package -DskipTests
+    & $mvn -B -ntp -pl :datacraft-cli -am package -DskipTests
     if ($LASTEXITCODE -ne 0) { throw "Maven build failed with exit code $LASTEXITCODE" }
-    Write-Host '[datacraft] Built: datacraft-cli/target/datacraft-cli.jar'
+    Write-Host '[datacraft] Built: modules/interfaces/datacraft-cli/target/datacraft-cli.jar'
 }
 finally {
     Pop-Location

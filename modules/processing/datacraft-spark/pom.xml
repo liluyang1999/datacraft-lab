@@ -1,0 +1,96 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <parent>
+        <groupId>com.example.datacraft</groupId>
+        <artifactId>datacraft-lab</artifactId>
+        <version>0.1.0-SNAPSHOT</version>
+        <relativePath>../../../pom.xml</relativePath>
+    </parent>
+
+    <artifactId>datacraft-spark</artifactId>
+    <name>datacraft-spark</name>
+
+    <properties>
+        <!-- No JUnit classes here: scalatest-maven-plugin runs this module's tests, so Surefire,
+             which would find nothing (and cannot filter tags without a JUnit engine), is skipped. -->
+        <surefire.skip>true</surefire.skip>
+    </properties>
+
+    <dependencies>
+        <dependency>
+            <groupId>com.example.datacraft</groupId>
+            <artifactId>datacraft-common</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>com.example.datacraft</groupId>
+            <artifactId>datacraft-engine</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>org.scala-lang</groupId>
+            <artifactId>scala-library</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.apache.spark</groupId>
+            <artifactId>spark-sql_${scala.binary.version}</artifactId>
+            <scope>${spark.scope}</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.apache.spark</groupId>
+            <artifactId>spark-hive_${scala.binary.version}</artifactId>
+            <scope>${spark.scope}</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.scalatest</groupId>
+            <artifactId>scalatest_${scala.binary.version}</artifactId>
+            <scope>test</scope>
+        </dependency>
+    </dependencies>
+
+    <build>
+        <plugins>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-enforcer-plugin</artifactId>
+                <executions>
+                    <execution>
+                        <id>enforce-module-boundaries</id>
+                        <goals>
+                            <goal>enforce</goal>
+                        </goals>
+                        <configuration>
+                            <rules>
+                                <bannedDependencies>
+                                    <excludes>
+                                        <exclude>com.example.datacraft</exclude>
+                                    </excludes>
+                                    <includes>
+                                        <include>com.example.datacraft:datacraft-common</include>
+                                        <include>com.example.datacraft:datacraft-engine</include>
+                                    </includes>
+                                    <message>datacraft-spark may depend only on datacraft-common and datacraft-engine among the project modules (design/architecture.md, "Module responsibilities").</message>
+                                </bannedDependencies>
+                            </rules>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+            <plugin>
+                <groupId>net.alchim31.maven</groupId>
+                <artifactId>scala-maven-plugin</artifactId>
+            </plugin>
+            <plugin>
+                <groupId>org.scalatest</groupId>
+                <artifactId>scalatest-maven-plugin</artifactId>
+                <configuration>
+                    <argLine>${spark.test.jvm.args} ${test.jvm.args}</argLine>
+                </configuration>
+            </plugin>
+        </plugins>
+    </build>
+</project>

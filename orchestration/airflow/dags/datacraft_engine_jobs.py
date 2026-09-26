@@ -7,7 +7,7 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
-from airflow.sdk import DAG
+from airflow.sdk import DAG, chain
 
 from datacraft_common import DEFAULT_ARGS, cli_task
 
@@ -24,4 +24,4 @@ with DAG(
     noop = cli_task("noop", "noop")
     echo = cli_task("echo", "echo", params={"message": "hello from airflow"})
 
-    noop >> echo
+    chain(noop, echo)

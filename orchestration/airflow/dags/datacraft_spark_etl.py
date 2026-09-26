@@ -12,7 +12,7 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
-from airflow.sdk import DAG, Param
+from airflow.sdk import DAG, Param, chain
 
 from datacraft_common import DEFAULT_ARGS, data_path_param, spark_task
 
@@ -57,4 +57,4 @@ with DAG(
         },
     )
 
-    convert >> count
+    chain(convert, count)

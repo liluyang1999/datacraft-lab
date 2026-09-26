@@ -17,10 +17,10 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
-from airflow.sdk import DAG, Param
+from airflow.providers.sftp.operators.sftp import SFTPOperator
+from airflow.sdk import DAG, Param, chain
 
 from datacraft_common import DEFAULT_ARGS, data_path_param, require_verified_sftp_host, spark_task
-from airflow.providers.sftp.operators.sftp import SFTPOperator
 
 with DAG(
     dag_id="datacraft_sftp_ingest",
@@ -71,4 +71,4 @@ with DAG(
         },
     )
 
-    download >> convert >> count
+    chain(download, convert, count)

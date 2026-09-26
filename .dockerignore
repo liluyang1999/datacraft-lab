@@ -14,7 +14,10 @@ data/
 logs/
 tmp/
 *.log
-docs/engineering-report/
+# Documentation, design notes and tests are not image inputs (the builder skips test compilation).
+docs/
+design/
+tests/
 deploy/compose/.env
 
 # Runtime state, database dumps and env files that .gitignore already excludes: never send them to

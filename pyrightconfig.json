@@ -1,0 +1,33 @@
+{
+  // Static type checking for the repository's Python: Airflow DAGs, deployment scripts and tests.
+  // Everything here runs on Linux (Airflow does not support Windows), so analyse it as Linux.
+  "include": ["orchestration", "deploy", "tests"],
+  "exclude": ["**/__pycache__", "**/target"],
+  "pythonVersion": "3.12",
+  "pythonPlatform": "Linux",
+  "typeCheckingMode": "standard",
+  "executionEnvironments": [
+    // Airflow, its providers, paramiko and pyspark exist only in the Airflow environment described
+    // in docs/guides/airflow.md; type-check these directories inside it for import coverage.
+    {
+      "root": "orchestration/airflow/dags",
+      "reportMissingImports": "none",
+      "reportMissingModuleSource": "none"
+    },
+    {
+      "root": "tests/orchestration",
+      "extraPaths": ["orchestration/airflow/dags"],
+      "reportMissingImports": "none",
+      "reportMissingModuleSource": "none"
+    },
+    {
+      "root": "tests/smoke",
+      "extraPaths": ["orchestration/airflow/dags"],
+      "reportMissingImports": "none",
+      "reportMissingModuleSource": "none"
+    },
+    {
+      "root": "."
+    }
+  ]
+}
