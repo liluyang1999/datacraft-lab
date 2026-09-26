@@ -283,7 +283,7 @@
 <div class="page" lang="zh-CN">
 
 <header class="masthead">
-  <p class="eyebrow">datacraft-lab · Evaluation report v3.0</p>
+  <p class="eyebrow">datacraft-lab · Evaluation report v3.1</p>
   <h1>datacraft-lab 综合评估报告</h1>
   <p class="lede">个人 JVM 数据处理平台的当前状态：架构与模块职责、本轮整理结果、质量证据、安全边界，以及东京与新加坡两地的云平台抉择和月费用计算。</p>
   <dl class="facts">
@@ -298,8 +298,8 @@
     <div class="kpi"><dt>可调度作业</dt><dd class="v">7</dd><dd class="d">纯 JVM 2 · Spark 3 · 内置 2</dd></div>
     <div class="kpi"><dt>JVM 测试用例</dt><dd class="v">262</dd><dd class="d">Linux 执行 256 · Windows 执行 248</dd></div>
     <div class="kpi"><dt>跳过 / 取消</dt><dd class="v">0</dd><dd class="d">平台相关测试按标签排除，不再跳过</dd></div>
-    <div class="kpi"><dt>编译与类型告警</dt><dd class="v">0</dd><dd class="d">javac、scalac 告警即失败；pyright 0 诊断</dd></div>
-    <div class="kpi"><dt>Python / Node 测试</dt><dd class="v">91</dd><dd class="d">部署 45 · CI 工具 11 · 文档 13 · DAG 16 · 计算器 6</dd></div>
+    <div class="kpi"><dt>构建与检查告警</dt><dd class="v">0</dd><dd class="d">JDK 25.0.4.1 全量构建 0 警告；pyright、ShellCheck 0 问题</dd></div>
+    <div class="kpi"><dt>Python / Node 测试</dt><dd class="v">99</dd><dd class="d">部署 45 · CI/CD 19 · 文档 13 · DAG 16 · 计算器 6</dd></div>
     <div class="kpi"><dt>综合评分</dt><dd class="v">4.3<small>/ 5</small></dd><dd class="d">2026-09-25 审计前为 3.2</dd></div>
     <div class="kpi"><dt>常开月费</dt><dd class="v">$10.15</dd><dd class="d">腾讯云 Lighthouse 2 核 / 8 GB / 80 GB</dd></div>
   </dl>
@@ -327,15 +327,16 @@
 
 <section id="summary" aria-labelledby="h-summary">
   <h2 id="h-summary">一、结论摘要</h2>
-  <p><strong>总体判断：</strong>项目已达到“个人单机数据处理平台可以放心使用和部署”的水平。CLI、HTTP API 与 Airflow 共用同一个 <code>DataJob</code> 契约和执行引擎；8 个 Maven 模块按职责分成 core、io、processing、interfaces 四组，每个模块可以依赖哪些项目模块由构建强制检查；Linux CI 覆盖构建、真实 Spark、真实 Airflow 流水线、镜像与 Compose 栈。</p>
+  <p><strong>总体判断：</strong>项目已达到“个人单机数据处理平台可以放心使用和部署”的水平。CLI、HTTP API 与 Airflow 共用同一个 <code>DataJob</code> 契约和执行引擎；8 个 Maven 模块按职责分成 core、io、processing、interfaces 四组，每个模块可以依赖哪些项目模块由构建强制检查；CI/CD 流水线逻辑集中在 <code>cicd/</code>，覆盖构建、真实 Spark、真实 Airflow 流水线、镜像与 Compose 栈，并且可以脱离 GitHub Actions 在本机运行。</p>
   <p><strong>本轮（2026-09-26）完成的工作：</strong></p>
   <ul>
-    <li><strong>工程目录按职责重组。</strong>源码模块移入 <code>modules/</code> 的四个分组，全部测试移入 <code>tests/</code>，文档集中到 <code>docs/</code>，架构设计集中到 <code>design/</code>。artifactId 与包名不变，文件移动保留 git 历史。</li>
-    <li><strong>告警清零并设门禁。</strong>javac <code>-Xlint:all</code> 加 <code>failOnWarning</code>、scalac <code>-Werror</code>、pyright 0 诊断（已加入 CI）；shade 不再报告资源重叠；测试日志默认静默；平台相关测试改为按标签排除，Windows 与 Linux 都不再出现跳过或取消。本机完整构建的输出从 6,715 行降到 653 行，<code>[WARNING]</code> 与 JVM 警告从 32 条降到 1 条，剩下的这一条是本机 JDK 版本提示。</li>
-    <li><strong>依赖与代码同步到最新。</strong>逐项对照 Maven Central、PyPI、Docker Hub 与 GitHub：升级 6 个构建与测试组件，CI 升到 Node 24 与 Python 3.13，建议 JDK 提高到 25.0.4.1，其余均已是最新稳定版。Jackson 3 因 Spark 4.2 固定使用 Jackson 2 而不迁移。</li>
+    <li><strong>工程目录按职责重组。</strong>源码模块移入 <code>modules/</code> 的四个分组，全部测试移入 <code>tests/</code>，CI/CD 逻辑集中到 <code>cicd/</code>，文档集中到 <code>docs/</code>，架构设计集中到 <code>design/</code>。artifactId 与包名不变，文件移动保留 git 历史。</li>
+    <li><strong>CI/CD 逻辑独立。</strong>GitHub 只从 <code>.github/workflows</code> 读取工作流，所以 <code>ci.yml</code> 留在原处，但只负责触发条件、运行环境和作业编排；原来写在 YAML 里的检查全部改为 <code>cicd/</code> 下按作业分组的脚本（build、airflow、lint、stacks），并有测试保证工作流不再出现多行内联逻辑。</li>
+    <li><strong>告警清零并设门禁。</strong>javac <code>-Xlint:all</code> 加 <code>failOnWarning</code>、scalac <code>-Werror</code>、pyright 0 诊断（已加入 CI）；shade 不再报告资源重叠；测试日志默认静默；平台相关测试改为按标签排除，Windows 与 Linux 都不再出现跳过或取消。ShellCheck 门禁从 error 收紧到 warning 级别。本机 JDK 升级到 25.0.4.1 后，完整构建的输出从 6,715 行降到 623 行，<code>[WARNING]</code> 与 JVM 警告从 32 条降到 0 条。</li>
+    <li><strong>依赖与代码同步到最新。</strong>逐项对照 Maven Central、PyPI、npm、Docker Hub 与 GitHub：升级 6 个构建与测试组件，pyright 固定到最新的 1.1.414，CI 升到 Node 24 与 Python 3.13；JDK 下限改为强制要求 25.0.4.1（本机、CI 与构建镜像均已是该版本），其余均已是最新稳定版。Jackson 3 因 Spark 4.2 固定使用 Jackson 2 而不迁移。</li>
     <li><strong>云平台抉择定稿。</strong>常开选腾讯云 Lighthouse 入门型（$10.15/月）；每月约 60 小时选 Oracle OCI A1（$4.79/月）；必须使用 AWS 时选 Lightsail 8 GB（$44.15/月）。托管 Airflow 与 Cloudflare 运行时不采用，R2 只存备份。</li>
   </ul>
-  <p><strong>仍需注意（详见第九节）：</strong>API 没有认证，只能留在回环地址或放在认证网关之后；Swarm 多机配置只做过静态与桩测试；本机 JDK 25.0.2 低于建议的 25.0.4.1；Spark 4.2.0 自带依赖有当前不可达的安全公告；本轮改动还需要一次 Linux CI 运行确认（见第六节）。</p>
+  <p><strong>仍需注意（详见第九节）：</strong>API 没有认证，只能留在回环地址或放在认证网关之后；Swarm 多机配置只做过静态与桩测试；Spark 4.2.0 自带依赖有当前不可达的安全公告；GitHub Actions 额度不足，本轮推送不会触发 CI，Docker 镜像、Compose 栈与 Stack 文件校验本轮没有在 Linux 上重新运行（见第六节）。</p>
 </section>
 
 <section id="round" aria-labelledby="h-round">
@@ -346,7 +347,8 @@
 <pre class="tree"><code>datacraft-lab/
 ├── pom.xml  mvnw  mvnw.cmd  .mvn/  Makefile    构建入口（Wrapper 固定 Maven 3.9.16）
 ├── pyrightconfig.json  config/checkstyle/       Python 类型检查、Checkstyle 规则
-├── .github/workflows/ci.yml                     CI
+├── .github/workflows/ci.yml                     CI 工作流：只负责触发、运行环境与作业编排
+├── cicd/                                        CI/CD 逻辑：build · airflow · lint · stacks
 ├── modules/                                     JVM 源码模块，按职责分组
 │   ├── core/         datacraft-common · datacraft-config · datacraft-engine
 │   ├── io/           datacraft-io
@@ -360,7 +362,7 @@
     ├── jvm/&lt;artifactId&gt;/{java,scala}             各模块的 JVM 测试，由该模块的构建运行
     ├── jvm/resources/                           共享测试资源（日志配置）
     ├── orchestration/  smoke/                   Airflow DAG 契约测试、运行时与容器冒烟
-    └── deploy/  ci/  docs/                      部署脚本、CI 工具、文档与计算器测试</code></pre>
+    └── deploy/  ci/  docs/                      部署脚本、CI/CD 脚本、文档与计算器测试</code></pre>
 
   <div class="table-wrap">
   <table>
@@ -370,7 +372,8 @@
       <tr><td>JVM 模块</td><td>仓库根目录 <code>datacraft-*</code></td><td><code>modules/core/</code>、<code>modules/io/</code>、<code>modules/processing/</code>、<code>modules/interfaces/</code></td></tr>
       <tr><td>JVM 测试</td><td>各模块 <code>src/test/{java,scala}</code></td><td><code>tests/jvm/&lt;artifactId&gt;/{java,scala}</code>；根 POM 的 <code>testSourceDirectory</code> 指向这里</td></tr>
       <tr><td>Airflow 测试</td><td>编排目录下的测试子目录</td><td><code>tests/orchestration/</code>、<code>tests/smoke/airflow_runtime_smoke.py</code></td></tr>
-      <tr><td>部署与 CI 测试</td><td>部署目录下的测试子目录、GitHub 工作流旁的脚本目录</td><td><code>tests/deploy/</code>、<code>tests/ci/</code>、<code>tests/docs/</code>、<code>tests/smoke/</code></td></tr>
+      <tr><td>部署与 CI 测试</td><td>部署目录下的测试子目录</td><td><code>tests/deploy/</code>、<code>tests/ci/</code>、<code>tests/docs/</code>、<code>tests/smoke/</code></td></tr>
+      <tr><td>CI/CD 逻辑</td><td>工作流里的内联脚本、GitHub 工作流旁的脚本目录</td><td><code>cicd/</code>：<code>build/</code>、<code>airflow/</code>、<code>lint/</code>、<code>stacks/</code>，共用 <code>cicd/lib.sh</code></td></tr>
       <tr><td>项目文档</td><td>根目录 README 与 CHANGELOG、原部署文档目录、编排目录下的 Airflow README</td><td><code>docs/README.md</code>、<code>docs/CHANGELOG.md</code>、<code>docs/guides/</code>、<code>docs/reports/</code></td></tr>
       <tr><td>架构设计</td><td>原 docs 目录下的架构说明、数据处理契约与工程开发文档</td><td><code>design/</code>：architecture、data-contracts、build-and-quality、decisions</td></tr>
       <tr><td>评估与云成本</td><td>根目录的项目评估页面与云部署费用页面</td><td>本报告（两份合并为一份）</td></tr>
@@ -401,8 +404,9 @@
       <tr><td>SLF4J</td><td>嵌入式 SFTP 服务器提示找不到日志实现</td><td>测试依赖 slf4j-nop 2.0.20</td></tr>
       <tr><td>SFTP 测试服务器</td><td>Windows 上 NIO2/IOCP 的停机竞态打印未捕获异常</td><td>改用基于 selector 的 MINA 传输（sshd-mina，仅测试）</td></tr>
       <tr><td>测试跳过与取消</td><td>Windows 跳过 7 项、取消 7 项；Linux 跳过 6 项</td><td>JUnit <code>@Tag</code> 与 ScalaTest <code>Tag</code> 标注 <code>posix-only</code> 或 <code>windows-only</code>，按操作系统自动激活的 profile 排除另一平台的测试</td></tr>
-      <tr><td>Python</td><td>可选值未判空、覆盖方法签名不一致、DAG 依赖写成裸表达式</td><td><code>pyrightconfig.json</code>；修复类型问题；DAG 用 <code>airflow.sdk.chain()</code> 声明依赖；CI 增加 pyright 门禁</td></tr>
-      <tr><td>仍存在（本机环境）</td><td>Enforcer 提示本机 JDK 25.0.2 低于建议的 25.0.4.1</td><td>升级本机 JDK 即消除；CI 使用最新 Temurin 25，不会触发</td></tr>
+      <tr><td>Python</td><td>可选值未判空、覆盖方法签名不一致、DAG 依赖写成裸表达式</td><td><code>pyrightconfig.json</code>；修复类型问题；DAG 用 <code>airflow.sdk.chain()</code> 声明依赖；CI 增加 pyright 1.1.414 门禁（warning 也失败）</td></tr>
+      <tr><td>Shell 脚本</td><td>ShellCheck 门禁只拦 error 级别；工作流里的内联脚本不在检查范围内</td><td>逻辑移入 <code>cicd/</code> 后全部 20 个脚本纳入检查；门禁收紧到 warning 级别，当前 0 问题</td></tr>
+      <tr><td>JDK 版本提示</td><td>本机 JDK 25.0.2 触发 Enforcer 的版本提示</td><td>本机已升级到 25.0.4.1，版本下限改为强制要求；构建不再输出任何警告</td></tr>
       <tr><td>仍存在（上游）</td><td>Airflow 3.3.2 读取 <code>.airflowignore</code> 时，其自身代码触发 pathspec 1.1.1 的 DeprecationWarning（版本由官方 constraints 固定）</td><td>不影响行为；只能改用 regexp 忽略语法规避，收益不抵配置改动，等待 Airflow 上游修复</td></tr>
     </tbody>
   </table>
@@ -423,12 +427,13 @@
       <tr><td>sshd-mina</td><td class="money">—</td><td class="money">2.19.0</td><td>新增，仅测试</td></tr>
       <tr><td>CI Node.js</td><td class="money">22</td><td class="money">24</td><td>当前 Active LTS</td></tr>
       <tr><td>CI Python（Airflow 与脚本作业）</td><td class="money">3.12</td><td class="money">3.13</td><td>与 <code>apache/airflow:3.3.2</code> 镜像一致，使用 constraints-3.13</td></tr>
-      <tr><td>建议 JDK 补丁版本</td><td class="money">25.0.3</td><td class="money">25.0.4.1</td><td>2026-08-18 的 OpenJDK 带外安全更新；容器冒烟断言镜像 JRE 不低于此版本</td></tr>
+      <tr><td>pyright</td><td class="money">—</td><td class="money">1.1.414</td><td>新增的 Python 类型检查门禁，npm 最新版（2026-09-09）</td></tr>
+      <tr><td>JDK 下限（Enforcer）</td><td class="money">[25,)</td><td class="money">[25.0.4.1,)</td><td>原先低于 25.0.3 只警告，现为强制要求；25.0.4.1 是 2026-08-18 的 OpenJDK 带外安全更新，容器冒烟也断言镜像 JRE 不低于此版本</td></tr>
     </tbody>
   </table>
   </div>
-  <p class="small muted"><strong>已是最新、未改动：</strong>Java 25 字节码目标、Spark 4.2.0 与 pyspark 4.2.0、Scala 2.13.18、Jackson 2.22.3、JUnit 6.1.3、JSch 2.28.7、Apache MINA SSHD 2.19.0、scopt 4.1.0、Checkstyle 14.1.0、google-java-format 1.36.1、scalafmt 3.11.5、scala-maven-plugin 4.9.10、scalatest-maven-plugin 2.2.0、Maven 3.9.16、Maven Wrapper 3.3.4、Airflow 3.3.2（fab 3.9.0、sftp 6.0.1、ssh 6.0.1、standard 1.19.0）、6 个 GitHub Actions（固定到最新标签的提交 SHA），基础镜像 <code>eclipse-temurin:25-jre</code>（25.0.4.1+1）、<code>postgres:18</code>（18.6）、<code>redis:8</code>（8.10.2）。<br>
-  <strong>有意不升级：</strong>Jackson 3.x（Spark 4.2 固定 Jackson 2，混用只增加冲突）；Spark 4.3.0（仅有 RC）；Maven 4（尚未 GA）。</p>
+  <p class="small muted"><strong>已是最新、未改动：</strong>Java 25 字节码目标、Spark 4.2.0 与 pyspark 4.2.0、Scala 2.13.18、Jackson 2.22.3、JUnit 6.1.3、JSch 2.28.7、Apache MINA SSHD 2.19.0、scopt 4.1.0、Checkstyle 14.1.0、google-java-format 1.36.1、scalafmt 3.11.5、scala-maven-plugin 4.9.10、scalatest-maven-plugin 2.2.0、Maven 3.9.16、Maven Wrapper 3.3.4、Airflow 3.3.2（fab 3.9.0、sftp 6.0.1、ssh 6.0.1、standard 1.19.0）、6 个 GitHub Actions（固定到最新标签的提交 SHA），基础镜像 <code>eclipse-temurin:25-jre</code>（25.0.4.1+1）、<code>postgres:18</code>（18.6）、<code>redis:8</code>（8.10.2）；Node 24（Active LTS）。<br>
+  <strong>有意不升级：</strong>Jackson 3.x（Spark 4.2 固定 Jackson 2，混用只增加冲突）；Spark 4.3.0（仅有 RC）；Maven 4（尚未 GA）；PostgreSQL 19（仅有 beta）；Temurin 26（非 LTS，Spark 4.2 支持到 Java 25）。</p>
 </section>
 
 <section id="architecture" aria-labelledby="h-architecture">
@@ -484,7 +489,8 @@
       <tr><td>Airflow 3.x 编排</td><td>3 个 DAG，Airflow 3.3.2 与官方 constraints；依赖用 <code>chain()</code> 声明</td><td>16 项契约测试；CI 在真实 Airflow 中执行三条流水线</td><td><span class="tag ok">满足</span></td></tr>
       <tr><td>单机 Compose / 多机 Swarm</td><td>Compose 为主；Swarm 固定单数据节点</td><td>Compose 在 CI 真实启动并做备份恢复；Swarm 仅 <code>stack config</code> 与静态测试</td><td><span class="tag warn">部分</span></td></tr>
       <tr><td>云部署评估与成本</td><td>11 个平台、两个地域、按需与常开比较，附计算器（第八节）</td><td>价格核验日 2026-09-19；计算器 6 项测试</td><td><span class="tag ok">满足</span></td></tr>
-      <tr><td>零告警构建</td><td>javac、scalac 告警即失败；pyright 门禁</td><td>本机构建 0 编译告警；pyright 0 诊断</td><td><span class="tag ok">本轮满足</span></td></tr>
+      <tr><td>零告警构建</td><td>javac、scalac 告警即失败；pyright 与 ShellCheck 门禁；JDK 下限强制</td><td>本机 JDK 25.0.4.1 全量构建 0 警告；pyright、ShellCheck 0 问题</td><td><span class="tag ok">本轮满足</span></td></tr>
+      <tr><td>CI/CD 逻辑独立</td><td><code>cicd/</code> 按作业分组；工作流只做编排</td><td><code>tests/ci/test_workflow.py</code> 检查；<code>cicd/build</code> 与 <code>cicd/lint</code> 已在本机实跑</td><td><span class="tag ok">本轮满足</span></td></tr>
       <tr><td>在线 API 的访问控制</td><td>回环绑定、Origin 403、数据根约束、非回环绑定必须设置数据根</td><td>无认证层，属于已记录的设计边界</td><td><span class="tag warn">部分</span></td></tr>
     </tbody>
   </table>
@@ -507,8 +513,8 @@
       <tr><td>CLI 与 HTTP 接口</td><td><div class="score"><div class="track"><span class="prev" style="width:60%"></span><span class="now" style="width:90%"></span></div><b>3.0 → 4.5 → 4.5</b></div></td><td>退出码可测试；输出跨平台字节一致；JSON 404、HEAD、排空停机</td></tr>
       <tr><td>Airflow 编排</td><td><div class="score"><div class="track"><span class="prev" style="width:70%"></span><span class="now" style="width:90%"></span></div><b>3.5 → 4.5 → 4.5</b></div></td><td>路径约束、SFTP 主机密钥守卫、具名配置错误；依赖用 <code>chain()</code> 声明</td></tr>
       <tr><td>容器与部署</td><td><div class="score"><div class="track"><span class="prev" style="width:60%"></span><span class="now" style="width:80%"></span></div><b>3.0 → 4.0 → 4.0</b></div></td><td>缺失密钥即失败、非 root API、Swarm 初始化服务；Swarm 仍缺真实多节点验证</td></tr>
-      <tr><td>构建与供应链</td><td><div class="score"><div class="track"><span class="prev" style="width:60%"></span><span class="now" style="width:90%"></span></div><b>3.0 → 4.5 → 4.5</b></div></td><td>零告警门禁；版本逐项核对为最新；Wrapper 校验和、Actions 固定 SHA；仍无持续漏洞扫描</td></tr>
-      <tr><td>测试与 CI</td><td><div class="score"><div class="track"><span class="prev" style="width:70%"></span><span class="now" style="width:90%"></span></div><b>3.5 → 4.5 → 4.5</b></div></td><td>测试集中到 <code>tests/</code>；平台标签取代跳过；每模块执行下限；pyright 进入 CI</td></tr>
+      <tr><td>构建与供应链</td><td><div class="score"><div class="track"><span class="prev" style="width:60%"></span><span class="now" style="width:90%"></span></div><b>3.0 → 4.5 → 4.5</b></div></td><td>零告警门禁；JDK 下限强制；版本逐项核对为最新；Wrapper 校验和、Actions 固定 SHA；仍无持续漏洞扫描</td></tr>
+      <tr><td>测试与 CI</td><td><div class="score"><div class="track"><span class="prev" style="width:70%"></span><span class="now" style="width:90%"></span></div><b>3.5 → 4.5 → 4.5</b></div></td><td>测试集中到 <code>tests/</code>；平台标签取代跳过；每模块执行下限；CI 逻辑移入 <code>cicd/</code> 可本机运行；本轮 CI 因额度不足未运行</td></tr>
       <tr><td>文档</td><td><div class="score"><div class="track"><span class="prev" style="width:60%"></span><span class="now" style="width:90%"></span></div><b>3.0 → 4.0 → 4.5</b></div></td><td>文档与设计分目录；单一评估报告；链接可达性与存放位置有测试；中英文文档仍并存</td></tr>
       <tr><td>安全</td><td><div class="score"><div class="track"><span class="prev" style="width:50%"></span><span class="now" style="width:70%"></span></div><b>2.5 → 3.5 → 3.5</b></div></td><td>多层防护已就位；API 仍无认证，机密在 Airflow 容器间共享</td></tr>
     </tbody>
@@ -521,7 +527,7 @@
   <h3>6.1 JVM 测试用例</h3>
   <div class="table-wrap">
   <table>
-    <caption>Linux 与 Windows 的执行数不同，是因为按平台标签排除了另一平台的测试，而不是跳过。CI 在 <code>tests/ci/check_test_counts.py</code> 中按 Linux 执行数设置每个模块的下限。</caption>
+    <caption>Linux 与 Windows 的执行数不同，是因为按平台标签排除了另一平台的测试，而不是跳过。CI 用 <code>cicd/build/check_test_counts.py</code> 按 Linux 执行数检查每个模块的下限。</caption>
     <thead><tr><th>模块</th><th class="num">用例</th><th class="num">Linux CI 执行</th><th class="num">Windows 本机执行</th><th>平台标签</th></tr></thead>
     <tbody>
       <tr><td>datacraft-common</td><td class="num">7</td><td class="num">7</td><td class="num">7</td><td>—</td></tr>
@@ -537,32 +543,34 @@
   </table>
   </div>
 
-  <h3>6.2 本机门禁（Windows 11 · JDK 25.0.2 · Maven 3.9.16）</h3>
+  <h3>6.2 本机门禁（Windows 11 · JDK 25.0.4.1 · Maven 3.9.16）</h3>
   <ul id="local-gates">
-    <li><code>./mvnw -B -ntp -o spotless:apply verify</code>：8 个模块全部成功，包括格式、Checkstyle、Enforcer（含模块边界）、编译（告警即失败）、测试与打包；共执行 248 项 JVM 测试，0 失败、0 跳过、0 取消；输出 653 行，唯一的 <code>[WARNING]</code> 是本机 JDK 25.0.2 的版本提示。</li>
-    <li><code>npx --yes pyright@1.1.410 --warnings</code>（warning 也使其失败）：0 errors、0 warnings、0 informations。</li>
-    <li>WSL Ubuntu（Python 3.12，DeprecationWarning 视为错误）：<code>tests/deploy</code> 45 项、<code>tests/ci</code> 11 项、<code>tests/docs</code> 13 项全部通过；<code>tests/docs</code> 在 Windows（Python 3.14）上同样通过。</li>
-    <li>Airflow 3.3.2 虚拟环境（WSL，Python 3.12，官方 constraints-3.12）：<code>tests/orchestration</code> 16 项 DAG 契约测试全部通过；<code>from airflow.sdk import chain</code> 可用。</li>
+    <li><code>./mvnw -B -ntp -o spotless:apply verify</code>：8 个模块全部成功，包括格式、Checkstyle、Enforcer（JDK 下限与模块边界）、编译（告警即失败）、测试与打包；共执行 248 项 JVM 测试，0 失败、0 跳过、0 取消；输出 623 行，<strong>0 条</strong> <code>[WARNING]</code> 或 JVM 警告。把 JDK 下限临时改为 <code>[25.0.4.2,)</code> 时构建按预期失败，说明第四位版本号也参与比较。</li>
+    <li><code>cicd/build</code> 脚本（Git Bash）：<code>check-maven-wrapper.sh</code>（错误的 SHA-256 被拒绝）、<code>check-spark-suite.sh</code>、<code>smoke-cli-jar.sh</code>、<code>check-jar-contents.sh</code>、<code>check-cli-exit-codes.sh</code> 全部通过；<code>check_test_counts.py</code> 在 Windows 报告上按预期指出 jobs 与 spark 低于 Linux 下限。</li>
+    <li><code>cicd/lint</code> 脚本（WSL，ShellCheck 0.11.0）：20 个 shell 脚本通过 <code>bash -n</code> 与 warning 级别的 ShellCheck；所有 Action 均固定到提交 SHA。</li>
+    <li><code>npx --yes pyright@1.1.414 --warnings</code>（warning 也使其失败）：0 errors、0 warnings、0 informations。</li>
+    <li>WSL Ubuntu（Python 3.12，DeprecationWarning 视为错误）：<code>tests/deploy</code> 45 项、<code>tests/ci</code> 19 项、<code>tests/docs</code> 13 项全部通过；在 Windows（Python 3.14）上 <code>tests/docs</code> 通过，<code>tests/ci</code> 17 项通过、2 项需要 POSIX bash 的检查按设计跳过。</li>
+    <li id="airflow-gate"><code>cicd/airflow</code> 脚本（WSL，Python 3.12 虚拟环境）：<code>install-airflow.sh</code> 按 constraints-3.12 安装 Airflow 3.3.2 与各 provider，再装入 pyspark 4.2.0，<code>pip check</code> 无冲突；<code>check_security_floor.py</code> 通过；随后 <code>tests/orchestration</code> 16 项 DAG 契约测试全部通过，<code>from airflow.sdk import chain</code> 可用。</li>
     <li>Node：<code>node --test tests/docs/cloud-costs.test.cjs</code> 6 项通过。</li>
   </ul>
 <pre class="reactor"><code>[INFO] Reactor Summary for datacraft-lab 0.1.0-SNAPSHOT:
 [INFO]
-[INFO] datacraft-lab ...................................... SUCCESS [ 11.608 s]
-[INFO] datacraft-common ................................... SUCCESS [  5.730 s]
-[INFO] datacraft-config ................................... SUCCESS [  1.478 s]
-[INFO] datacraft-io ....................................... SUCCESS [  5.573 s]
-[INFO] datacraft-engine ................................... SUCCESS [  1.417 s]
-[INFO] datacraft-jobs ..................................... SUCCESS [  4.938 s]
-[INFO] datacraft-spark .................................... SUCCESS [ 36.038 s]
-[INFO] datacraft-api ...................................... SUCCESS [  2.380 s]
-[INFO] datacraft-cli ...................................... SUCCESS [  5.211 s]
+[INFO] datacraft-lab ...................................... SUCCESS [  2.910 s]
+[INFO] datacraft-common ................................... SUCCESS [  2.365 s]
+[INFO] datacraft-config ................................... SUCCESS [  1.422 s]
+[INFO] datacraft-io ....................................... SUCCESS [  4.940 s]
+[INFO] datacraft-engine ................................... SUCCESS [  1.536 s]
+[INFO] datacraft-jobs ..................................... SUCCESS [  2.414 s]
+[INFO] datacraft-spark .................................... SUCCESS [ 17.690 s]
+[INFO] datacraft-api ...................................... SUCCESS [  2.298 s]
+[INFO] datacraft-cli ...................................... SUCCESS [  4.501 s]
 [INFO] ------------------------------------------------------------------------
 [INFO] BUILD SUCCESS
-[INFO] Total time:  01:14 min   (2026-09-26 13:11 JST, Windows 11, JDK 25.0.2)</code></pre>
+[INFO] Total time:  40.351 s   (2026-09-26 14:27 JST, Windows 11, JDK 25.0.4.1, 0 warnings)</code></pre>
 
   <h3>6.3 Linux CI（GitHub Actions，ubuntu-24.04）</h3>
-  <p>CI 有五个作业：构建与验证（含真实 Spark、每模块执行下限、jar 清单与退出码冒烟）、Airflow 契约与真实流水线、脚本与文档测试（含 pyright）、Compose/Swarm 配置校验、镜像构建与容器/Compose 冒烟。Docker、真实 Airflow 端到端与容器冒烟只由 CI 证明，本机不作替代。</p>
-  <p id="ci-status">最近一次 CI：提交 <code>4111189</code> 的 <a href="https://github.com/liluyang1999/datacraft-lab/actions/runs/36142294607">运行 36142294607</a>，五个作业全部成功（2026-09-25）。本轮改动尚未推送，Linux 上的执行数与冒烟结果需要推送后由 CI 确认。</p>
+  <p>CI 有五个作业：构建与验证（含真实 Spark、每模块执行下限、jar 清单与退出码冒烟）、Airflow 契约与真实流水线、脚本与文档测试（含 ShellCheck 与 pyright）、Compose/Swarm 配置校验、镜像构建与容器/Compose 冒烟。工作流只负责编排，每一步调用 <code>cicd/</code> 下的脚本或 <code>tests/</code> 下的测试入口；<code>cicd/build</code>、<code>cicd/lint</code> 与 <code>cicd/airflow</code> 已在本机实跑，需要 Docker 的 <code>cicd/stacks</code> 与 <code>tests/smoke</code> 只能在 CI 上运行。</p>
+  <p id="ci-status">最近一次通过的 CI：提交 <code>4111189</code> 的 <a href="https://github.com/liluyang1999/datacraft-lab/actions/runs/36142294607">运行 36142294607</a>，五个作业全部成功（2026-09-25）。GitHub Actions 当前额度不足，本轮推送不会触发 CI；本轮 Linux 端的镜像构建、容器与 Compose 冒烟以及 Stack 文件校验没有重新运行，额度恢复后可通过 <code>workflow_dispatch</code> 手动触发一次完整验证。</p>
 </section>
 
 <section id="security" aria-labelledby="h-security">
@@ -730,7 +738,8 @@ bash deploy/scripts/compose-up.sh                # 预检机密与端口后启�
     <tbody>
       <tr><td><span class="tag risk">P1</span></td><td>API 无认证</td><td>误暴露即可被任意调用</td><td>保持回环绑定；需要远程访问时在前面加认证网关</td></tr>
       <tr><td><span class="tag risk">P1</span></td><td>Swarm 未在真实多节点验证</td><td>初始化服务、健康检查与节点排空只做过静态与桩测试</td><td>扩展到多机前先配置共享存储、加密覆盖网络与 Redis 认证，并做一次演练</td></tr>
-      <tr><td><span class="tag warn">P2</span></td><td>本机 JDK 补丁级别</td><td>本机 25.0.2 低于建议的 25.0.4.1，构建给出 Enforcer 提示；运行镜像已解析到 Temurin 25.0.4.1+1，但可选的 <code>datacraft/spark</code> 镜像仍继承上游 <code>apache/spark:4.2.0</code> 的 25.0.3+9（没有服务使用它）</td><td>升级本机 JDK 后，把 Enforcer 的版本下限改为硬性要求；上游 Spark 镜像更新后再重建可选镜像</td></tr>
+      <tr><td><span class="tag warn">P2</span></td><td>本轮 CI 未运行</td><td>Actions 额度不足；镜像构建、容器与 Compose 冒烟、Stack 文件校验以及新的工作流本身没有在 Linux 上执行过</td><td>额度恢复后手动触发一次 <code>workflow_dispatch</code>；在此之前以本机验证为准</td></tr>
+      <tr><td><span class="tag info">P3</span></td><td>可选 Spark 镜像的 JDK</td><td>可选的 <code>datacraft/spark</code> 镜像继承上游 <code>apache/spark:4.2.0</code> 的 JDK 25.0.3+9，低于 25.0.4.1（没有服务使用它）</td><td>上游 Spark 镜像更新后再重建；本机与运行镜像已是 25.0.4.1</td></tr>
       <tr><td><span class="tag warn">P2</span></td><td>Spark 4.2.0 自带依赖的公告</td><td>Jackson 2.21.2、Netty、Jetty 有公告，当前配置下不可达</td><td>不发布 Spark UI 与 RPC 端口；Spark 4.2.1 发布后升级</td></tr>
       <tr><td><span class="tag warn">P2</span></td><td>机密在 Airflow 容器间共享</td><td>任一任务代码都能读取全部机密</td><td>视为可信代码边界；多租户前再做机密隔离</td></tr>
       <tr><td><span class="tag warn">P2</span></td><td>无持续依赖与漏洞监控</td><td>固定 SHA 的 Actions 与依赖会逐渐过时</td><td>经所有者同意后启用 Dependabot 与定期 SCA 扫描；基础镜像固定 digest</td></tr>
@@ -775,7 +784,7 @@ bash deploy/scripts/compose-up.sh                # 预检机密与端口后启�
     <li><time datetime="2026-08-23">2026-08-23 – 24</time>首份综合复盘；修复并扩展 CI；升级到 JDK 25、Spark 4.2.0、Scala 2.13.18；重做云厂商评估。</li>
     <li><time datetime="2026-09-19">2026-09-19</time>数据处理与 Airflow 执行加固；经济型云部署准备与费用核验。</li>
     <li><time datetime="2026-09-25">2026-09-25</time>11 维审计与 13 个工作包、集成后审查、评估报告 v2.0。</li>
-    <li><time datetime="2026-09-26">2026-09-26</time>目录按职责重组、告警清零、依赖核对与升级、文档归档；评估报告 v3.0 合并云平台抉择。</li>
+    <li><time datetime="2026-09-26">2026-09-26</time>目录按职责重组、CI/CD 逻辑独立到 <code>cicd/</code>、告警清零、JDK 25.0.4.1 成为强制下限、依赖核对与升级、文档归档；评估报告 v3.1 合并云平台抉择。</li>
   </ol>
 </section>
 
@@ -784,7 +793,7 @@ bash deploy/scripts/compose-up.sh                # 预检机密与端口后启�
   <ul class="docs-index">
     <li><a href="../README.md">项目首页</a> <code>docs/README.md</code><br><span class="small muted">概览、目录结构、快速开始、文档地图</span></li>
     <li><a href="../guides/usage.md">使用指南</a> <code>docs/guides/usage.md</code><br><span class="small muted">作业、CLI 参数与退出码、HTTP API</span></li>
-    <li><a href="../guides/development.md">开发指南</a> <code>docs/guides/development.md</code><br><span class="small muted">构建、测试布局、平台标签、类型检查、CI</span></li>
+    <li><a href="../guides/development.md">开发指南</a> <code>docs/guides/development.md</code><br><span class="small muted">构建、测试布局、平台标签、类型检查、CI 与 <code>cicd/</code> 脚本</span></li>
     <li><a href="../guides/airflow.md">Airflow 编排</a> <code>docs/guides/airflow.md</code><br><span class="small muted">DAG、参数约束、测试环境</span></li>
     <li><a href="../guides/deployment.md">部署教程</a> <code>docs/guides/deployment.md</code><br><span class="small muted">单机 Compose、Swarm、升级、备份与恢复</span></li>
     <li><a href="pricing-evidence.md">价格依据</a> <code>docs/reports/pricing-evidence.md</code><br><span class="small muted">价格来源、SKU、算式与核验范围</span></li>

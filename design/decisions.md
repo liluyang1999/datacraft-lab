@@ -98,17 +98,20 @@ job.
 Jackson 3 exists as a new major line with new packages, while Spark stays on Jackson 2.
 
 **Decision.** Build and run on JDK 25: `java.version` 25 drives javac's `release` and scalac's
-`-release`, the Enforcer requires `[25,)` and warns below 25.0.4.1 (the July/August 2026 security
-fixes; Spark 4.2.0 deprecates Java 25 releases older than 25.0.3), and every image runs a Java 25
-runtime. Pin `spark.version` 4.2.0 and `scala.version` 2.13.18 together. Stay on Jackson 2
-(`jackson.version` 2.22.3 through the BOM), and fail the build if `jackson-core` or
-`jackson-databind` older than 2.22.3, which four published advisories affect, enters it.
+`-release`, the Enforcer requires `[25.0.4.1,)` (the July/August 2026 security fixes; Spark 4.2.0
+deprecates Java 25 releases older than 25.0.3), and every image runs a Java 25 runtime. Pin
+`spark.version` 4.2.0 and `scala.version` 2.13.18 together. Stay on Jackson 2 (`jackson.version`
+2.22.3 through the BOM), and fail the build if `jackson-core` or `jackson-databind` older than
+2.22.3, which four published advisories affect, enters it.
 
 **Consequences.**
 
 - Builders and runtimes need JDK 25: the builder image is `maven:3.9.16-eclipse-temurin-25`, the
   optional Spark image is the `java25` variant, and `container_smoke.sh` requires the images' JRE
   to be at least 25.0.4.1.
+- A JDK older than 25.0.4.1 fails the build instead of warning. The floor was a warning while the
+  workstation JDK lagged; it became a requirement once the workstation, CI's `setup-java` and the
+  builder image all resolved to 25.0.4.1, and a new security update raises it again.
 - Scala and Spark move together: a Spark upgrade that changes its Scala version changes
   `scala.version` with it.
 - Moving the API's JSON writer to Jackson 3 would not remove Jackson 2, which Spark needs and
@@ -296,3 +299,36 @@ dependencies.
 
 Layout and rules: [Repository layout](architecture.md#repository-layout) and
 [Module responsibilities](architecture.md#module-responsibilities).
+
+## 10. CI/CD logic lives in cicd/; the workflow only orchestrates
+
+**Status:** Accepted (2026-09-26 restructure).
+
+**Context.** The workflow carried most of the pipeline as inline shell: the Maven Wrapper checksum
+check, the Spark-suite, jar and exit-code checks, the pinned-action check and the stack-file
+validation. That logic ran only on a GitHub runner, ShellCheck never saw it, and it could not be
+reproduced when the Actions quota was exhausted. GitHub reads workflows only from
+`.github/workflows`, so the workflow file itself cannot move.
+
+**Decision.** `.github/workflows/ci.yml` keeps the triggers, permissions, runners, toolchain setup
+(SHA-pinned actions) and job order, and each step runs one command: a script in `cicd/` or a test
+entry point in `tests/`. `cicd/` groups the scripts by the job that runs them: `build/` (wrapper
+checksum, test-count floors, Spark suite, CLI jar checks and the JSch probe), `airflow/` (the
+constrained Airflow install and the security floor), `lint/` (shell syntax, ShellCheck, pinned
+actions) and `stacks/` (Compose and Swarm validation), with shared helpers in `cicd/lib.sh`. The
+tests of these scripts stay in `tests/ci`.
+
+**Consequences.**
+
+- The checks run outside GitHub Actions (Linux, macOS, WSL or Git Bash for the build checks,
+  Docker for the stack check) and report through `::error::` annotations only on a runner.
+- ShellCheck covers every script at warning severity, the pipeline scripts included.
+- `tests/ci/test_workflow.py` fails when a `run:` step turns into a multi-line block, names a
+  script that does not exist, or when a file in `cicd/` is used by nothing.
+- `cicd/airflow/install-airflow.sh` derives the constraints file from the running Python, as the
+  Airflow image does, so the CI Python version and the constraints file cannot disagree.
+- `cicd/stacks/check-stack-files.sh` refuses to run while `deploy/compose/.env` exists, because the
+  Compose file reads that path and the check must never overwrite real secrets.
+
+Details: [CI gates](build-and-quality.md#ci-gates) and the
+[development guide](../docs/guides/development.md#ci).

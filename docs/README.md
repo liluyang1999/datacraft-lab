@@ -30,7 +30,8 @@ datacraft-lab/
 ├── .editorconfig, .gitattributes, .gitignore, .dockerignore, .scalafmt.conf   tool settings
 ├── pyrightconfig.json               Python type checking
 ├── config/checkstyle/checkstyle.xml Checkstyle rules
-├── .github/workflows/ci.yml         CI
+├── .github/workflows/ci.yml         CI workflow: triggers, runners and job order only
+├── cicd/                            the scripts the CI jobs run: build, airflow, lint, stacks
 ├── modules/                         JVM source modules, grouped by responsibility
 │   ├── core/          datacraft-common, datacraft-config, datacraft-engine
 │   ├── io/            datacraft-io
@@ -46,7 +47,7 @@ datacraft-lab/
     ├── orchestration/                  Airflow DAG contract tests (need Airflow)
     ├── smoke/                          Airflow runtime, container and Compose smoke tests
     ├── deploy/                         deployment script and template tests
-    ├── ci/                             test-count floor check and its tests, JSch probe
+    ├── ci/                             tests of the cicd/ scripts and the workflow structure
     └── docs/                           documentation consistency and cost calculator tests
 ```
 
@@ -72,8 +73,8 @@ the build when the module depends on a project module outside this list. Every m
 
 ## Quick start
 
-You need JDK 25 (25.0.4.1 or newer recommended); the Maven Wrapper downloads Maven 3.9.16 on first
-use. The [development guide](guides/development.md) lists every prerequisite.
+You need JDK 25.0.4.1 or newer, which the build enforces; the Maven Wrapper downloads Maven 3.9.16
+on first use. The [development guide](guides/development.md) lists every prerequisite.
 
 Run the full gate, then run jobs from the shaded jar:
 
@@ -112,7 +113,7 @@ Swarm, is in Chinese: [guides/deployment.md](guides/deployment.md).
 | [design/build-and-quality.md](../design/build-and-quality.md) | English | Reactor, versions, compiler and formatting settings, Enforcer rules, tests, packaging, CI gates, zero-warning policy |
 | [design/decisions.md](../design/decisions.md) | English | Architecture decision log, including the cloud platform choice |
 | [guides/usage.md](guides/usage.md) | English | Running jobs: CLI options, exit codes, `spark-submit`, `serve-api`, HTTP API |
-| [guides/development.md](guides/development.md) | English | Prerequisites, build and test commands, test layout, CI |
+| [guides/development.md](guides/development.md) | English | Prerequisites, build and test commands, test layout, CI and the `cicd/` scripts |
 | [guides/airflow.md](guides/airflow.md) | English | DAGs, Airflow configuration, SFTP connection, Airflow tests |
 | [guides/deployment.md](guides/deployment.md) | Chinese | Compose and Swarm deployment tutorial and operations |
 | [reports/evaluation-report.html](reports/evaluation-report.html) | Chinese | Consolidated evaluation report, including the cloud platform decision and a cost calculator |

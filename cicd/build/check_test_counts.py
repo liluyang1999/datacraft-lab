@@ -9,7 +9,7 @@ count (tests minus skipped) with FLOORS. Surefire counts skipped and aborted tes
 skipped attribute; ScalaTest writes no such attribute and instead gives each canceled, ignored or
 pending <testcase> a <skipped/> child. Both forms are read, and a test marked both ways counts once.
 
-Usage: python3 -B tests/ci/check_test_counts.py [REPOSITORY_ROOT]
+Usage: python3 -B cicd/build/check_test_counts.py [REPOSITORY_ROOT]
 Exit status: 0 when every module meets its floor, 1 otherwise.
 """
 

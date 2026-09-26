@@ -23,7 +23,7 @@ Spark 和 Airflow；不要求在云主机上额外安装 Maven、JDK 或 Airflow
 `build-images.sh` 每次先拉取基础镜像（Maven 构建镜像、`eclipse-temurin:25-jre`、`apache/airflow:3.3.2`），
 使重建的镜像带上这些标签当前的 JDK 与系统补丁；`MAVEN_IMAGE`、`JRE_IMAGE`、`AIRFLOW_IMAGE`、
 `SPARK_IMAGE` 可改用其他基础镜像。CI 的 `tests/smoke/container_smoke.sh` 检查两个运行镜像的 JRE
-与新拉取的 `JRE_IMAGE` 一致，且版本不低于建议的 25.0.4.1。
+与新拉取的 `JRE_IMAGE` 一致，且版本不低于 25.0.4.1。
 
 只用 `bash deploy/scripts/build-images.sh` 构建镜像。`Dockerfile.jvm`、`Dockerfile.airflow`、
 `Dockerfile.spark` 的 `JAR_IMAGE` 没有默认值，由脚本传入本机构建的 `datacraft/jar-builder:latest`；
@@ -299,12 +299,14 @@ node --test tests/docs/cloud-costs.test.cjs
 
 Linux CI（ubuntu-24.04）是权威门禁：完整 JVM verify 与各模块测试数下限、jar 冒烟与退出码、真实
 Airflow 3.3.2 流程、ShellCheck、Compose/Swarm 解析与缺失密钥拒绝、镜像构建、实际 Compose 任务与备份恢复。
+工作流只负责编排，每项检查都是 `cicd/` 下的脚本，也可以在本机运行；其中 `cicd/stacks/check-stack-files.sh`
+需要 Docker，并且在 `deploy/compose/.env` 已存在时拒绝运行，以免覆盖真实密钥。
 镜像检查（`tests/smoke/container_smoke.sh`）还包括 JRE ≥ 25.0.4.1、Airflow ≥ 3.3.2、FAB ≥ 3.9.0，以及
 API 以非 root 运行、数据挂载只读。`tests/smoke/compose_smoke.sh` 仅限隔离 CI，会销毁其专用测试项目的
 数据卷，拒绝覆盖已有 `.env`。
 
-本地构建建议使用 JDK 25.0.4.1 及以上（含 2026 年 7、8 月的安全修复）；更低的 JDK 25 仍可构建，但
-Enforcer 会给出警告。开发环境与构建命令见[开发指南](development.md)。
+本地构建需要 JDK 25.0.4.1 及以上（含 2026 年 7、8 月的安全修复），更低的版本会被 Enforcer 直接拒绝。
+开发环境、构建命令与 `cicd/` 脚本的本地用法见[开发指南](development.md)。
 
 在 Windows 上本地运行 JVM 测试：NIO Selector 需要在临时目录创建 AF_UNIX 套接字，部分 Windows 用户
 TEMP 目录做不到，这是主机状态而非 JDK 缺陷；构建在所有系统上为测试 JVM 设置

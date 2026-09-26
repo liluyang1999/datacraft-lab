@@ -11,7 +11,7 @@ import unittest
 import xml.etree.ElementTree as ET
 
 REPOSITORY = Path(__file__).resolve().parents[2]
-SCRIPT = REPOSITORY / "tests" / "ci" / "check_test_counts.py"
+SCRIPT = REPOSITORY / "cicd" / "build" / "check_test_counts.py"
 
 _spec = importlib.util.spec_from_file_location("check_test_counts", SCRIPT)
 assert _spec is not None and _spec.loader is not None, SCRIPT

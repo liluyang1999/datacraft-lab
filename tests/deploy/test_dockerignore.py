@@ -85,7 +85,7 @@ class DockerignoreTests(unittest.TestCase):
                      "deploy/compose/.env", "warehouse/t/part-0.parquet", "spark-warehouse/x",
                      ".airflow/airflow.db", f"{cli}/target/datacraft-cli.jar",
                      ".claude/worktrees/wf/pom.xml", "tests/jvm/datacraft-io/java/X.java",
-                     "docs/README.md", "design/architecture.md"):
+                     "docs/README.md", "design/architecture.md", "cicd/build/check-jar-contents.sh"):
             self.assertTrue(is_excluded(self.patterns, path), path)
 
     def test_build_inputs_stay_in_the_build_context(self):

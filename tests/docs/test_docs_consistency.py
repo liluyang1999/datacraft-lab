@@ -5,8 +5,8 @@ docs/README.md and has relative links that resolve; tests live only under tests/
 names a path, module location or build property that the 2026-09-26 restructure moved or renamed
 (docs/CHANGELOG.md keeps those as history). Claims that drifted before: stale cloud wording, a
 Java release other than the build's, a workstation JDK path, a serve-api command the CLI refuses,
-Airflow pins that disagree, a CI constraints file for another Python version, and loopback-only
-ports advertised on <host>.
+Airflow pins that disagree, a CI constraints file fixed to another Python version, and
+loopback-only ports advertised on <host>.
 
 Standard library only; runs on Windows and Linux. The files checked are those git lists as
 tracked or untracked-but-not-ignored; without git, a directory walk approximates that.
@@ -33,6 +33,8 @@ INDEX = "docs/README.md"
 # History: it may name moved paths and renamed properties.
 CHANGELOG = "docs/CHANGELOG.md"
 CI_WORKFLOW = ".github/workflows/ci.yml"
+# The dags job installs Airflow through this script, which pins it the way the Airflow image does.
+CI_AIRFLOW_INSTALL = "cicd/airflow/install-airflow.sh"
 
 PAGE_SUFFIXES = (".md", ".html", ".htm")
 TEXT_SUFFIXES = PAGE_SUFFIXES + (".css", ".js", ".cjs", ".mjs", ".json", ".txt", ".svg")
@@ -61,6 +63,7 @@ STALE_NAMES = (
     "orchestration/airflow/README.md", "docs/deployment/", "docs/architecture.md",
     "cloud-and-deployment.md", "data-processing.md", "PROJECT-REVIEW.html",
     "CLOUD-DEPLOYMENT-ANALYSIS.html", "engineering-report", "test.nio.jvm.args",
+    "tests/ci/check_test_counts.py", "tests/ci/JschAlgorithmsProbe.java",
 )
 STALE_NAME = re.compile("|".join(re.escape(name).replace("/", r"[\\/]") for name in STALE_NAMES))
 # A module's src, target or pom.xml, which must be named from its directory under modules/.
@@ -80,7 +83,7 @@ AIRFLOW_PINS = (
 )
 # The pin kinds each file must carry; the Airflow guide may show any of them.
 AIRFLOW_PIN_FILES = {
-    CI_WORKFLOW: ("apache-airflow==", "constraints-"),
+    CI_AIRFLOW_INSTALL: ("apache-airflow==", "constraints-"),
     "deploy/docker/Dockerfile.airflow": ("apache/airflow:",),
     "docs/guides/airflow.md": (),
 }
@@ -187,6 +190,7 @@ class _LinkAttributes(HTMLParser):
         self.links = []
 
     def handle_starttag(self, tag, attrs):
+        del tag  # every element's href and src count, whatever the element
         self.links.extend(value for name, value in attrs if name in ("href", "src") and value)
 
 
@@ -555,16 +559,19 @@ class DocsConsistencyTests(unittest.TestCase):
                     for version in listed}
         self.assertEqual(1, len(versions), f"Airflow pins disagree: {found}")
 
-    def test_dags_job_constraints_match_its_python(self):
+    def test_dags_job_constraints_follow_its_python(self):
         job = "\n".join(workflow_job(read(CI_WORKFLOW), "dags"))
         self.assertTrue(job, f"{CI_WORKFLOW} has no dags job")
-        pythons = set(SETUP_PYTHON.findall(job))
-        constrained = set(CONSTRAINTS_PYTHON.findall(job))
-        self.assertTrue(pythons, "the dags job sets up no literal python-version")
-        self.assertTrue(constrained,
-                        "the dags job installs Airflow without a constraints-3.NN.txt file")
-        self.assertEqual(pythons, constrained,
-                         "the dags job's constraints file must match its setup-python version")
+        self.assertTrue(SETUP_PYTHON.findall(job), "the dags job sets up no literal python-version")
+        self.assertIn(CI_AIRFLOW_INSTALL, job, "the dags job must install Airflow with the script")
+        # The constraints file must match the interpreter that installs Airflow. The script derives
+        # the Python version, so a fixed constraints-3.NN.txt in the job or the script could
+        # disagree with the job's setup-python version.
+        script = read(CI_AIRFLOW_INSTALL)
+        self.assertEqual([], CONSTRAINTS_PYTHON.findall(job + "\n" + script),
+                         "name the constraints file from the running Python, not a fixed version")
+        self.assertIn("sys.version_info", script)
+        self.assertRegex(script, r"constraints-\d+(?:\.\d+)+/constraints-\$\{python_minor\}\.txt")
 
     def test_readme_and_changelog_drop_stale_cloud_claims(self):
         for name in (INDEX, CHANGELOG):

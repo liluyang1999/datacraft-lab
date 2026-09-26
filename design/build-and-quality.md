@@ -177,11 +177,15 @@ on a violation. Scala sources are covered by scalac (`-Xlint`, `-Werror`) and sc
 
 ## Enforcer
 
-maven-enforcer-plugin runs three executions, all at `validate`:
+maven-enforcer-plugin runs two executions, both at `validate`:
 
 1. **`enforce-build-environment`** (root, inherited by every module):
-   - `requireJavaVersion [25,)`: "datacraft-lab builds with JDK 25 or newer and targets Java 25
-     bytecode (25.0.4.1+ recommended)."
+   - `requireJavaVersion [25.0.4.1,)`: "datacraft-lab builds with JDK 25.0.4.1 or newer and targets
+     Java 25 bytecode: 25.0.4.1 carries the July/August 2026 security fixes, and Spark 4.2.0
+     deprecates Java 25 releases older than 25.0.3." 25.0.4.1 is the out-of-band update for the
+     OpenJDK vulnerability advisory of 2026-08-18; CI's `setup-java` and the builder image resolve
+     to it or newer. The rule compares the fourth version component: `[25.0.4.2,)` rejects
+     25.0.4.1.
    - `requireMavenVersion [3.9.0,)`.
    - `requirePluginVersions` for every plugin up to the `clean`, `deploy` and `site` phases, with
      `LATEST`, `RELEASE` and SNAPSHOT versions banned.
@@ -192,12 +196,7 @@ maven-enforcer-plugin runs three executions, all at `validate`:
      GHSA-p6pp-m3f8-5c89 (CVE-2026-89407) and GHSA-7hhh-6rmp-j9qf (CVE-2026-89425). The two
      artifacts are named explicitly because `jackson-annotations` is versioned 2.22, without a
      patch number, which sorts below 2.22.3 and would fall under a group-wide ban.
-2. **`warn-deprecated-jdk`** (root): `requireJavaVersion [25.0.4.1,)` at level `WARN`, with the
-   message "Use JDK 25.0.4.1 or newer: it carries the July/August 2026 security fixes, and Spark
-   4.2.0 deprecates Java 25 releases older than 25.0.3." The hard floor stays `[25,)` so existing
-   JDK 25 hosts keep building; on such a host this is the one warning a clean build is expected to
-   print.
-3. **`enforce-module-boundaries`** (each module POM except `datacraft-cli`): the allow-list of
+2. **`enforce-module-boundaries`** (each module POM except `datacraft-cli`): the allow-list of
    project modules and the Spark ban described in
    [Module responsibilities](architecture.md#module-responsibilities).
 
@@ -272,7 +271,7 @@ tests bind to `slf4j-nop`.
 ### Test inventory and floors
 
 The JVM suites have 262 test cases.
-[`tests/ci/check_test_counts.py`](../tests/ci/check_test_counts.py) reads each module's
+[`cicd/build/check_test_counts.py`](../cicd/build/check_test_counts.py) reads each module's
 `target/surefire-reports/TEST-*.xml`, counts executed tests (skipped, aborted and canceled ones do
 not count) and fails when a module is below its floor. Floors are Linux counts and minimums: adding
 tests needs no change, removing tests needs a lower floor in the same commit. A test in `tests/ci`
@@ -301,7 +300,7 @@ design; CI runs the floor check on Linux only.
 | Real pipelines | `tests/smoke/airflow_runtime_smoke.py` | Airflow 3.3.2, pyspark 4.2.0, the jar | CI `dags` and `containers` |
 | Images and stack | `tests/smoke/container_smoke.sh`, `compose_smoke.sh` | Docker; `compose_smoke.sh` refuses to run outside CI | CI `containers` |
 | Deployment scripts and templates | `tests/deploy` | Python standard library | CI `scripts`; `make test-scripts` |
-| CI tooling | `tests/ci` | Python standard library | CI `scripts`; `make test-scripts` |
+| CI/CD scripts and workflow structure | `tests/ci` | Python standard library; Bash for the pinning check (skipped on Windows) | CI `scripts`; `make test-scripts` |
 | Documentation consistency | `tests/docs/test_docs_consistency.py` | Python standard library | CI `scripts`; `make test-scripts` |
 | Cost calculator | `tests/docs/cloud-costs.test.cjs` | Node | CI `scripts`; `make test-scripts` |
 
@@ -358,48 +357,59 @@ laptop experiments without `spark-submit`. CI checks the shaded jar in the `buil
 
 ## Python type checking
 
-[`pyrightconfig.json`](../pyrightconfig.json) type-checks the Python in `orchestration/`, `deploy/`
-and `tests/` (excluding `__pycache__` and `target`) in pyright's `standard` mode, as Python 3.12 on
-Linux, the platform everything here runs on. Airflow, its providers, paramiko and pyspark exist
-only in the Airflow environment, so the execution environments for `orchestration/airflow/dags`,
-`tests/orchestration` and `tests/smoke` (which see the DAG helpers through `extraPaths`) do not
-report missing imports; CI's `dags` job exercises those imports with Airflow installed.
+[`pyrightconfig.json`](../pyrightconfig.json) type-checks the Python in `orchestration/`, `deploy/`,
+`tests/` and `cicd/` (excluding `__pycache__` and `target`) in pyright's `standard` mode, as Python
+3.12 on Linux, the platform everything here runs on. Airflow, its providers, paramiko, pyspark and
+packaging exist only in the Airflow environment, so the execution environments for
+`orchestration/airflow/dags`, `tests/orchestration`, `tests/smoke` (which see the DAG helpers
+through `extraPaths`) and `cicd/airflow` do not report missing imports; CI's `dags` job exercises
+those imports with Airflow installed.
 
-CI's `scripts` job runs `npx --yes pyright@1.1.410 --warnings`, and `make typecheck` runs the same
+CI's `scripts` job runs `npx --yes pyright@1.1.414 --warnings`, and `make typecheck` runs the same
 command (the `PYRIGHT` variable). Without `--warnings` pyright exits 0 when it reports only
 warnings; with it, any error or warning fails the gate, so the Python code is held at zero
 diagnostics.
 
 ## CI gates
 
+GitHub reads workflows only from `.github/workflows`, so `ci.yml` stays there, but it only
+orchestrates: triggers, permissions, runners, toolchain setup (the pinned actions) and job order.
+Every check a job runs is a script in `cicd/`, grouped by the job that runs it (`build/`,
+`airflow/`, `lint/`, `stacks/`, with shared helpers in `cicd/lib.sh`), or a test entry point in
+`tests/`. The scripts therefore run and can be reviewed outside GitHub Actions: on a runner their
+errors become `::error::` annotations, elsewhere they go to standard error.
+[`tests/ci/test_workflow.py`](../tests/ci/test_workflow.py) keeps the split: a `run:` step must be
+a single command, the scripts it names must exist, every file in `cicd/` must be used by the
+workflow or by another `cicd/` script, and tests stay out of `cicd/`.
+
 The workflow runs on pushes and pull requests to `main` and on demand, with read-only repository
 permissions; a newer run on the same ref cancels the older one. Every job runs on `ubuntu-24.04`,
 and every action is pinned to a full commit SHA with the release in a comment: `checkout` v7.0.1,
 `setup-java` v6.0.1, `setup-python` v7.0.0, `setup-node` v7.0.0, `upload-artifact` v7.0.1 and
 `download-artifact` v8.0.1. The `scripts` job fails on any non-local `uses:` that is not pinned to
-a SHA.
+a SHA (`cicd/lint/check-actions-pinned.sh`).
 
 | Job | What it gates |
 | --- | --- |
-| `build`: Build & verify (JDK 25) | Temurin 25; the wrapper must refuse a Maven download with a wrong SHA-256 (a copy with a zeroed `distributionSha256Sum` and an empty `MAVEN_USER_HOME`), and no `maven-wrapper.jar` may be committed; `./mvnw -B -ntp verify`; the test floors; the Spark suite must have run `SparkPipelineSpec` with `canceled 0`; the jar smoke tests; jar and exit-code checks (below). |
-| `dags`: Airflow contracts and real pipelines (3.3.2) | Python 3.13, the version the `apache/airflow:3.3.2` image runs; `apache-airflow==3.3.2` and the providers under `constraints-3.3.2/constraints-3.13.txt` (a test in `tests/docs` checks that the constraints file names the job's Python version), then `pip check`; a security floor of apache-airflow 3.3.2 and FAB provider 3.9.0; `tests/orchestration`; `tests/smoke/airflow_runtime_smoke.py` against the jar built by `build`, with pyspark 4.2.0's `spark-submit`. |
-| `scripts`: Deployment script lint | SHA pinning of actions; Python 3.13 and Node 24; `bash -n` and ShellCheck (`--severity=error`) on `deploy/scripts/*.sh` and `tests/smoke/*.sh`; `tests/deploy`, `tests/ci` and `tests/docs`; `node --test tests/docs/cloud-costs.test.cjs`; pyright 1.1.410 with `--warnings`. |
-| `compose`: Compose / Swarm file validation | `docker compose config` and `docker stack config` with test-only secrets; for each required secret, interpolation must fail when it is missing. Nothing is built or deployed. |
+| `build`: Build & verify (JDK 25) | Temurin 25; `cicd/build/check-maven-wrapper.sh`: the wrapper must refuse a Maven download with a wrong SHA-256 (a copy with a zeroed `distributionSha256Sum` and an empty `MAVEN_USER_HOME`), and no `maven-wrapper.jar` may be committed; `./mvnw -B -ntp verify`; the test floors (`cicd/build/check_test_counts.py`); `cicd/build/check-spark-suite.sh`: the Spark suite must have run `SparkPipelineSpec` with `canceled 0`; the jar and exit-code checks below. |
+| `dags`: Airflow contracts and real pipelines (3.3.2) | Python 3.13, the version the `apache/airflow:3.3.2` image runs; `cicd/airflow/install-airflow.sh`: `apache-airflow==3.3.2` and the providers under the official `constraints-3.3.2` file for the running Python (the script derives the version, as `Dockerfile.airflow` does, and a test in `tests/docs` keeps it from being fixed), `pip check`, then pyspark 4.2.0; `cicd/airflow/check_security_floor.py`: apache-airflow 3.3.2 and FAB provider 3.9.0 at least; `tests/orchestration`; `tests/smoke/airflow_runtime_smoke.py` against the jar built by `build`, with pyspark 4.2.0's `spark-submit`. |
+| `scripts`: Script, documentation and type checks | `cicd/lint/check-actions-pinned.sh`; Python 3.13 and Node 24; `cicd/lint/check-shell-scripts.sh`: `bash -n` and ShellCheck at warning severity on every script in `cicd/`, `deploy/scripts/` and `tests/smoke/`; `tests/deploy`, `tests/ci` and `tests/docs`; `node --test tests/docs/cloud-costs.test.cjs`; pyright 1.1.414 with `--warnings`. |
+| `compose`: Compose / Swarm file validation | `cicd/stacks/check-stack-files.sh`: `docker compose config` and `docker stack config` with test-only secrets; for each required secret, interpolation must fail when it is missing. Nothing is built or deployed; the script refuses to run while `deploy/compose/.env` exists, because it writes that file from `.env.example`. |
 | `containers`: Build and smoke-test runtime images | `tests/smoke/container_smoke.sh`: builds the images; the build context must exclude `.env` and `backups/`; both runtime images carry the freshly pulled Temurin JRE, at least 25.0.4.1; the API runs as non-root, cannot modify its jar and answers `spark-version` with HTTP 500 FAILED; Airflow and FAB floors and `pip check` in the Airflow image; a fresh data volume is writable by an Airflow task and read-only for the API; the real pipelines inside the image. `tests/smoke/compose_smoke.sh`: the full Compose stack with generated secrets, a triggered `datacraft_engine_jobs` run through the scheduler and LocalExecutor, and a `pg_dump` backup restored into a separate database that must contain the successful run. |
 
 Checks of the shaded jar in the `build` job:
 
-- `list-jobs`, `echo` and `noop` run under plain `java -jar`, which proves the jar is runnable and
-  that these commands need no Spark.
-- `csv-profile` with `expectedRows=2` and `file-checksum` with the file's `sha256sum` succeed on a
-  sample CSV, and `csv-profile` with `expectedRows=3` exits 1.
-- The manifest contains `Multi-Release: true`, no entry is a `module-info.class`, and
-  [`JschAlgorithmsProbe.java`](../tests/ci/JschAlgorithmsProbe.java), run from the jar, signs and
-  verifies with Ed25519 and initialises X25519 key agreement.
-- The bundled `jackson-core` and `jackson-databind` versions equal `jackson.version` in `pom.xml`.
-- Exit codes: `spark-version` under plain `java -jar` exits 1 and still writes a FAILED
-  `--result-file`; an unknown command, a malformed `--param` and a missing `--config` exit 2; none
-  of them may end with an uncaught exception.
+- `cicd/build/smoke-cli-jar.sh`: `list-jobs`, `echo` and `noop` run under plain `java -jar`, which
+  proves the jar is runnable and that these commands need no Spark; `csv-profile` with
+  `expectedRows=2` and `file-checksum` with the file's `sha256sum` succeed on a sample CSV, and
+  `csv-profile` with `expectedRows=3` exits 1.
+- `cicd/build/check-jar-contents.sh`: the manifest contains `Multi-Release: true`, no entry is a
+  `module-info.class`, and [`JschAlgorithmsProbe.java`](../cicd/build/JschAlgorithmsProbe.java),
+  run from the jar, signs and verifies with Ed25519 and initialises X25519 key agreement; the
+  bundled `jackson-core` and `jackson-databind` versions equal `jackson.version` in `pom.xml`.
+- `cicd/build/check-cli-exit-codes.sh`: `spark-version` under plain `java -jar` exits 1 and still
+  writes a FAILED `--result-file`; an unknown command, a malformed `--param` and a missing
+  `--config` exit 2; none of them may end with an uncaught exception.
 
 On failure the job uploads the test reports; on success it shares the verified jar with the
 `dags` job for one day.
@@ -415,17 +425,17 @@ zero:
 | javac | `-Xlint:all`, `failOnWarning` | the build fails |
 | scalac | `-deprecation -feature -unchecked -Xlint -Werror` | the build fails |
 | Formatting and imports | Spotless `check`, Checkstyle | the build fails |
-| Build environment, plugin versions, dependencies | Enforcer rules | the build fails; the JDK recommendation only warns |
+| Build environment, plugin versions, dependencies | Enforcer rules | the build fails, including on a JDK older than 25.0.4.1 |
 | Shading | manifests filtered, NOTICE merged, one LICENSE, services merged, no `module-info.class` | configuration; CI checks the manifest and `module-info.class` |
 | JVM warnings in the Maven JVM | `.mvn/jvm.config` | configuration |
 | JVM warnings in Spark test JVMs | `spark.test.jvm.args` | configuration |
 | Log noise from provoked failures | handler-less java.util.logging, Log4j 2 level `off`, `slf4j-nop`, the MINA transport for the SFTP test server | configuration |
 | Skipped and canceled tests | platform tags and host profiles | CI counts executed tests only and fails a canceled Spark suite |
 | Python | pyright configuration | CI and `make typecheck` fail on any pyright error or warning (`--warnings`) |
-| Shell | ShellCheck at severity `error` | CI |
+| Shell | ShellCheck at severity `warning` over every script; only its informational notes remain | CI; `make lint` |
+| Pipeline logic | multi-line `run:` blocks are not allowed in the workflow; logic lives in `cicd/` | `tests/ci/test_workflow.py` |
 
-By design, the one warning a clean build may still print is the Enforcer's recommendation on a JDK
-25 older than 25.0.4.1; upgrading the JDK removes it.
+A clean `./mvnw verify` on JDK 25.0.4.1 prints no Maven or JVM warning at all.
 
 ## Related documents
 

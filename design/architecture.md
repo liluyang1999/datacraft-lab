@@ -10,8 +10,8 @@ orchestration with container deployments.
 ## Repository layout
 
 The repository is organised by responsibility. Production code lives in `modules/`, every test in
-`tests/`, user documentation in `docs/` and design documentation in `design/`; the root keeps only
-build entry points and tool configuration.
+`tests/`, the CI/CD pipeline logic in `cicd/`, user documentation in `docs/` and design
+documentation in `design/`; the root keeps only build entry points and tool configuration.
 
 ```text
 datacraft-lab/
@@ -20,7 +20,12 @@ datacraft-lab/
 ├── .editorconfig  .gitattributes  .gitignore  .dockerignore  .scalafmt.conf
 ├── pyrightconfig.json                 Python type checking
 ├── config/checkstyle/checkstyle.xml   Checkstyle rules
-├── .github/workflows/ci.yml           CI
+├── .github/workflows/ci.yml           CI workflow: triggers, runners and job order only
+├── cicd/                              the scripts the CI jobs run
+│   ├── build/        Maven Wrapper checksum, test-count floors, Spark suite, CLI jar checks
+│   ├── airflow/      constrained Airflow install and security floor
+│   ├── lint/         shell syntax and ShellCheck, pinned actions
+│   └── stacks/       Compose and Swarm definitions
 ├── modules/                           JVM source modules, grouped by responsibility
 │   ├── core/         datacraft-common, datacraft-config, datacraft-engine
 │   ├── io/           datacraft-io
@@ -36,10 +41,13 @@ datacraft-lab/
     ├── orchestration/                 Airflow DAG contract tests (need Airflow)
     ├── smoke/                         Airflow pipeline, container and Compose smoke tests
     ├── deploy/                        deployment script and template tests (standard library only)
-    ├── ci/                            check_test_counts.py and its tests, JschAlgorithmsProbe.java
+    ├── ci/                            tests of the cicd/ scripts and of the workflow structure
     └── docs/                          documentation consistency and cost calculator tests
 ```
 
+- GitHub reads workflows only from `.github/workflows`, so `ci.yml` stays there, but it only
+  orchestrates; every step runs a script in `cicd/` or a test entry point in `tests/`, and
+  `tests/ci/test_workflow.py` keeps it that way.
 - The grouping directories are not part of any coordinate: artifactIds and Java/Scala packages
   are the same as before the grouping, so select a module by artifactId, for example
   `./mvnw -pl :datacraft-cli -am package`.
@@ -223,13 +231,14 @@ All JVM code uses base package `com.example.datacraft` plus the module name (`.c
 
 The parent POM owns every version and the compiler, formatter, Checkstyle, Enforcer and test
 configuration; module POMs declare only their dependencies, their boundary rule and module-specific
-plugins. `./mvnw verify` runs the Enforcer rules (JDK 25+, Maven 3.9+, pinned plugins, no POM
-repositories, no vulnerable Jackson, module boundaries), javac with `-Xlint:all` and scalac with
+plugins. `./mvnw verify` runs the Enforcer rules (JDK 25.0.4.1+, Maven 3.9+, pinned plugins, no
+POM repositories, no vulnerable Jackson, module boundaries), javac with `-Xlint:all` and scalac with
 `-Werror` (any warning fails), Spotless, Checkstyle, the JUnit and ScalaTest suites and the shaded
-package. GitHub Actions on `ubuntu-24.04` is the authoritative gate: on top of `verify` it checks
-per-module test floors, the shaded jar and the CLI exit codes, runs real Airflow pipelines, lints
-and tests the deployment scripts, type-checks the Python code, validates both stacks and
-smoke-tests the images. The full description is in [build-and-quality.md](build-and-quality.md).
+package. GitHub Actions on `ubuntu-24.04` is the authoritative gate: on top of `verify` it runs
+the `cicd/` scripts that check per-module test floors, the shaded jar and the CLI exit codes, runs
+real Airflow pipelines, lints the shell scripts, tests the deployment scripts, type-checks the
+Python code, validates both stacks and smoke-tests the images. The full description is in
+[build-and-quality.md](build-and-quality.md).
 
 ## Extending the platform
 
@@ -278,8 +287,8 @@ Adding a JVM module:
    configuration. A Scala module also declares `scala-maven-plugin` and `scalatest-maven-plugin`
    and sets `surefire.skip=true` when it has no JUnit tests, as `datacraft-spark` and
    `datacraft-cli` do.
-4. Add it to `MODULE_DIRS` and `FLOORS` in `tests/ci/check_test_counts.py`; a test there checks
-   that `MODULE_DIRS` matches `<modules>`.
+4. Add it to `MODULE_DIRS` and `FLOORS` in `cicd/build/check_test_counts.py`; a test in `tests/ci`
+   checks that `MODULE_DIRS` matches `<modules>`.
 5. Add its POM to the `COPY` list of `deploy/docker/Dockerfile.build`, so the dependency layer that
    the builder resolves from the POMs, before it copies the sources, still covers every module.
 6. If it contributes jobs, make `datacraft-cli` depend on it and register the jobs in

@@ -6,10 +6,11 @@ is covered in [the usage guide](usage.md); the reasoning behind the build rules 
 
 ## Prerequisites
 
-- **JDK 25.** The build targets Java 25 bytecode. The Enforcer fails the build on an older JDK and
-  warns below 25.0.4.1, the recommended minimum: "Use JDK 25.0.4.1 or newer: it carries the
-  July/August 2026 security fixes, and Spark 4.2.0 deprecates Java 25 releases older than 25.0.3."
-  On Windows, set `$env:JAVA_HOME` (for example `C:\path\to\jdk-25`) if Maven does not find it.
+- **JDK 25.0.4.1 or newer.** The build targets Java 25 bytecode, and the Enforcer fails it on an
+  older JDK: "datacraft-lab builds with JDK 25.0.4.1 or newer and targets Java 25 bytecode:
+  25.0.4.1 carries the July/August 2026 security fixes, and Spark 4.2.0 deprecates Java 25 releases
+  older than 25.0.3." On Windows, set `$env:JAVA_HOME` (for example `C:\path\to\jdk-25`) if Maven
+  does not find it.
 - **Maven, through the wrapper.** `./mvnw` (Linux, macOS, WSL) and `mvnw.cmd` (Windows; it runs its
   logic in PowerShell) are Maven Wrapper 3.3.4 scripts; no wrapper jar is committed. On first use
   they download Maven 3.9.16 into `~/.m2/wrapper/dists` and verify it against the SHA-256 pinned in
@@ -26,8 +27,8 @@ is covered in [the usage guide](usage.md); the reasoning behind the build rules 
 - **Linux or WSL** for Airflow, which does not run on Windows, and for the deployment tests, several
   of which run the Bash scripts or need POSIX terminals and file modes.
 - **Node.js** (CI uses 24) for the cost calculator test and for running pyright through `npx`.
-- **ShellCheck**, optionally, to repeat CI's `shellcheck --severity=error` over
-  `deploy/scripts/*.sh` and `tests/smoke/*.sh`.
+- **ShellCheck**, optionally, to repeat CI's shell checks with `make lint` (warning severity over
+  every script in `cicd/`, `deploy/scripts/` and `tests/smoke/`).
 
 ## Build and test
 
@@ -63,12 +64,13 @@ The Makefile wraps the common commands:
 | `make clean` | `$(MVN) -B -ntp clean` |
 | `make test-scripts` | The `tests/deploy`, `tests/ci` and `tests/docs` suites with `$(PYTHON) -B -m unittest discover`, then `node --test tests/docs/cloud-costs.test.cjs` |
 | `make typecheck` | `$(PYRIGHT)` |
+| `make lint` | `cicd/lint/check-shell-scripts.sh` (`bash -n` and ShellCheck) and `cicd/lint/check-actions-pinned.sh` |
 | `make dags` | `$(PYTHON) -B -m unittest discover -s tests/orchestration -v` (needs Airflow) |
 | `make images`, `up`, `down`, `swarm` | `deploy/scripts/build-images.sh`, `compose-up.sh`, `compose-down.sh`, `swarm-deploy.sh` |
 | `make help` | Lists the targets |
 
 The variables default to `MVN ?= ./mvnw`, `PYTHON ?= python3` and
-`PYRIGHT ?= npx --yes pyright@1.1.410 --warnings`; override them on the command line, for example
+`PYRIGHT ?= npx --yes pyright@1.1.414 --warnings`; override them on the command line, for example
 `make MVN=mvn verify`.
 
 ## Test layout
@@ -82,7 +84,7 @@ tests/
 ├── orchestration/                Airflow DAG contract tests (test_dags.py)
 ├── smoke/                        Airflow runtime, container and Compose smoke tests
 ├── deploy/                       deployment script and template tests
-├── ci/                           check_test_counts.py, its tests, JschAlgorithmsProbe.java
+├── ci/                           tests of the cicd/ scripts and of the workflow structure
 └── docs/                         test_docs_consistency.py, cloud-costs.test.cjs
 ```
 
@@ -159,8 +161,8 @@ java.util.logging output needs a configuration with a `ConsoleHandler` in
 - The `windows-host` profile excludes the `posix-only` tests: symbolic links, `?` and `*` in file
   names, and the Spark tests that write through Hadoop and would need winutils. The `windows-only`
   junction tests run only on Windows.
-- Test counts therefore differ by OS. The floors in `tests/ci/check_test_counts.py` are Linux counts
-  and CI checks them on Linux; against Windows reports the check puts `datacraft-jobs` and
+- Test counts therefore differ by OS. The floors in `cicd/build/check_test_counts.py` are Linux
+  counts and CI checks them on Linux; against Windows reports the check puts `datacraft-jobs` and
   `datacraft-spark` below their floors.
 - Airflow does not run on Windows. Use WSL or Linux for `tests/orchestration`, the Airflow smoke
   test and the deployment tests that run Bash.
@@ -171,14 +173,15 @@ The deployment, CI tooling and documentation suites, which `make test-scripts` a
 
 ```bash
 python3 -B -m unittest discover -s tests/deploy -v   # deployment scripts and templates
-python3 -B -m unittest discover -s tests/ci -v       # the test-count floor check
+python3 -B -m unittest discover -s tests/ci -v       # the CI/CD scripts and the workflow
 python3 -B -m unittest discover -s tests/docs -v     # documentation links and consistency
 node --test tests/docs/cloud-costs.test.cjs          # the evaluation report's cost calculator
 ```
 
 `tests/orchestration` imports Airflow. It needs an Airflow 3.3.2 environment with the providers in
 `orchestration/airflow/requirements.txt`, installed under Airflow's constraints file for your
-Python version (CI uses `constraints-3.13.txt`); [airflow.md](airflow.md) shows the setup. Then run
+Python version; [airflow.md](airflow.md) shows the setup, and `cicd/airflow/install-airflow.sh`
+does the same inside an activated virtual environment (CI runs it on Python 3.13). Then run
 `python -B -m unittest discover -s tests/orchestration -v`, or `make dags`.
 
 The smoke tests exercise real runtimes, and CI runs all three:
@@ -195,13 +198,13 @@ the second refuses to run unless `CI=true` and when `deploy/compose/.env` exists
 
 ## Type checking
 
-`pyrightconfig.json` covers `orchestration`, `deploy` and `tests`, analysed for Linux and Python
-3.12 in `standard` mode. Airflow, its providers, paramiko and pyspark exist only in the Airflow
-environment, so missing imports are not reported in `orchestration/airflow/dags`,
-`tests/orchestration` and `tests/smoke`.
+`pyrightconfig.json` covers `orchestration`, `deploy`, `tests` and `cicd`, analysed for Linux and
+Python 3.12 in `standard` mode. Airflow, its providers, paramiko, pyspark and packaging exist only
+in the Airflow environment, so missing imports are not reported in `orchestration/airflow/dags`,
+`tests/orchestration`, `tests/smoke` and `cicd/airflow`.
 
 ```bash
-make typecheck   # npx --yes pyright@1.1.410 --warnings
+make typecheck   # npx --yes pyright@1.1.414 --warnings
 ```
 
 The CI `scripts` job runs the same command. `--warnings` makes pyright exit non-zero on warnings as
@@ -210,25 +213,47 @@ well as errors, so the gate keeps the tree at `0 errors, 0 warnings, 0 informati
 ## CI
 
 `.github/workflows/ci.yml` runs five jobs on `ubuntu-24.04` for pushes and pull requests to `main`
-and on manual dispatch. Actions are pinned to full commit SHAs.
+and on manual dispatch. Actions are pinned to full commit SHAs. GitHub reads workflows only from
+`.github/workflows`, so the file stays there, but it only orchestrates: triggers, runners, toolchain
+setup and job order. Every check it runs is a script in `cicd/` or a test entry point in `tests/`,
+so the pipeline logic can be run and reviewed outside GitHub Actions. `tests/ci/test_workflow.py`
+fails when a step grows multi-line shell logic, names a script that does not exist, or when a file
+in `cicd/` is used by neither the workflow nor another `cicd/` script.
+
+```text
+cicd/
+├── lib.sh      shared helpers: REPO_ROOT, CLI_JAR, fail, scratch_dir
+├── build/      build job: wrapper checksum, test-count floors, Spark suite, CLI jar checks
+├── airflow/    dags job: constrained Airflow install and the security floor
+├── lint/       scripts job: shell syntax and ShellCheck, pinned actions
+└── stacks/     compose job: the Compose file and the Swarm stack
+```
 
 | Job | What it runs |
 | --- | --- |
-| `build` | Checks that the wrapper refuses a Maven download with the wrong checksum; `./mvnw -B -ntp verify` on JDK 25; the test-count floors; that `SparkPipelineSpec` ran with no canceled tests; a smoke test of the jar (`list-jobs`, `echo`, `noop`, `csv-profile`, `file-checksum`, and a failing row gate that must exit `1`); that the jar is Multi-Release, has no `module-info.class` and exposes JSch's modern algorithms (`tests/ci/JschAlgorithmsProbe.java`); that it bundles the Jackson version in `jackson.version`; the CLI exit codes `1` and `2`. It then shares the verified jar with `dags` |
-| `dags` | After `build`: Python 3.13 and JDK 25; Airflow 3.3.2 and its providers under `constraints-3.13.txt`, then `pyspark==4.2.0`; the Airflow 3.3.2 and FAB provider 3.9.0 security floors; `tests/orchestration`; `tests/smoke/airflow_runtime_smoke.py` with the verified jar |
-| `scripts` | That actions are pinned; `bash -n` and ShellCheck over `deploy/scripts/*.sh` and `tests/smoke/*.sh`; the `tests/deploy`, `tests/ci` and `tests/docs` suites on Python 3.13; `node --test tests/docs/cloud-costs.test.cjs` on Node.js 24; `npx --yes pyright@1.1.410 --warnings` |
-| `compose` | `docker compose config` and `docker stack config` with test-only secrets, and that each missing secret is rejected |
+| `build` | `cicd/build/check-maven-wrapper.sh` (the wrapper refuses a Maven download with the wrong checksum); `./mvnw -B -ntp verify` on JDK 25; `cicd/build/check_test_counts.py` (test-count floors); `cicd/build/check-spark-suite.sh` (`SparkPipelineSpec` ran with no canceled tests); `cicd/build/smoke-cli-jar.sh` (`list-jobs`, `echo`, `noop`, `csv-profile`, `file-checksum`, and a failing row gate that must exit `1`); `cicd/build/check-jar-contents.sh` (Multi-Release manifest, no `module-info.class`, JSch's modern algorithms through `cicd/build/JschAlgorithmsProbe.java`, the Jackson version in `jackson.version`); `cicd/build/check-cli-exit-codes.sh` (exit codes `1` and `2`). It then shares the verified jar with `dags` |
+| `dags` | After `build`: Python 3.13 and JDK 25; `cicd/airflow/install-airflow.sh` (Airflow 3.3.2 and its providers under the official constraints for the running Python, then `pyspark==4.2.0`); `cicd/airflow/check_security_floor.py` (Airflow 3.3.2 and FAB provider 3.9.0); `tests/orchestration`; `tests/smoke/airflow_runtime_smoke.py` with the verified jar |
+| `scripts` | `cicd/lint/check-actions-pinned.sh`; `cicd/lint/check-shell-scripts.sh` (`bash -n` and ShellCheck at warning severity over `cicd/`, `deploy/scripts/` and `tests/smoke/`); the `tests/deploy`, `tests/ci` and `tests/docs` suites on Python 3.13; `node --test tests/docs/cloud-costs.test.cjs` on Node.js 24; `npx --yes pyright@1.1.414 --warnings` |
+| `compose` | `cicd/stacks/check-stack-files.sh`: `docker compose config` and `docker stack config` with test-only secrets, and that each missing secret is rejected |
 | `containers` | `tests/smoke/container_smoke.sh`, then `tests/smoke/compose_smoke.sh` |
+
+The `cicd/build` scripts run after `./mvnw verify` on Linux, macOS, WSL or Git Bash; they need
+`java`, `unzip` and `sha256sum`, and `CLI_JAR` overrides the jar path.
+`check-maven-wrapper.sh` needs network access, because the wrapper downloads Maven before it
+rejects the checksum. `cicd/airflow/install-airflow.sh` installs into the current Python
+environment, so run it inside a virtual environment. `cicd/stacks/check-stack-files.sh` needs
+Docker, and refuses to run while `deploy/compose/.env` exists because that file may hold real
+secrets.
 
 ### Test-count floors
 
-`tests/ci/check_test_counts.py` sums the JUnit XML reports in each module's
+`cicd/build/check_test_counts.py` sums the JUnit XML reports in each module's
 `target/surefire-reports` and fails when a module executed fewer tests than its floor. Skipped,
 aborted and canceled tests do not count, so a renamed class or a suite that silently cancels itself
 cannot pass as green. The floors are minimums measured on Linux: adding tests needs no change, but
 deliberately removing tests needs a lower floor in the same commit. `MODULE_DIRS` in the same script
-maps each artifactId to its module directory, and a test keeps it equal to the root pom's
-`<modules>`.
+maps each artifactId to its module directory, and a test in `tests/ci` keeps it equal to the root
+pom's `<modules>`.
 
 | Module | Floor |
 | --- | --- |
@@ -248,8 +273,9 @@ maps each artifactId to its module directory, and a test keeps it equal to the r
 - scalac runs with `-deprecation -feature -unchecked -Xlint -Werror`, so any Scala compiler warning
   fails the build.
 - pyright stays at zero errors and zero warnings (see [Type checking](#type-checking)).
-- On a JDK older than 25.0.4.1 the Enforcer prints its recommendation as a warning without failing
-  the build; a newer JDK 25 removes it.
+- ShellCheck reports nothing at warning severity for any shell script (`make lint`).
+- A local `./mvnw verify` on JDK 25.0.4.1 prints no Maven or JVM warning at all; an older JDK fails
+  the Enforcer instead of warning.
 
 The reasons and the rest of the build rules are in
 [build and quality](../../design/build-and-quality.md).
@@ -260,6 +286,8 @@ The reasons and the rest of the build rules are in
   wrapper downloads the `.tar.gz` distribution, whose checksum cannot match the pinned zip. Install
   `unzip` and run it again. Without `sha256sum` or `shasum` it stops with "Checksum validation was
   requested but neither 'sha256sum' or 'shasum' are available."
+- **`validate` fails on `requireJavaVersion`**: the JDK is older than 25.0.4.1. Install 25.0.4.1
+  or newer and point `JAVA_HOME` at it.
 - **`validate` fails on `enforce-module-boundaries`**: a new dependency crosses a module boundary.
   The message ends in `(design/architecture.md, "Module responsibilities")`; see
   [Module responsibilities](../../design/architecture.md#module-responsibilities).

@@ -119,8 +119,9 @@ networked storage before removing that placement constraint.
 
 Run these commands from the repository root. Install Airflow with the constraints file for your
 environment's own Python minor version; the commands below derive it the same way
-`deploy/docker/Dockerfile.airflow` does. CI uses Python 3.13 and `constraints-3.13.txt`, because the
-`apache/airflow:3.3.2` base image runs Python 3.13.
+`deploy/docker/Dockerfile.airflow` does. CI does the same with `cicd/airflow/install-airflow.sh`
+on Python 3.13, the Python of the `apache/airflow:3.3.2` base image; inside an activated virtual
+environment the script installs the providers and pyspark in one step.
 
 ```bash
 python -m venv .venv
@@ -137,8 +138,8 @@ python -B tests/smoke/airflow_runtime_smoke.py \
 ```
 
 Build the JAR with `./mvnw verify` first (it writes
-`modules/interfaces/datacraft-cli/target/datacraft-cli.jar`) and run with JDK 25 (25.0.4.1+
-recommended). The runtime smoke initializes an isolated metadata database twice, runs all three
+`modules/interfaces/datacraft-cli/target/datacraft-cli.jar`) with JDK 25.0.4.1 or newer, which the
+build requires, and run it with a Java 25 runtime. The runtime smoke initializes an isolated metadata database twice, runs all three
 DAGs (ETL twice) with `DATACRAFT_DATA_ROOT` set to its temporary data directory, verifies SFTP bytes
 and the row count and exact `note` values of both Parquet outputs, and cleans its temporary
 credentials, files and logs. It does not contact a real SFTP account or deploy a stack.

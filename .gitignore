@@ -1,6 +1,6 @@
 ### Build output ###
 **/target/
-build/
+/build/
 /dist/
 
 ### IDEs ###

@@ -1,7 +1,7 @@
 {
   // Static type checking for the repository's Python: Airflow DAGs, deployment scripts and tests.
   // Everything here runs on Linux (Airflow does not support Windows), so analyse it as Linux.
-  "include": ["orchestration", "deploy", "tests"],
+  "include": ["orchestration", "deploy", "tests", "cicd"],
   "exclude": ["**/__pycache__", "**/target"],
   "pythonVersion": "3.12",
   "pythonPlatform": "Linux",
@@ -17,6 +17,12 @@
     {
       "root": "tests/orchestration",
       "extraPaths": ["orchestration/airflow/dags"],
+      "reportMissingImports": "none",
+      "reportMissingModuleSource": "none"
+    },
+    {
+      // Runs only where the dags job installed Airflow, which brings the packaging library.
+      "root": "cicd/airflow",
       "reportMissingImports": "none",
       "reportMissingModuleSource": "none"
     },

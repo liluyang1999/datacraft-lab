@@ -7,7 +7,7 @@ import java.nio.charset.StandardCharsets;
  * Proves the shaded CLI jar exposes JSch's modern SSH algorithms. Run it against the jar only:
  *
  * <pre>
- * java -cp modules/interfaces/datacraft-cli/target/datacraft-cli.jar tests/ci/JschAlgorithmsProbe.java
+ * java -cp modules/interfaces/datacraft-cli/target/datacraft-cli.jar cicd/build/JschAlgorithmsProbe.java
  * </pre>
  *
  * <p>JSch keeps its JCE-backed Ed25519 and X25519 classes under {@code META-INF/versions/11} and

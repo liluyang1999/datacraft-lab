@@ -376,4 +376,4 @@ in CI's `dags` job (see [CI gates](build-and-quality.md#ci-gates)).
 | HTTP status contract | [`EngineHttpServerTest`](../tests/jvm/datacraft-api/java/com/example/datacraft/api/EngineHttpServerTest.java) |
 | Airflow data paths, host-key guard and task wiring | [`tests/orchestration/test_dags.py`](../tests/orchestration/test_dags.py), [`tests/smoke/airflow_runtime_smoke.py`](../tests/smoke/airflow_runtime_smoke.py) |
 | API port and mount checks of `deployment_env.py` | [`tests/deploy/test_deployment_env.py`](../tests/deploy/test_deployment_env.py) |
-| Exit codes and results of the shaded jar | the `build` job of [`ci.yml`](../.github/workflows/ci.yml) |
+| Exit codes and results of the shaded jar | [`cicd/build/smoke-cli-jar.sh`](../cicd/build/smoke-cli-jar.sh) and [`cicd/build/check-cli-exit-codes.sh`](../cicd/build/check-cli-exit-codes.sh), run by the `build` job of [`ci.yml`](../.github/workflows/ci.yml) |

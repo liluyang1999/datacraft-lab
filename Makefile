@@ -2,9 +2,9 @@
 # `make MVN=mvn ...`); deployment uses the deploy/ scripts.
 MVN ?= ./mvnw
 PYTHON ?= python3
-PYRIGHT ?= npx --yes pyright@1.1.410 --warnings
+PYRIGHT ?= npx --yes pyright@1.1.414 --warnings
 
-.PHONY: help build test verify format package images up down swarm dags test-scripts typecheck clean
+.PHONY: help build test verify format package images up down swarm dags test-scripts typecheck lint clean
 
 help: ## Show available targets
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN{FS=":.*?## "}{printf "  \033[36m%-14s\033[0m %s\n", $$1, $$2}'
@@ -47,6 +47,10 @@ test-scripts: ## Run the deployment, CI and documentation suites (Python stdlib 
 
 typecheck: ## Type-check the Python code with pyright (pyrightconfig.json)
 	$(PYRIGHT)
+
+lint: ## Shell syntax, ShellCheck and pinned GitHub Actions (the CI checks in cicd/lint)
+	bash cicd/lint/check-shell-scripts.sh
+	bash cicd/lint/check-actions-pinned.sh
 
 clean: ## Remove build output
 	$(MVN) -B -ntp clean

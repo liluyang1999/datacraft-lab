@@ -9,15 +9,17 @@ All notable changes to this project are documented here. The format follows
 ### Repository restructure, warning cleanup and dependency currency (2026-09-26)
 
 The repository is organised by responsibility: JVM source modules under `modules/`, every test
-under `tests/`, the English design documents under `design/` and all other documentation under
-`docs/`. Files were moved with `git mv`, so `git log --follow` keeps their history. ArtifactIds,
-the groupId, the version, the Java and Scala packages and the jar name are unchanged, and the CLI,
-the HTTP API and the DAGs behave as before: the breaks are in paths and build commands. Any
-compiler warning now fails the build, and a local `./mvnw -o spotless:apply verify` prints 653
-lines instead of 6,715, with one warning (the JDK advice) instead of 32. Dependencies were checked on 2026-09-26 against Maven Central, PyPI, Docker Hub, GitHub
-and the OpenJDK vulnerability advisories. The current evaluation, its evidence and the residual
-risks are in the [evaluation report](reports/evaluation-report.html) (Chinese). Items marked
-**BREAKING** need action from developers or from scripts that drive the build.
+under `tests/`, the CI/CD pipeline logic under `cicd/`, the English design documents under
+`design/` and all other documentation under `docs/`. Files were moved with `git mv`, so
+`git log --follow` keeps their history. ArtifactIds, the groupId, the version, the Java and Scala
+packages and the jar name are unchanged, and the CLI, the HTTP API and the DAGs behave as before:
+the breaks are in paths, build commands and the JDK floor. Any compiler warning now fails the
+build, and a local `./mvnw -o spotless:apply verify` on JDK 25.0.4.1 prints 623 lines instead of
+6,715, with no warning instead of 32. Dependencies were checked on 2026-09-26 against Maven
+Central, PyPI, npm, Docker Hub, GitHub and the OpenJDK vulnerability advisories. The current
+evaluation, its evidence and the residual risks are in the
+[evaluation report](reports/evaluation-report.html) (Chinese). Items marked **BREAKING** need
+action from developers or from scripts that drive the build.
 
 #### Changed
 - **BREAKING:** the eight JVM modules moved under `modules/`, grouped by responsibility:
@@ -40,9 +42,10 @@ risks are in the [evaluation report](reports/evaluation-report.html) (Chinese). 
   `orchestration/airflow/tests/runtime_smoke.py` to `tests/smoke/airflow_runtime_smoke.py`;
   `deploy/tests/container_smoke.sh` and `compose_smoke.sh` to `tests/smoke/`; the deployment script
   and template tests from `deploy/tests/` to `tests/deploy/`;
-  `deploy/tests/test_check_test_counts.py`, `.github/scripts/check_test_counts.py` and
-  `.github/scripts/JschAlgorithmsProbe.java` to `tests/ci/`; and
-  `deploy/tests/test_docs_consistency.py` and `deploy/tests/cloud-costs.test.cjs` to `tests/docs/`.
+  `deploy/tests/test_check_test_counts.py` to `tests/ci/`; and
+  `deploy/tests/test_docs_consistency.py` and `deploy/tests/cloud-costs.test.cjs` to
+  `tests/docs/`. The CI tools themselves are not tests: `.github/scripts/check_test_counts.py`
+  and `.github/scripts/JschAlgorithmsProbe.java` moved to `cicd/build/` (see Build and CI).
 - **BREAKING:** the root pom property `test.nio.jvm.args` is renamed `test.jvm.args` and also
   quiets test logging. It is `-Djdk.net.unixdomain.tmpdir=${project.build.directory}
   -Djava.util.logging.config.file=${datacraft.root}/tests/jvm/resources/logging.properties
@@ -76,10 +79,11 @@ risks are in the [evaluation report](reports/evaluation-report.html) (Chinese). 
   3.3.2 with the providers fab 3.9.0, sftp 6.0.1, ssh 6.0.1 and standard 1.19.0, the six GitHub
   Actions (pinned to the SHAs of their newest tags), and the floating image tags
   `eclipse-temurin:25-jre` (now 25.0.4.1+1), `postgres:18` (18.6) and `redis:8` (8.10.2).
-- JDK recommendation raised from 25.0.3 to 25.0.4.1, the out-of-band update for the OpenJDK
-  vulnerability advisory of 2026-08-18 (25.0.4 and earlier are affected): the WARN-level Enforcer
-  rule asks for `[25.0.4.1,)` (the hard rule stays `[25,)`), and `container_smoke.sh` requires the
-  JRE of both images to be at least 25.0.4.1.
+- **BREAKING:** the build requires JDK 25.0.4.1 or newer, the out-of-band update for the OpenJDK
+  vulnerability advisory of 2026-08-18 (25.0.4 and earlier are affected). The Enforcer's
+  `requireJavaVersion` is `[25.0.4.1,)` (it was `[25,)`, with a separate WARN-level rule below
+  25.0.3, which is removed); CI's `setup-java`, the builder image and the workstation all resolve
+  to 25.0.4.1. `container_smoke.sh` requires the JRE of both images to be at least 25.0.4.1.
 - `spark.test.jvm.args` matches Spark 4.2's own launcher options (`JavaModuleOptions`):
   `--sun-misc-unsafe-memory-access=allow` and `--enable-native-access=ALL-UNNAMED` are added;
   `--add-opens=java.base/sun.security.action=ALL-UNNAMED` (the package is gone in JDK 25) and the
@@ -96,8 +100,9 @@ risks are in the [evaluation report](reports/evaluation-report.html) (Chinese). 
   ManifestResourceTransformer adds `Main-Class`, `Multi-Release`, `Implementation-Title`,
   `Implementation-Version` and `Build-Jdk-Spec`.
 - `.gitignore` is regrouped by purpose; the stray template negations (`!.mvn/` and the
-  `src/main`/`src/test` `target`/`build` exceptions) and the duplicate `/target/` are removed. No
-  tracked file changes its ignore status.
+  `src/main`/`src/test` `target`/`build` exceptions) and the duplicate `/target/` are removed, and
+  the IDE template's `build/` is anchored to the root (`/build/`): unanchored, it hid `cicd/build/`
+  from git. No tracked file changes its ignore status.
 
 #### Added
 - Module responsibilities are enforced. Every module except `datacraft-cli` runs an Enforcer
@@ -119,10 +124,22 @@ risks are in the [evaluation report](reports/evaluation-report.html) (Chinese). 
 - `.mvn/jvm.config` passes `--enable-native-access=ALL-UNNAMED` and
   `--sun-misc-unsafe-memory-access=allow` to the Maven JVM, so JDK 25 no longer warns about native
   access and `sun.misc.Unsafe` use by build plugins (Spotless and zinc use `sun.misc.Unsafe`).
-- `pyrightconfig.json`: pyright checks `orchestration/`, `deploy/` and `tests/` as Linux code with
-  Python 3.12 semantics in `standard` mode. Missing Airflow, provider, paramiko and pyspark imports
-  are not reported in `orchestration/airflow/dags`, `tests/orchestration` and `tests/smoke`, which
-  need the Airflow environment. pyright 1.1.410 reports 0 errors and 0 warnings.
+- `pyrightconfig.json`: pyright checks `orchestration/`, `deploy/`, `tests/` and `cicd/` as Linux
+  code with Python 3.12 semantics in `standard` mode. Missing Airflow, provider, paramiko, pyspark
+  and packaging imports are not reported in `orchestration/airflow/dags`, `tests/orchestration`,
+  `tests/smoke` and `cicd/airflow`, which need the Airflow environment. pyright 1.1.414 reports 0
+  errors, 0 warnings and 0 informations.
+- `cicd/`, the CI/CD pipeline logic, grouped by the job that runs it: `cicd/build/`
+  (`check-maven-wrapper.sh`, `check_test_counts.py`, `check-spark-suite.sh`, `smoke-cli-jar.sh`,
+  `check-jar-contents.sh` with `JschAlgorithmsProbe.java`, `check-cli-exit-codes.sh`),
+  `cicd/airflow/` (`install-airflow.sh`, `check_security_floor.py`), `cicd/lint/`
+  (`check-shell-scripts.sh`, `check-actions-pinned.sh`) and `cicd/stacks/`
+  (`check-stack-files.sh`), with shared helpers in `cicd/lib.sh`. The scripts run outside GitHub
+  Actions and report `::error::` annotations only on a runner.
+- `tests/ci/test_workflow.py`: every `run:` step is a single command, the scripts it names exist,
+  every file in `cicd/` is used by the workflow or another `cicd/` script and is not git-ignored,
+  and no test lives in `cicd/`; with a POSIX bash it also runs the pinned-action check against
+  pinned and unpinned samples.
 - `CloudCosts.lowerBound()` adds only the known charges for plans with unverified extras, where
   `total()` refuses to give a figure; for complete plans it equals `total()`.
 - Test dependencies of `datacraft-io`: `org.apache.sshd:sshd-mina` 2.19.0 and
@@ -161,48 +178,62 @@ risks are in the [evaluation report](reports/evaluation-report.html) (Chinese). 
 #### Build and CI
 - **BREAKING:** javac runs with `-Xlint:all` and `failOnWarning=true`, and scalac with `-Werror` in
   addition to `-deprecation -feature -unchecked -Xlint`, so any compiler warning fails the build.
-  The only warning left in a local build is the Enforcer JDK advice on JDKs older than 25.0.4.1;
-  CI's latest Temurin 25 does not trigger it.
+  A local build on JDK 25.0.4.1 prints no warning at all.
 - **BREAKING:** the `dags` and `scripts` jobs run Python 3.13 (was 3.12), the Python of the
-  `apache/airflow:3.3.2` image; the `dags` job installs Airflow with
-  `constraints-3.3.2/constraints-3.13.txt`. Reproduce CI with Python 3.13. The `scripts` job runs
-  Node 24, the active LTS (was 22).
-- Build job: `CLI_JAR` names the jar for the smoke, manifest, Jackson and exit-code checks and for
-  the artifact upload; the test-count gate runs `tests/ci/check_test_counts.py`, whose `MODULE_DIRS`
-  maps each module to its directory (a test checks it against the pom's `<modules>`); the Spark
-  report is read from `modules/processing/datacraft-spark/target/surefire-reports/`; the JSch probe
-  is `tests/ci/JschAlgorithmsProbe.java`.
-- `scripts` job: `tests/deploy`, `tests/ci` and `tests/docs` run as separate unittest steps,
-  `node --test tests/docs/cloud-costs.test.cjs` tests the calculator,
-  `npx --yes pyright@1.1.410 --warnings` is a type-check gate that fails on errors and warnings, and `bash -n` and ShellCheck cover `deploy/scripts/*.sh`
-  and `tests/smoke/*.sh`. The `dags` job runs `tests/orchestration` and
-  `tests/smoke/airflow_runtime_smoke.py`; the `containers` job runs `tests/smoke/container_smoke.sh`
-  and `tests/smoke/compose_smoke.sh`.
+  `apache/airflow:3.3.2` image. Reproduce CI with Python 3.13. The `scripts` job runs Node 24, the
+  active LTS (was 22).
+- The workflow only orchestrates: `.github/workflows/ci.yml` keeps the triggers, permissions,
+  runners, pinned toolchain actions and job order, and every step runs one command, a `cicd/`
+  script or a test entry point in `tests/`. The inline shell it used to carry (wrapper checksum,
+  Spark suite, jar smoke, manifest and Jackson checks, exit codes, pinned actions, shell lint,
+  stack-file validation) moved into `cicd/` unchanged in behaviour, except that
+  `cicd/stacks/check-stack-files.sh` refuses to run while `deploy/compose/.env` exists instead of
+  overwriting it, and the scratch directories are removed afterwards.
+- Build job: `CLI_JAR` names the jar for the `cicd/build` checks and the artifact upload; the
+  test-count gate is `cicd/build/check_test_counts.py`, whose `MODULE_DIRS` maps each module to its
+  directory (a test in `tests/ci` checks it against the pom's `<modules>`); the Spark report is read
+  from `modules/processing/datacraft-spark/target/surefire-reports/`.
+- `dags` job: `cicd/airflow/install-airflow.sh` installs `apache-airflow==3.3.2` and the providers
+  under the official `constraints-3.3.2` file for the running Python (the script derives the
+  version, as `Dockerfile.airflow` does), then `pyspark==4.2.0`;
+  `cicd/airflow/check_security_floor.py` enforces Airflow 3.3.2 and FAB provider 3.9.0. It then
+  runs `tests/orchestration` and `tests/smoke/airflow_runtime_smoke.py`; the `containers` job runs
+  `tests/smoke/container_smoke.sh` and `tests/smoke/compose_smoke.sh`.
+- `scripts` job, renamed "Script, documentation and type checks" (was "Deployment script lint"):
+  `cicd/lint/check-actions-pinned.sh`; `cicd/lint/check-shell-scripts.sh`, which runs `bash -n`
+  and ShellCheck at warning severity (was error) over every script in `cicd/`, `deploy/scripts/`
+  and `tests/smoke/`; the `tests/deploy`, `tests/ci` and `tests/docs` suites;
+  `node --test tests/docs/cloud-costs.test.cjs`; and `npx --yes pyright@1.1.414 --warnings`, a
+  type-check gate that fails on errors and warnings.
+- `compose` job: `cicd/stacks/check-stack-files.sh` holds the test-only secrets and the
+  missing-secret rejections that the job's environment and inline steps held.
 - `tests/docs/test_docs_consistency.py` checks the new layout: relative links in `docs/` and
   `design/` resolve and every page there is reachable from `docs/README.md`; Markdown and HTML
   documents live only in `docs/` and `design/`, and tests only in `tests/`; no file other than this
   changelog names a moved path or renamed property, a module path outside `modules/` or a module
   selected by directory name. The Java release, JDK path, `serve-api`, Airflow pin, stale wording
-  and loopback-port checks remain, and the `dags` job's constraints file must match its Python.
-- Spotless formats `tests/**/*.java` and `tests/**/*.scala` from the root project (each module
-  formats its own `src/main`), and Checkstyle reads each module's tests from
+  and loopback-port checks remain; the Airflow pins are read from `cicd/airflow/install-airflow.sh`,
+  whose constraints file must follow the running Python instead of naming a fixed version.
+- Spotless formats `tests/**/*.java`, `tests/**/*.scala` and `cicd/**/*.java` from the root
+  project (each module formats its own `src/main`), its whitespace rules also cover `design/`,
+  `tests/` and `cicd/` text files, and Checkstyle reads each module's tests from
   `${project.build.testSourceDirectory}`.
 - `Dockerfile.build` copies the module poms from their new paths, resolves dependencies with
   `-pl :datacraft-cli -am dependency:go-offline`, builds with
   `-pl :datacraft-cli -am package -Dmaven.test.skip=true` (the tests are not in the Docker context)
-  and copies the jar from its new path. `.dockerignore` excludes `docs/`, `design/` and `tests/`
-  (it excluded only `docs/engineering-report/` of these before).
+  and copies the jar from its new path. `.dockerignore` excludes `docs/`, `design/`, `tests/` and
+  `cicd/` (it excluded only `docs/engineering-report/` of these before).
 - Makefile: `PYTHON ?= python3`; `package` uses `-pl :datacraft-cli`; `dags` runs
   `tests/orchestration` with `$(PYTHON)`; `test-scripts` runs the `tests/deploy`, `tests/ci` and
   `tests/docs` suites and the calculator tests; `typecheck` runs pyright
-  (`PYRIGHT ?= npx --yes pyright@1.1.410 --warnings`).
+  (`PYRIGHT ?= npx --yes pyright@1.1.414 --warnings`); `lint` runs the two `cicd/lint` checks.
 - Test inventory: 262 JVM test cases, as before (`datacraft-common` 7, `datacraft-config` 12,
   `datacraft-io` 62, `datacraft-engine` 31, `datacraft-jobs` 67, `datacraft-spark` 48,
   `datacraft-api` 12, `datacraft-cli` 23). `datacraft-io` runs 56 of them on Linux (six
   `windows-only` excluded) and 57 on Windows (five `posix-only` excluded); on Windows
   `datacraft-jobs` runs 65 and `datacraft-spark` 41. The CI floors are unchanged. Python:
-  `tests/deploy` 45, `tests/ci` 11, `tests/docs` 13 and `tests/orchestration` 16 (needs Airflow),
-  plus three smoke scripts; Node: 6 calculator tests.
+  `tests/deploy` 45, `tests/ci` 19 (two need a POSIX bash), `tests/docs` 13 and
+  `tests/orchestration` 16 (needs Airflow), plus three smoke scripts; Node: 6 calculator tests.
 
 ### Review and hardening round (2026-09-25)
 

@@ -348,9 +348,11 @@
                         </goals>
                         <configuration>
                             <rules>
+                                <!-- 25.0.4.1 is the out-of-band update for the OpenJDK advisory of 2026-08-18;
+                                     CI (setup-java) and the builder image resolve to it or newer. -->
                                 <requireJavaVersion>
-                                    <version>[25,)</version>
-                                    <message>datacraft-lab builds with JDK 25 or newer and targets Java 25 bytecode (25.0.4.1+ recommended).</message>
+                                    <version>[25.0.4.1,)</version>
+                                    <message>datacraft-lab builds with JDK 25.0.4.1 or newer and targets Java 25 bytecode: 25.0.4.1 carries the July/August 2026 security fixes, and Spark 4.2.0 deprecates Java 25 releases older than 25.0.3.</message>
                                 </requireJavaVersion>
                                 <requireMavenVersion>
                                     <version>[3.9.0,)</version>
@@ -372,22 +374,6 @@
                                     </excludes>
                                     <message>jackson-core and jackson-databind older than 2.22.3 are affected by GHSA-wv8q-qhhj-9h54 (CVE-2026-91776), GHSA-cxp5-3px4-pw24 (CVE-2026-91777), GHSA-p6pp-m3f8-5c89 (CVE-2026-89407) and GHSA-7hhh-6rmp-j9qf (CVE-2026-89425).</message>
                                 </bannedDependencies>
-                            </rules>
-                        </configuration>
-                    </execution>
-                    <!-- Warning only: the hard floor above stays [25,) so existing JDK 25 hosts keep building. -->
-                    <execution>
-                        <id>warn-deprecated-jdk</id>
-                        <goals>
-                            <goal>enforce</goal>
-                        </goals>
-                        <configuration>
-                            <rules>
-                                <requireJavaVersion>
-                                    <version>[25.0.4.1,)</version>
-                                    <level>WARN</level>
-                                    <message>Use JDK 25.0.4.1 or newer: it carries the July/August 2026 security fixes, and Spark 4.2.0 deprecates Java 25 releases older than 25.0.3.</message>
-                                </requireJavaVersion>
                             </rules>
                         </configuration>
                     </execution>
@@ -417,16 +403,20 @@
                                 <include>orchestration/**/*.py</include>
                                 <include>tests/**/*.py</include>
                                 <include>tests/**/*.properties</include>
+                                <include>cicd/**/*.py</include>
+                                <include>cicd/**/*.sh</include>
                             </includes>
                             <trimTrailingWhitespace />
                             <endWithNewline />
                         </format>
                     </formats>
                     <java>
-                        <!-- Module sources are checked in each module; the root project checks tests/. -->
+                        <!-- Module sources are checked in each module; the root project checks tests/
+                             and the Java probe in cicd/. -->
                         <includes>
                             <include>src/main/java/**/*.java</include>
                             <include>tests/**/*.java</include>
+                            <include>cicd/**/*.java</include>
                         </includes>
                         <googleJavaFormat>
                             <version>${google.java.format.version}</version>
