@@ -67,13 +67,14 @@ metrics and messages are specified in
 | Code | Meaning |
 | --- | --- |
 | `0` | Success. |
-| `1` | The job failed, or its `--result-file` could not be written (the result is still printed). |
+| `1` | The job failed, its `--result-file` could not be written (the result is still printed), or `serve-api` could not open its socket. |
 | `2` | Invalid usage: a parse error (including job options given to a control command), an unknown command or job, or an unreadable or malformed `--config` file. |
 
 `serve-api` also exits `2` when it refuses a non-loopback `--host` (see
 [Serving the API](#serving-the-api)). A job that rejects its parameters is a failed job, not a
 usage error: it exits `1` and still prints its FAILED result. Usage errors are reported on stderr,
-for example `Unknown command or job: <name>`.
+for example `Unknown command or job: <name>`. Every option except `--param` may be given once; a
+repeated one is a usage error, which the parser reports as an unknown option.
 
 ### Parameters and `--config`
 
@@ -123,9 +124,11 @@ Without `--json`, a job prints one line, `<job> <STATUS> <message>`, for example
 
 ### Lifecycle
 
-`--lifecycle` accepts `dev` or `prod` (also `development` or `production`, in any case) and defaults
-to `dev`; any other value is a parse error. It is a label carried in the job request, and no job
-reads it yet. Over HTTP the same label is the `lifecycle` query parameter.
+`--lifecycle` accepts `dev` or `prod` (also `development` or `production`) and defaults to `dev`.
+Case, surrounding spaces, hyphens and underscores are ignored, so `PROD` and `Pro-Duction` both
+mean `prod`; any other value is a parse error. It is a label carried in the job request, and no
+job reads it yet. Over HTTP the same label is the `lifecycle` query parameter, where an unknown
+value answers 400.
 
 ### Control commands
 
@@ -186,7 +189,9 @@ DATACRAFT_DATA_ROOT=/srv/datacraft/data \
 
 `serve-api` prints `datacraft-api listening on http://<host>:<port>/` and serves until the process
 stops. On shutdown it stops accepting connections and waits up to 8 seconds for in-flight requests;
-runs still going after that are cut off.
+runs still going after that are cut off. When the socket cannot be opened, because the port is in
+use or the host cannot be bound, it prints one stderr line,
+`serve-api cannot listen on <host>:<port>: <cause>`, and exits `1`.
 
 The API has no authentication and its file jobs read local paths, so `serve-api` binds a
 non-loopback `--host`, such as `0.0.0.0`, only when `DATACRAFT_DATA_ROOT` is set and not blank.

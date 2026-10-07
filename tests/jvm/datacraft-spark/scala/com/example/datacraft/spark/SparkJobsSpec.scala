@@ -118,6 +118,10 @@ class SparkJobsSpec extends AnyFunSuite {
       "Missing required parameter: input"
     )
     assertFailsWith(
+      executeWithoutSpark("row-count", Map("input" -> "in.parquet", "inputFormat" -> " ")),
+      "inputFormat must not be blank"
+    )
+    assertFailsWith(
       executeWithoutSpark(
         "row-count",
         Map("input" -> "in.csv", "inputFormat" -> " CSV ", "multiLine" -> "typo")

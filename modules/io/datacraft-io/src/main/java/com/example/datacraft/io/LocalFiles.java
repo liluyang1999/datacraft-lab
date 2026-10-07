@@ -14,6 +14,7 @@ import java.nio.file.StandardOpenOption;
 import java.nio.file.attribute.BasicFileAttributes;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
+import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HexFormat;
 import java.util.List;
@@ -74,16 +75,63 @@ public final class LocalFiles {
     }
   }
 
+  /**
+   * Lists the regular files below {@code directory}, sorted. A link to a file counts as that file,
+   * but a linked directory is never entered: a symbolic link is not followed, and a Windows
+   * junction or mount point, which may lead back to an ancestor, is skipped.
+   */
   public static List<Path> listRegularFilesRecursively(Path directory) {
-    try (Stream<Path> paths = Files.walk(directory)) {
-      return paths.filter(Files::isRegularFile).sorted(Comparator.naturalOrder()).toList();
+    List<Path> files = new ArrayList<>();
+    try {
+      Files.walkFileTree(
+          directory,
+          new SimpleFileVisitor<>() {
+            @Override
+            public FileVisitResult preVisitDirectory(Path dir, BasicFileAttributes attributes) {
+              // isOther() marks a Windows reparse-point directory; a POSIX directory never
+              // reports it. The start directory was named by the caller, so it is walked.
+              return attributes.isOther() && !dir.equals(directory)
+                  ? FileVisitResult.SKIP_SUBTREE
+                  : FileVisitResult.CONTINUE;
+            }
+
+            @Override
+            public FileVisitResult visitFile(Path file, BasicFileAttributes attributes) {
+              // The attributes describe a link itself, so ask again to follow a link to a file.
+              if (Files.isRegularFile(file)) {
+                files.add(file);
+              }
+              return FileVisitResult.CONTINUE;
+            }
+
+            @Override
+            public FileVisitResult visitFileFailed(Path file, IOException failure)
+                throws IOException {
+              // A junction whose target is gone cannot be opened, so the walker reports it here
+              // instead of in preVisitDirectory; skip it like every other reparse point.
+              if (file.equals(directory) || !isReparsePoint(file)) {
+                throw failure;
+              }
+              return FileVisitResult.CONTINUE;
+            }
+          });
     } catch (IOException exception) {
       throw new DataCraftException(
           "Failed to recursively list regular files in directory: " + directory, exception);
     }
+    files.sort(Comparator.naturalOrder());
+    return List.copyOf(files);
   }
 
+  /**
+   * Copies a regular file, replacing an existing target file. The copy is not atomic: the target is
+   * removed first, so a copy that fails part-way leaves no target or an incomplete one.
+   */
   public static void copy(Path source, Path target) {
+    // Files.copy turns a directory source into an empty directory that replaces the target.
+    if (!Files.isRegularFile(source)) {
+      throw new DataCraftException("Copy source is not a regular file: " + source);
+    }
     ensureParentDirectory(target);
     try {
       Files.copy(source, target, StandardCopyOption.REPLACE_EXISTING);

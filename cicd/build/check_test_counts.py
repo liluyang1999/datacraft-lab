@@ -9,7 +9,10 @@ count (tests minus skipped) with FLOORS. Surefire counts skipped and aborted tes
 skipped attribute; ScalaTest writes no such attribute and instead gives each canceled, ignored or
 pending <testcase> a <skipped/> child. Both forms are read, and a test marked both ways counts once.
 
-Usage: python3 -B cicd/build/check_test_counts.py [REPOSITORY_ROOT]
+The floors depend on the platform that ran the tests, because the build excludes the other
+platform's tagged tests: --platform names it and defaults to the platform this script runs on.
+
+Usage: python3 -B cicd/build/check_test_counts.py [--platform {linux,windows}] [REPOSITORY_ROOT]
 Exit status: 0 when every module meets its floor, 1 otherwise.
 """
 
@@ -18,20 +21,25 @@ from pathlib import Path
 import sys
 import xml.etree.ElementTree as ET
 
-# Minimum executed tests per reactor module, as counted on Linux CI. Floors are minimums, not
-# exact counts: adding tests needs no change, but deliberately removing tests needs a lower floor
-# in the same commit. Counts differ by OS: Windows skips symlink and Parquet-writing tests, and Linux
-# skips datacraft-io's six Windows-only junction tests, so datacraft-io runs 56 tests here.
+# Minimum executed tests per reactor module on Linux, where CI runs. Floors are minimums, not exact
+# counts: adding tests needs no change, but deliberately removing tests needs a lower floor in the
+# same commit.
 FLOORS = {
-    "datacraft-api": 12,
+    "datacraft-api": 17,
     "datacraft-common": 7,
-    "datacraft-config": 12,
-    "datacraft-engine": 31,
-    "datacraft-io": 56,
-    "datacraft-jobs": 67,
-    "datacraft-cli": 23,
-    "datacraft-spark": 48,
+    "datacraft-config": 13,
+    "datacraft-engine": 32,
+    "datacraft-io": 57,
+    "datacraft-jobs": 70,
+    "datacraft-cli": 28,
+    "datacraft-spark": 52,
 }
+
+# The same on Windows, where the build excludes the posix-only tests (symbolic links, `?` in file
+# names, Hadoop local writes) and runs datacraft-io's windows-only junction tests instead.
+WINDOWS_FLOORS = {**FLOORS, "datacraft-io": 59, "datacraft-jobs": 68, "datacraft-spark": 44}
+
+PLATFORM_FLOORS = {"linux": FLOORS, "windows": WINDOWS_FLOORS}
 
 
 # Repository-relative directory of each reactor module, matching the <modules> list in pom.xml.
@@ -98,6 +106,11 @@ def executed_tests(reports_dir):
     return executed, skipped
 
 
+def host_platform():
+    """The floors that apply to tests run on this machine; every POSIX system counts as Linux."""
+    return "windows" if sys.platform == "win32" else "linux"
+
+
 def check(root, floors=None):
     """Returns the list of failure messages; empty when every module meets its floor."""
     floors = FLOORS if floors is None else floors
@@ -118,8 +131,11 @@ def check(root, floors=None):
 def main(argv=None):
     parser = argparse.ArgumentParser(description=(__doc__ or "").split("\n", 1)[0])
     parser.add_argument("root", nargs="?", default=".", help="repository root (default: .)")
+    parser.add_argument("--platform", choices=sorted(PLATFORM_FLOORS), default=host_platform(),
+                        help="platform that ran the tests (default: this one)")
     args = parser.parse_args(argv)
-    failures = check(Path(args.root))
+    print(f"floors for tests run on {args.platform}")
+    failures = check(Path(args.root), PLATFORM_FLOORS[args.platform])
     for failure in failures:
         print(f"::error::{failure}")
     return 1 if failures else 0

@@ -22,7 +22,7 @@
 Spark 和 Airflow；不要求在云主机上额外安装 Maven、JDK 或 Airflow。构建时要能访问 Docker Hub：
 `build-images.sh` 每次先拉取基础镜像（Maven 构建镜像、`eclipse-temurin:25-jre`、`apache/airflow:3.3.2`），
 使重建的镜像带上这些标签当前的 JDK 与系统补丁；`MAVEN_IMAGE`、`JRE_IMAGE`、`AIRFLOW_IMAGE`、
-`SPARK_IMAGE` 可改用其他基础镜像。CI 的 `tests/smoke/container_smoke.sh` 检查两个运行镜像的 JRE
+`SPARK_IMAGE` 可改用其他基础镜像。CI 的 `cicd/images/smoke-images.sh` 检查两个运行镜像的 JRE
 与新拉取的 `JRE_IMAGE` 一致，且版本不低于 25.0.4.1。
 
 只用 `bash deploy/scripts/build-images.sh` 构建镜像。`Dockerfile.jvm`、`Dockerfile.airflow`、
@@ -49,6 +49,8 @@ bash deploy/scripts/compose-up.sh
 初始化会创建 `deploy/compose/.env`，为数据库、管理员、API、JWT 和 Fernet 分别生成独立随机值，
 使用仅所有者可读写的权限，不在终端打印密钥，不覆盖已有文件或符号链接。将文件安全备份，
 从中读取初始管理员密码。不要重新生成 Fernet 密钥，否则已有加密连接可能无法解密。
+留在仓库目录里的副本请放到 `backups/`，或命名为 `.env.<后缀>`（如 `.env.bak`）：这两类路径都被
+`.gitignore` 与 `.dockerignore` 排除，不会被提交，也不会进入镜像构建上下文。
 `AIRFLOW_UID` 保持 50000 即可（Linux 也是）：没有绑定挂载主机目录，不需要与主机用户一致。
 
 部署前会验证 Compose 最终生效配置（包括外部环境变量覆盖），拒绝占位符、空密钥、不一致的
@@ -73,6 +75,8 @@ docker compose -f deploy/compose/docker-compose.yml logs --tail 100 airflow-init
 管理员密码交给 `airflow users create`，密码不出现在进程参数中；日志里的
 `Warning: Password input may be echoed.` 无害。账号已存在时只输出
 `Airflow admin account already exists; password unchanged.`，不会按 `.env` 改密。
+管理员邮箱在 Airflow 中必须唯一：只改 `AIRFLOW_ADMIN_USERNAME` 而保留原邮箱时，`airflow-init` 会因邮箱
+已被占用而失败，`compose-up.sh` 不会启动任何 Airflow 服务；要换用户名，请同时换邮箱，或先删除旧账号。
 
 DAG 与 CLI jar 都打包在 Airflow 镜像中，Compose 不再绑定挂载 `orchestration/airflow/dags`。
 `git pull` 之后先运行 `build-images.sh` 再运行 `compose-up.sh`，否则运行的仍是旧 DAG 与旧 jar；
@@ -188,6 +192,9 @@ Compose 默认 `AIRFLOW_PARALLELISM=1`、`AIRFLOW_PARSING_PROCESSES=1`、API wor
 前三项只在 Compose 生效，Swarm 的并发见第 6 节。
 DAG 自身还有 `max_active_runs=1`；它只是每个 DAG 的限制，不能代替全局并发限制。
 如果直接调用 JVM API 或手动启动 Spark，它们不受 Airflow 并发控制，应避免和大任务同时运行。
+JVM API 对同时到达的 `csv-profile` 请求逐个处理（内存预算按单次运行计算）；`datacraft/jvm` 镜像以
+`-XX:+ExitOnOutOfMemoryError` 启动，内存耗尽时进程退出，由 Compose 的 `restart: unless-stopped` 或
+Swarm 的重启策略拉起新实例，而不是留下一个不再响应请求的进程。
 
 记录代表性数据的耗时、峰值内存、磁盘余量、CPU 积分（如适用）和出站量，再决定提高并发或升配。
 本轮不承诺固定空闲/峰值内存，也不承诺 4 GB 一定够用。Airflow 调度器关闭时不会按时调度任务；
@@ -219,7 +226,7 @@ backup="backups/airflow-$(date -u +%Y%m%dT%H%M%SZ).dump"
 记录校验和，保留异机副本。示例外部备份费用不是已经配置了自动上传。
 
 恢复时先在隔离环境创建新数据库，用 `pg_restore --exit-on-error` 恢复，核对 DAG 运行记录与业务输出，
-再决定生产切换；不要直接对现有生产数据库执行 `--clean`。CI 的 `tests/smoke/compose_smoke.sh`
+再决定生产切换；不要直接对现有生产数据库执行 `--clean`。CI 的 `cicd/images/smoke-compose.sh`
 演示了备份到临时文件、恢复到独立测试库、检查成功运行记录、再移除测试资源的过程。
 
 ```bash
@@ -299,11 +306,13 @@ node --test tests/docs/cloud-costs.test.cjs
 
 Linux CI（ubuntu-24.04）是权威门禁：完整 JVM verify 与各模块测试数下限、jar 冒烟与退出码、真实
 Airflow 3.3.2 流程、ShellCheck、Compose/Swarm 解析与缺失密钥拒绝、镜像构建、实际 Compose 任务与备份恢复。
-工作流只负责编排，每项检查都是 `cicd/` 下的脚本，也可以在本机运行；其中 `cicd/stacks/check-stack-files.sh`
-需要 Docker，并且在 `deploy/compose/.env` 已存在时拒绝运行，以免覆盖真实密钥。
-镜像检查（`tests/smoke/container_smoke.sh`）还包括 JRE ≥ 25.0.4.1、Airflow ≥ 3.3.2、FAB ≥ 3.9.0，以及
-API 以非 root 运行、数据挂载只读。`tests/smoke/compose_smoke.sh` 仅限隔离 CI，会销毁其专用测试项目的
-数据卷，拒绝覆盖已有 `.env`。
+工作流只负责编排，每项检查都是 `cicd/` 下的脚本或 `tests/` 下的测试入口，也可以在本机运行；其中
+`cicd/stacks/check-stack-files.sh` 需要 Docker，并且在 `deploy/compose/.env` 已存在时拒绝运行，以免覆盖真实密钥。
+镜像检查（`cicd/images/smoke-images.sh`）还包括 JRE ≥ 25.0.4.1、Airflow ≥ 3.3.2、FAB ≥ 3.9.0，以及
+API 以非 root 运行、数据挂载只读。`cicd/images/smoke-compose.sh` 仅限隔离 CI，会销毁其专用测试项目的
+数据卷，拒绝覆盖已有 `.env`；它还确认镜像内的三个 DAG 都已注册，失败时先输出任务日志。
+没有 Docker 的机器可以运行 `bash cicd/build/check-image-build.sh`：它在一份按 `.dockerignore` 过滤的
+仓库副本里执行构建镜像的 Maven 命令，提前发现“只有完整检出才能构建”的问题。
 
 本地构建需要 JDK 25.0.4.1 及以上（含 2026 年 7、8 月的安全修复），更低的版本会被 Enforcer 直接拒绝。
 开发环境、构建命令与 `cicd/` 脚本的本地用法见[开发指南](development.md)。
@@ -315,8 +324,8 @@ Selector 的主机上 Spark 套件取消，而 CI 中 Spark 套件出现取消�
 平台相关测试按标签排除，而不是在运行时跳过：按操作系统自动激活的 `windows-host` profile 排除
 `posix-only` 测试（符号链接、文件名含 `?`、需要 winutils 的 Hadoop 本地写入），`posix-host` 排除
 `windows-only` 测试（NTFS junction），因此在 Windows 上运行测试不再需要开发者模式或 winutils。
-全部 262 个测试中，Linux 执行 256 个（6 个 junction 测试只在 Windows 运行），Windows 执行 248 个
-（14 个 posix-only 测试只在 Linux 等非 Windows 系统运行）。
+全部 283 个测试中，Linux 执行 276 个（7 个 junction 测试只在 Windows 运行），Windows 执行 268 个
+（15 个 posix-only 测试只在 Linux 等非 Windows 系统运行）。
 
 当前尚未执行真实云部署、ARM 主机测试或多机 Swarm 故障切换；这些边界与“部署资料已准备”分开记录，
 不作为已完成上线报告。

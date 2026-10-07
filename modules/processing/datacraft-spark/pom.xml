@@ -14,12 +14,6 @@
     <artifactId>datacraft-spark</artifactId>
     <name>datacraft-spark</name>
 
-    <properties>
-        <!-- No JUnit classes here: scalatest-maven-plugin runs this module's tests, so Surefire,
-             which would find nothing (and cannot filter tags without a JUnit engine), is skipped. -->
-        <surefire.skip>true</surefire.skip>
-    </properties>
-
     <dependencies>
         <dependency>
             <groupId>com.example.datacraft</groupId>
@@ -83,6 +77,15 @@
             <plugin>
                 <groupId>net.alchim31.maven</groupId>
                 <artifactId>scala-maven-plugin</artifactId>
+            </plugin>
+            <!-- No JUnit classes here: scalatest-maven-plugin runs this module's tests, so Surefire,
+                 which would find nothing (and cannot filter tags without a JUnit engine), is skipped. -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-surefire-plugin</artifactId>
+                <configuration>
+                    <skip>true</skip>
+                </configuration>
             </plugin>
             <plugin>
                 <groupId>org.scalatest</groupId>

@@ -14,7 +14,7 @@ import org.scalatest.funsuite.AnyFunSuite
 
 import java.nio.channels.Selector
 import java.nio.charset.StandardCharsets
-import java.nio.file.Files
+import java.nio.file.{Files, Path}
 import scala.jdk.CollectionConverters._
 
 /**
@@ -30,6 +30,9 @@ class SparkPipelineSpec extends AnyFunSuite {
   )
 
   private val GlobRejection = "input must be a literal file or directory path"
+
+  private val NoDataFiles =
+    "requirement failed: input contains no data files (Spark skips names starting with _ or .)"
 
   /**
    * Spark's Netty transport cannot start without working NIO selectors. On Windows the selector
@@ -159,6 +162,87 @@ class SparkPipelineSpec extends AnyFunSuite {
     } finally deleteRecursively(workDir)
   }
 
+  /**
+   * Converts and counts `input` against an existing output: both must fail on the missing data
+   * files, and the output must stay as it was.
+   */
+  private def assertNoDataFiles(workDir: Path, input: Path): Unit = {
+    val output = workDir.resolve("existing")
+    Files.createDirectory(output)
+    Files.writeString(output.resolve("sentinel"), "keep")
+    val schema    = "schema" -> "id INT, amount DECIMAL(10,2)"
+    val engine    = newEngine()
+    val converted = execute(
+      engine,
+      "csv-to-parquet",
+      Map("input" -> input.toString, "output" -> output.toString, schema)
+    )
+    assert(converted.status() == JobStatus.FAILED, converted.message())
+    assert(converted.message() == NoDataFiles)
+    assert(Files.readString(output.resolve("sentinel")) == "keep")
+    val counted = execute(
+      engine,
+      "row-count",
+      Map("input" -> input.toString, "inputFormat" -> "csv", schema)
+    )
+    assert(counted.status() == JobStatus.FAILED, counted.metrics())
+    assert(counted.message() == NoDataFiles)
+  }
+
+  test("a file Spark treats as hidden fails instead of replacing the output with zero rows") {
+    requireNioSelectors()
+    val workDir = Files.createTempDirectory("datacraft-spark-hidden")
+    try
+      // Spark's file listing skips names starting with '_' or '.', even when the input names one.
+      assertNoDataFiles(
+        workDir,
+        Files.writeString(workDir.resolve("_export.csv"), "id,amount\n1,2.50\n")
+      )
+    finally deleteRecursively(workDir)
+  }
+
+  // Listing a directory needs Hadoop's native I/O on Windows, like the writing tests.
+  test("a directory without data files fails instead of replacing the output", PosixOnly) {
+    requireNioSelectors()
+    for (hiddenOnly <- Seq(false, true)) {
+      val workDir = Files.createTempDirectory("datacraft-spark-no-data")
+      try {
+        val input = Files.createDirectory(workDir.resolve("input"))
+        if (hiddenOnly) {
+          Files.writeString(input.resolve("_SUCCESS"), "")
+          Files.writeString(input.resolve(".part-0.csv.crc"), "id,amount\n1,2.50\n")
+        }
+        assertNoDataFiles(workDir, input)
+      } finally deleteRecursively(workDir)
+    }
+  }
+
+  test("error and errorifexists refuse an existing output before reading the input") {
+    requireNioSelectors()
+    val workDir = Files.createTempDirectory("datacraft-spark-exists")
+    try {
+      val output = workDir.resolve("existing")
+      Files.createDirectory(output)
+      Files.writeString(output.resolve("sentinel"), "keep")
+      val engine = newEngine()
+      for (mode <- Seq("error", " ErrorIfExists ")) {
+        val result = execute(
+          engine,
+          "csv-to-parquet",
+          // The input does not exist: the refusal must come first.
+          Map(
+            "input"  -> workDir.resolve("missing.csv").toString,
+            "output" -> output.toString,
+            "mode"   -> mode
+          )
+        )
+        assert(result.status() == JobStatus.FAILED, mode)
+        assert(result.message() == s"requirement failed: Output already exists: $output", mode)
+        assert(Files.readString(output.resolve("sentinel")) == "keep")
+      }
+    } finally deleteRecursively(workDir)
+  }
+
   test("conversion rejects overlapping paths without destroying the source") {
     requireNioSelectors()
     val workDir = Files.createTempDirectory("datacraft-spark-overlap")
@@ -274,7 +358,46 @@ class SparkPipelineSpec extends AnyFunSuite {
           Map("input" -> input.toString, "inputFormat" -> "csv", "schema" -> schema)
         )
         assert(result.status() == JobStatus.FAILED, s"$content counted as ${result.metrics()}")
+        // Spark names the file it could not read; the malformed record is the cause.
+        assert(result.message().contains("FAILED_READ_FILE"), result.message())
       }
+      // The same reader accepts a well-formed file, so the failures above are about the records.
+      val valid   = Files.writeString(workDir.resolve("valid.csv"), "id,amount\n1,2.50\n2,3\n")
+      val counted = execute(
+        engine,
+        "row-count",
+        Map(
+          "input"        -> valid.toString,
+          "inputFormat"  -> " CSV ",
+          "schema"       -> "id INT, amount DECIMAL(10,2)",
+          "expectedRows" -> "2"
+        )
+      )
+      assert(counted.status() == JobStatus.SUCCEEDED, counted.message())
+      assert(counted.metrics().get("rows") == "2")
+      // The metric reports the format as given, trimmed but not lower-cased.
+      assert(counted.metrics().get("inputFormat") == "CSV")
+    } finally deleteRecursively(workDir)
+  }
+
+  test("the CSV reader replaces bytes that are not UTF-8 and stores a quoted CRLF as LF") {
+    requireNioSelectors()
+    val workDir = Files.createTempDirectory("datacraft-spark-decoding")
+    try {
+      // The documented limits of the conversion: neither input fails, and both lose bytes.
+      val latin1 = workDir.resolve("latin1.csv")
+      Files.write(latin1, "id,name\n1,caf\u00e9\n".getBytes(StandardCharsets.ISO_8859_1))
+      val crlf    = Files.writeString(workDir.resolve("crlf.csv"), "id,note\r\n1,\"a\r\nb\"\r\n")
+      val options = CsvReadOptions(Map.empty, inferSchema = false)
+      val session = SparkSessions.create(
+        SparkRuntimeConfig.local("csv-decoding").copy(master = "local[1]")
+      )
+      try {
+        def secondColumn(path: Path): String =
+          DataFrames.read(session, "csv", path.toString, options).collect().head.getString(1)
+        assert(secondColumn(latin1) == "caf\uFFFD")
+        assert(secondColumn(crlf) == "a\nb")
+      } finally session.stop()
     } finally deleteRecursively(workDir)
   }
 
@@ -485,9 +608,11 @@ class SparkPipelineSpec extends AnyFunSuite {
     val session =
       SparkSessions.create(SparkRuntimeConfig.local("external-owner").copy(master = "local[1]"))
     try {
-      val engine = newEngine()
+      val refused = execute(newEngine(), "spark-version", Map.empty[String, String])
+      assert(refused.status() == JobStatus.FAILED)
       assert(
-        execute(engine, "spark-version", Map.empty[String, String]).status() == JobStatus.FAILED
+        refused.message() ==
+          "requirement failed: A managed Spark job requires exclusive session ownership"
       )
       assert(session.range(3).count() == 3L)
     } finally session.stop()

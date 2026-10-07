@@ -109,6 +109,11 @@ class ImageBuildContractTests(unittest.TestCase):
         self.assertFalse([line for line in instructions if not line.startswith("ENV ")
                           and re.search(r"/opt/datacraft/data(?![\w.-])", line)])
         self.assertIn("ENV DATACRAFT_DATA_ROOT=/opt/datacraft/data", instructions)
+        # The API must not limp on after an OutOfMemoryError; the JVM option precedes -jar.
+        entrypoint = json.loads(next(line for line in instructions
+                                     if line.startswith("ENTRYPOINT "))[len("ENTRYPOINT "):])
+        self.assertEqual(["java", "-XX:+ExitOnOutOfMemoryError", "-jar",
+                          "/opt/datacraft/datacraft-cli.jar"], entrypoint)
         airflow = (DOCKERFILES / "Dockerfile.airflow").read_text(encoding="utf-8")
         self.assertRegex(airflow, r"(?m)^RUN mkdir -p /opt/datacraft/data .*chmod -R g\+rwX /opt/datacraft/data$")
 

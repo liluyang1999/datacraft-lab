@@ -57,13 +57,16 @@ COMPOSE_VARIABLE = re.compile(r"\$\{[A-Za-z_][A-Za-z0-9_]*(?::?-([^}]*))?\}")
 MAVEN_TEST_TREE = re.compile(r"(?:^|/)src/test/")
 TEST_SCRIPT = re.compile(r"(?:^|/)(?:test_[^/]*\.py|[^/]*_test\.py|[^/]*\.test\.[cm]?js)$")
 
-# Paths and names the 2026-09-26 restructure moved or renamed; either path separator matches.
+# Paths and names that were moved, renamed or removed (2026-09-26: the restructure; 2026-10-07:
+# the image smoke scripts moved into cicd/images, the surefire.skip property was removed); either
+# path separator matches.
 STALE_NAMES = (
     "deploy/tests", ".github/scripts", "orchestration/airflow/tests",
     "orchestration/airflow/README.md", "docs/deployment/", "docs/architecture.md",
     "cloud-and-deployment.md", "data-processing.md", "PROJECT-REVIEW.html",
     "CLOUD-DEPLOYMENT-ANALYSIS.html", "engineering-report", "test.nio.jvm.args",
     "tests/ci/check_test_counts.py", "tests/ci/JschAlgorithmsProbe.java",
+    "container_smoke.sh", "compose_smoke.sh", "surefire.skip",
 )
 STALE_NAME = re.compile("|".join(re.escape(name).replace("/", r"[\\/]") for name in STALE_NAMES))
 # A module's src, target or pom.xml, which must be named from its directory under modules/.
@@ -507,8 +510,8 @@ class DocsConsistencyTests(unittest.TestCase):
                 offenders.extend(f"{name}:{number}: {mention}"
                                  for number, mention in stale_mentions(text, directories))
         self.assertEqual([], offenders,
-                         "these name a path or property the 2026-09-26 restructure moved or "
-                         "renamed (see docs/CHANGELOG.md), or select a module by directory name "
+                         "these name a path or property that was moved, renamed or removed "
+                         "(see docs/CHANGELOG.md), or select a module by directory name "
                          "instead of -pl :<artifactId>")
 
     def test_documented_java_release_matches_the_build(self):
@@ -522,6 +525,15 @@ class DocsConsistencyTests(unittest.TestCase):
                              for match in RELEASE.finditer(text)
                              if match.group(1) != java_version)
         self.assertEqual([], offenders, f"pom.xml java.version is {java_version}")
+
+    def test_cli_usage_header_names_the_project_version(self):
+        # The header is a literal in the parser; nothing else ties it to the POM at a version bump.
+        parser = read("modules/interfaces/datacraft-cli/src/main/scala/com/example/datacraft/cli/"
+                      "CliParser.scala")
+        header = re.search(r'\bhead\("datacraft-lab",\s*"([^"]+)"\)', parser)
+        if header is None:
+            self.fail('CliParser.scala must declare head("datacraft-lab", "<version>")')
+        self.assertEqual(pom().findtext("{*}version"), header.group(1))
 
     def test_no_workstation_jdk_path(self):
         offenders = []

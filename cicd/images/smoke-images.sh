@@ -1,7 +1,13 @@
 #!/usr/bin/env bash
-# Ephemeral CI only: build the actual images and verify both runtime surfaces.
+# Builds the real images and verifies both runtime surfaces: the API image (health, non-root user,
+# read-only jar, no data directory, a Spark job answering 500 FAILED) and the Airflow image
+# (dependency and security floors, the shared data volume's permissions, the three pipelines run
+# inside the image). Needs Docker. Disposable CI runners only: it creates and removes the build
+# context canaries .env and backups/ci-probe.dump, and refuses to run when either exists.
 set -euo pipefail
-cd "$(dirname "${BASH_SOURCE[0]}")/../.."
+# shellcheck source=cicd/lib.sh
+. "$(dirname "$0")/../lib.sh"
+cd "$REPO_ROOT"
 
 container="datacraft-ci-api-${GITHUB_RUN_ID:-$$}"
 probe_volume="datacraft-ci-data-${GITHUB_RUN_ID:-$$}"
@@ -19,10 +25,6 @@ cleanup() {
   exit "$status"
 }
 trap cleanup EXIT
-fail() {
-  echo "$*" >&2
-  exit 1
-}
 
 for canary in "${canaries[@]}"; do
   [[ ! -e "$canary" && ! -L "$canary" ]] || fail "Refusing to overwrite existing $canary."
@@ -68,7 +70,7 @@ for ((attempt=0; attempt<30; attempt++)); do
 done
 if [[ "$healthy" != true ]]; then
   docker logs "$container"
-  exit 1
+  fail "The datacraft/jvm API did not become healthy."
 fi
 [[ "$(docker exec "$container" id -u)" != 0 ]] || fail "datacraft/jvm must not run as root."
 if docker exec "$container" test -w /opt/datacraft/datacraft-cli.jar; then
@@ -86,16 +88,11 @@ spark_response=$(docker exec "$container" curl -sS -m 10 -w '\n%{http_code}' -X 
 [[ "${spark_response##*$'\n'}" == 500 && "$spark_response" == *'"status":"FAILED"'* ]] ||
   fail "POST /jobs/spark-version/runs on datacraft/jvm: expected HTTP 500 FAILED, got: $spark_response"
 
-docker run --rm --entrypoint bash datacraft/airflow:latest -c '
+# The floors are the ones the dags job enforces; the checkout is mounted read-only to run them.
+docker run --rm --entrypoint bash -v "$PWD:/workspace:ro" datacraft/airflow:latest -c '
 set -euo pipefail
 python -m pip check
-python - <<"PY"
-import importlib.metadata as metadata
-from packaging.version import Version
-for name, floor in (("apache-airflow", "3.3.2"), ("apache-airflow-providers-fab", "3.9.0")):
-    installed = metadata.version(name)
-    assert Version(installed) >= Version(floor), f"{name} {installed} is below {floor}"
-PY
+python -B /workspace/cicd/airflow/check_security_floor.py
 airflow version
 java -version
 spark-submit --version'
@@ -116,3 +113,4 @@ docker run --rm --entrypoint sh -v "$probe_volume:/opt/datacraft/data:ro" datacr
 docker run --rm --entrypoint python \
   -v "$PWD:/workspace:ro" datacraft/airflow:latest \
   -B /workspace/tests/smoke/airflow_runtime_smoke.py --jar /opt/datacraft/datacraft-cli.jar
+echo "Verified the jar builder, the API image and the Airflow image."

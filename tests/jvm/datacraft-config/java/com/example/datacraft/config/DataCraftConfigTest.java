@@ -58,6 +58,15 @@ class DataCraftConfigTest {
   }
 
   @Test
+  void aKeyEqualToThePrefixHasNoNameLeftAndIsLeftOut() {
+    DataCraftConfig config =
+        DataCraftConfig.fromMap(Map.of("sftp.", "orphan", "sftp.host", "example.org"));
+
+    // A blank key would break the class's own rule that keys are never blank.
+    assertEquals(Map.of("host", "example.org"), config.withPrefix("sftp.").asMap());
+  }
+
+  @Test
   void rejectsMissingRequiredKeysAndInvalidNumbers() {
     DataCraftConfig config = DataCraftConfig.fromMap(Map.of("workers", "many"));
 

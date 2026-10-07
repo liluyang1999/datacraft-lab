@@ -31,9 +31,7 @@ object CliParser {
         .action((value, args) =>
           args.copy(lifecycle = Lifecycle.fromName(value), lifecycleExplicit = true)
         )
-        .text(
-          "Lifecycle label passed to jobs (dev|prod); built-in and Spark jobs currently ignore it."
-        ),
+        .text("Lifecycle label carried in the job request (dev|prod); no job reads it yet."),
       opt[String]("master")
         .optional()
         .validate(value =>

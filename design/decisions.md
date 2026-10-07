@@ -51,7 +51,7 @@ and the CLI the same `--master`, and the Airflow image ships pyspark 4.2.0 for i
 **Consequences.**
 
 - The shaded jar stays at about 9 MB. The `datacraft/jvm` image that serves the API has no Spark,
-  so a Spark job sent to it answers HTTP 500 with that hint (`tests/smoke/container_smoke.sh`
+  so a Spark job sent to it answers HTTP 500 with that hint (`cicd/images/smoke-images.sh`
   checks this).
 - Under `spark-submit`, classes that Spark provides load from Spark's own jars first by default
   (`spark.driver.userClassPathFirst=false`), so a Spark run uses Spark's Jackson (2.21.2 in Spark
@@ -107,8 +107,8 @@ deprecates Java 25 releases older than 25.0.3), and every image runs a Java 25 r
 **Consequences.**
 
 - Builders and runtimes need JDK 25: the builder image is `maven:3.9.16-eclipse-temurin-25`, the
-  optional Spark image is the `java25` variant, and `container_smoke.sh` requires the images' JRE
-  to be at least 25.0.4.1.
+  optional Spark image is the `java25` variant, and `cicd/images/smoke-images.sh` requires the
+  images' JRE to be at least 25.0.4.1.
 - A JDK older than 25.0.4.1 fails the build instead of warning. The floor was a warning while the
   workstation JDK lagged; it became a requirement once the workstation, CI's `setup-java` and the
   builder image all resolved to 25.0.4.1, and a new security update raises it again.
@@ -170,8 +170,8 @@ rejects an empty tag and `latest`), and `airflow-init` runs as a one-shot servic
 - There is no high availability. Spreading services across nodes first needs shared storage for
   data and logs, a highly available database, secret management and authenticated networking;
   adding worker replicas alone does not scale out.
-- CI runs the Compose path for real (`tests/smoke/compose_smoke.sh`: the full stack, a DAG run and
-  a restored metadata backup). The Swarm template is only validated (`docker stack config` and
+- CI runs the Compose path for real (`cicd/images/smoke-compose.sh`: the full stack, a DAG run
+  and a restored metadata backup). The Swarm template is only validated (`docker stack config` and
   static tests) and has not run on a real multi-node swarm.
 - Every secret must be set: both stack files fail interpolation without one, and
   `deployment_env.py init` generates them.
@@ -254,7 +254,8 @@ executed tests.
 
 **Decision.** Every test lives under `tests/`, grouped by kind: `tests/jvm/<artifactId>` for each
 module's JVM tests (wired through `testSourceDirectory`, so they still run in that module's build),
-then `tests/orchestration`, `tests/smoke`, `tests/deploy`, `tests/ci` and `tests/docs`.
+then `tests/orchestration`, `tests/smoke`, `tests/deploy`, `tests/ci` and `tests/docs`. A check
+that only a pipeline job runs is pipeline logic and lives in `cicd/` (decision 10).
 Platform-specific tests carry a `posix-only` or `windows-only` tag, and the OS-activated profiles
 `windows-host` and `posix-host` exclude the other platform's tag.
 
@@ -262,10 +263,10 @@ Platform-specific tests carry a `posix-only` or `windows-only` tag, and the OS-a
 
 - Modules contain only production code. The Docker build context excludes `tests/`, so the
   builder image skips test compilation.
-- No module reports skipped or canceled tests on either OS. Linux CI executes 256 of the 262 JVM
-  tests and a Windows build 248.
-- The floors are Linux counts, so a Windows build is below two of them; the floor check runs in CI
-  on Linux.
+- No module reports skipped or canceled tests on either OS. Linux CI executes 276 of the 283 JVM
+  tests and a Windows build 268.
+- The test-count floors exist per platform, so the floor check works on a Windows workstation as
+  well as in CI on Linux.
 
 Details: [Testing](build-and-quality.md#testing).
 
@@ -292,8 +293,8 @@ dependencies.
   `modules/interfaces/datacraft-cli/target/datacraft-cli.jar`; CI, the scripts,
   `Dockerfile.build` and the documents use these paths.
 - The root has no README; GitHub shows `docs/README.md` on the repository page instead.
-- `.dockerignore` excludes `docs/`, `design/` and `tests/`, keeping them out of the image build
-  context.
+- `.dockerignore` excludes `docs/`, `design/`, `tests/` and `cicd/`, keeping them out of the image
+  build context.
 - The per-module Enforcer rules back the grouping: a dependency that crosses responsibilities
   fails the build instead of only contradicting the documentation.
 
@@ -302,29 +303,45 @@ Layout and rules: [Repository layout](architecture.md#repository-layout) and
 
 ## 10. CI/CD logic lives in cicd/; the workflow only orchestrates
 
-**Status:** Accepted (2026-09-26 restructure).
+**Status:** Accepted (2026-09-26 restructure); amended 2026-10-07, when the image and Compose smoke
+scripts moved from `tests/smoke` to `cicd/images` and the ShellCheck install left the workflow.
 
 **Context.** The workflow carried most of the pipeline as inline shell: the Maven Wrapper checksum
 check, the Spark-suite, jar and exit-code checks, the pinned-action check and the stack-file
 validation. That logic ran only on a GitHub runner, ShellCheck never saw it, and it could not be
-reproduced when the Actions quota was exhausted. GitHub reads workflows only from
-`.github/workflows`, so the workflow file itself cannot move.
+reproduced on a workstation. GitHub reads workflows only from `.github/workflows`, so the workflow
+file itself cannot move.
 
 **Decision.** `.github/workflows/ci.yml` keeps the triggers, permissions, runners, toolchain setup
-(SHA-pinned actions) and job order, and each step runs one command: a script in `cicd/` or a test
-entry point in `tests/`. `cicd/` groups the scripts by the job that runs them: `build/` (wrapper
-checksum, test-count floors, Spark suite, CLI jar checks and the JSch probe), `airflow/` (the
-constrained Airflow install and the security floor), `lint/` (shell syntax, ShellCheck, pinned
-actions) and `stacks/` (Compose and Swarm validation), with shared helpers in `cicd/lib.sh`. The
-tests of these scripts stay in `tests/ci`.
+(SHA-pinned actions) and job order, and each step runs one command: a script in `cicd/`, a test
+entry point in `tests/`, or a single tool (the Maven Wrapper, pyright, a clean-up `rm`). `cicd/`
+groups the scripts by the job that runs them: `build/` (wrapper checksum, test-count floors, Spark
+suite, CLI jar checks and the JSch probe, the builder image's Maven command in the Docker build
+context), `airflow/` (the constrained Airflow install and the security floor), `lint/` (the pinned
+ShellCheck, shell syntax and ShellCheck, pinned actions), `stacks/` (Compose and Swarm validation)
+and `images/` (image build and smoke test, Compose stack smoke test), with shared helpers in
+`cicd/lib.sh`. The tests of these scripts stay in `tests/ci`.
+
+The rule for what goes where: `cicd/` holds what a pipeline job runs; `tests/` holds the suites a
+test runner or a developer runs; `deploy/scripts` holds what an operator runs on the host. A
+pipeline script may call an operator script (the image smoke test builds with `build-images.sh`),
+but nothing under `deploy/` depends on `cicd/`, which the Docker build context excludes.
 
 **Consequences.**
 
-- The checks run outside GitHub Actions (Linux, macOS, WSL or Git Bash for the build checks,
-  Docker for the stack check) and report through `::error::` annotations only on a runner.
-- ShellCheck covers every script at warning severity, the pipeline scripts included.
-- `tests/ci/test_workflow.py` fails when a `run:` step turns into a multi-line block, names a
-  script that does not exist, or when a file in `cicd/` is used by nothing.
+- The checks run outside GitHub Actions (Linux, WSL or Git Bash for the build checks, Docker for
+  the stack and image checks). The shell scripts report through `fail`: an `::error::` annotation
+  on a runner, standard error elsewhere. The Python checks print `::error::` lines everywhere.
+- ShellCheck, pinned to one release, covers every shell script git knows and fails on any finding,
+  the pipeline scripts included.
+- `tests/ci/test_workflow.py` fails when a `run:` step is more than one command, names a script
+  that does not exist, when a file in `cicd/` is used by nothing, or when a shell script appears
+  outside `cicd/` and `deploy/scripts`.
+- A check that needs Docker gets a Docker-free counterpart where one is possible, so a failure
+  shows before the `containers` job and on a workstation without Docker:
+  `cicd/build/check-image-build.sh` runs the builder image's Maven command in a copy of the Docker
+  build context. The `containers` job, the longest, starts only after `build`, `scripts` and
+  `compose` have passed.
 - `cicd/airflow/install-airflow.sh` derives the constraints file from the running Python, as the
   Airflow image does, so the CI Python version and the constraints file cannot disagree.
 - `cicd/stacks/check-stack-files.sh` refuses to run while `deploy/compose/.env` exists, because the

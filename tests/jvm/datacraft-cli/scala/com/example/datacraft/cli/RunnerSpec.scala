@@ -9,6 +9,7 @@ import com.example.datacraft.engine.{
 }
 
 import java.io.{ByteArrayOutputStream, PrintStream}
+import java.net.{InetAddress, ServerSocket}
 import java.net.http.{HttpClient, HttpRequest, HttpResponse}
 import java.nio.ByteBuffer
 import java.nio.charset.StandardCharsets
@@ -19,9 +20,14 @@ import java.util.concurrent.atomic.AtomicInteger
 
 import scala.jdk.CollectionConverters._
 
+import org.scalatest.concurrent.{Signaler, ThreadSignaler, TimeLimits}
 import org.scalatest.funsuite.AnyFunSuite
+import org.scalatest.time.{Seconds, Span}
 
-class RunnerSpec extends AnyFunSuite {
+class RunnerSpec extends AnyFunSuite with TimeLimits {
+
+  // Interrupts a test body that outlives its failAfter limit.
+  private implicit val signaler: Signaler = ThreadSignaler
 
   test("explicit CLI master overrides config while explicit job parameters take precedence") {
     val file = java.nio.file.Files.createTempFile("datacraft-config-", ".properties")
@@ -235,6 +241,32 @@ class RunnerSpec extends AnyFunSuite {
     }
   }
 
+  test(
+    "--result-file without --json gets the JSON line, with parents created and the file replaced"
+  ) {
+    withTempDir { dir =>
+      val resultFile = dir.resolve("nested").resolve("deeper").resolve("result.json")
+      def echo(message: String): (Int, Array[Byte], String) = captured(
+        Runner.run(
+          CommandLineArgs(
+            command = "echo",
+            resultFile = Some(resultFile),
+            parameters = Map("message" -> message)
+          )
+        )
+      )
+      val (code, output, _) = echo("first")
+      assert(code == 0)
+      assert(new String(output, StandardCharsets.UTF_8).trim == "echo SUCCEEDED first")
+      assert(Files.readString(resultFile).contains("\"message\":\"first\""))
+
+      assert(echo("second")._1 == 0)
+      val replaced = Files.readString(resultFile)
+      assert(replaced.contains("\"message\":\"second\"") && !replaced.contains("first"), replaced)
+      assert(replaced.endsWith("}\n") && replaced.count(_ == '\n') == 1, replaced)
+    }
+  }
+
   test("spark-version rejects invalid Spark settings before creating a session") {
     val (code, output, _) = captured(
       Runner.run(
@@ -259,8 +291,17 @@ class RunnerSpec extends AnyFunSuite {
       .toList
     assert(code == 0)
     assert(names == Runner.registry().jobNames().asScala.toList)
+    // The whole catalog, so a module that stops registering its jobs fails here.
     assert(
-      Set("csv-to-parquet", "echo", "noop", "row-count", "spark-version").subsetOf(names.toSet)
+      names == List(
+        "csv-profile",
+        "csv-to-parquet",
+        "echo",
+        "file-checksum",
+        "noop",
+        "row-count",
+        "spark-version"
+      )
     )
   }
 
@@ -299,6 +340,24 @@ class RunnerSpec extends AnyFunSuite {
     }
     assert(code == 2)
     assert(err.toString(StandardCharsets.UTF_8).contains("serve-api refuses --host 0.0.0.0"))
+  }
+
+  test("serve-api reports a port it cannot bind in one line and returns 1") {
+    val occupied = new ServerSocket(0, 1, InetAddress.getByName("127.0.0.1"))
+    try {
+      val port = occupied.getLocalPort
+      // A successful bind would block in serve-api forever, so the call is bounded.
+      val (code, output, errors) = failAfter(Span(30, Seconds)) {
+        captured(
+          Runner.execute(CommandLineArgs(command = "serve-api", port = port), registryOf())
+        )
+      }
+      assert(code == 1)
+      assert(errors.startsWith(s"serve-api cannot listen on 127.0.0.1:$port: "), errors)
+      assert(errors.contains("BindException"), errors)
+      assert(!errors.contains("\tat ") && errors.trim.linesIterator.size == 1, errors)
+      assert(output.isEmpty)
+    } finally occupied.close()
   }
 
   test("runner starts embedded API for online engine access") {

@@ -126,11 +126,15 @@ public final class DataCraftConfig {
     return Boolean.parseBoolean(value);
   }
 
+  /**
+   * The entries whose key starts with {@code prefix}, with the prefix removed. A key equal to the
+   * prefix would be left with a blank name and is omitted.
+   */
   public DataCraftConfig withPrefix(String prefix) {
     TreeMap<String, String> prefixed = new TreeMap<>();
     values.forEach(
         (key, value) -> {
-          if (key.startsWith(prefix)) {
+          if (key.startsWith(prefix) && key.length() > prefix.length()) {
             prefixed.put(key.substring(prefix.length()), value);
           }
         });

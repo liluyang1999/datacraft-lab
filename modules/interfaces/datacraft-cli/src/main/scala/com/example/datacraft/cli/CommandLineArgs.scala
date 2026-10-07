@@ -1,6 +1,6 @@
 package com.example.datacraft.cli
 
-import com.example.datacraft.common.{AppInfo, Lifecycle}
+import com.example.datacraft.common.Lifecycle
 
 import java.nio.file.Path
 
@@ -16,7 +16,4 @@ final case class CommandLineArgs(
     lifecycleExplicit: Boolean = false,
     jsonOutput: Boolean = false,
     resultFile: Option[Path] = None
-) {
-
-  def appName: String = s"${AppInfo.DEFAULT_APP_NAME}-$command"
-}
+)

@@ -16,6 +16,7 @@ import com.example.datacraft.spark.SparkJobs
 import com.example.datacraft.io.LocalFiles
 import com.example.datacraft.jobs.JvmJobs
 
+import java.io.IOException
 import java.net.InetAddress
 import java.nio.charset.StandardCharsets
 import java.nio.file.Path
@@ -28,9 +29,10 @@ import scala.util.Try
  * other command name is dispatched through the engine as a job, so the CLI, the HTTP API, and
  * Airflow all share one execution path.
  *
- * Exit codes: `0` success; `1` the job failed, or its `--result-file` could not be written (the
- * result is still printed); `2` invalid usage, i.e. a parse error (including job options given to a
- * control command), an unknown command or job, or an unreadable or malformed `--config` file.
+ * Exit codes: `0` success; `1` the job failed, its `--result-file` could not be written (the result
+ * is still printed), or `serve-api` could not open its socket; `2` invalid usage, i.e. a parse
+ * error (including job options given to a control command), an unknown command or job, or an
+ * unreadable or malformed `--config` file.
  */
 object Runner {
 
@@ -64,11 +66,16 @@ object Runner {
             Console.err.println(message)
             2
           case None =>
-            val server = startApi(args, catalog)
-            sys.addShutdownHook(server.close())
-            println(s"datacraft-api listening on ${server.uri("/")}")
-            Thread.currentThread().join()
-            0
+            listen(args, catalog) match {
+              case Left(message) =>
+                Console.err.println(message)
+                1
+              case Right(server) =>
+                sys.addShutdownHook(server.close())
+                println(s"datacraft-api listening on ${server.uri("/")}")
+                Thread.currentThread().join()
+                0
+            }
         }
       case jobName if !catalog.find(jobName).isPresent =>
         Console.err.println(s"Unknown command or job: $jobName")
@@ -100,6 +107,14 @@ object Runner {
 
   def startApi(args: CommandLineArgs, catalog: JobCatalog = registry()): EngineHttpServer =
     EngineHttpServer.start(EngineHttpServerConfig.of(args.host, args.port), catalog)
+
+  /** Starts the API; a port in use or a host that cannot be bound becomes a one-line error. */
+  private def listen(args: CommandLineArgs, catalog: JobCatalog): Either[String, EngineHttpServer] =
+    try Right(startApi(args, catalog))
+    catch {
+      case e: IOException =>
+        Left(s"serve-api cannot listen on ${args.host}:${args.port}: $e")
+    }
 
   /** Builds the full catalog: built-in core jobs, the plain-JVM data jobs and all Spark jobs. */
   private[cli] def registry(): JobRegistry =

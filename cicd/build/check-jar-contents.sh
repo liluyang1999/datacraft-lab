@@ -15,10 +15,12 @@ cd "$REPO_ROOT"
 jar=$CLI_JAR
 [ -f "$jar" ] || fail "CLI jar missing at $jar"
 
-manifest=$(unzip -p "$jar" META-INF/MANIFEST.MF | tr -d '\r')
+manifest=$(unzip -p "$jar" META-INF/MANIFEST.MF | tr -d '\r') || fail "cannot read the manifest of $jar"
 echo "$manifest"
 grep -qx 'Multi-Release: true' <<<"$manifest" || fail "$jar manifest lacks 'Multi-Release: true'"
-if unzip -Z1 "$jar" | grep -E '(^|/)module-info\.class$'; then
+# Listed first: in a pipeline, a failing unzip would make the grep below find nothing and pass.
+entries=$(unzip -Z1 "$jar") || fail "cannot list the entries of $jar"
+if grep -E '(^|/)module-info\.class$' <<<"$entries"; then
   fail "$jar must not contain module-info.class entries"
 fi
 java -cp "$jar" cicd/build/JschAlgorithmsProbe.java
@@ -28,8 +30,9 @@ if [ -z "$expected" ] || [ "$(wc -l <<<"$expected")" -ne 1 ]; then
   fail "pom.xml must define exactly one jackson.version property"
 fi
 for artifact in jackson-core jackson-databind; do
+  # A jar without the entry leaves the version empty, which the comparison below reports.
   actual=$(unzip -p "$jar" "META-INF/maven/com.fasterxml.jackson.core/$artifact/pom.properties" \
-    | tr -d '\r' | sed -n 's/^version=//p')
+    2> /dev/null | tr -d '\r' | sed -n 's/^version=//p') || actual=
   echo "$artifact ${actual:-<missing>} (pom.xml jackson.version $expected)"
   [ "$actual" = "$expected" ] || fail "$jar bundles $artifact ${actual:-<missing>}, expected $expected"
 done

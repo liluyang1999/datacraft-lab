@@ -55,7 +55,8 @@ final class JobParameters {
 
   /**
    * Parses an optional 64-bit integer in {@code [min, max]}. A present but blank or malformed value
-   * fails; the message names the key and the range but never echoes the raw value.
+   * fails; the exception names the key and the range but carries the raw value neither in its
+   * message nor in a cause.
    */
   static OptionalLong longInRange(Map<String, String> parameters, String key, long min, long max) {
     String value = parameters.get(key);
@@ -70,7 +71,8 @@ final class JobParameters {
     try {
       parsed = Long.parseLong(value.trim());
     } catch (NumberFormatException exception) {
-      throw new IllegalArgumentException(message, exception);
+      // Not chained: its message quotes the raw value, and the engine logs the cause chain.
+      throw new IllegalArgumentException(message);
     }
     if (parsed < min || parsed > max) {
       throw new IllegalArgumentException(message);

@@ -18,8 +18,11 @@ export AIRFLOW_JWT_SECRET=test-only-not-for-deployment
 export AIRFLOW_FERNET_KEY=ZGF0YWNyYWZ0LWNpLXRlc3Qtb25seS1mZXJuZXRrZXk=
 export DATACRAFT_DATA_NODE=ci-test-node
 
+command -v docker > /dev/null 2>&1 || fail "docker is not installed"
 env_file=deploy/compose/.env
-[ ! -e "$env_file" ] || fail "$env_file exists; move it aside first, this check never overwrites it"
+if [ -e "$env_file" ] || [ -L "$env_file" ]; then
+  fail "$env_file exists; move it aside first, this check never overwrites it"
+fi
 work=$(scratch_dir stack-files)
 created=
 cleanup() {
@@ -29,8 +32,8 @@ cleanup() {
 trap cleanup EXIT
 # The copied .env leaves the Airflow secrets empty, and its POSTGRES_PASSWORD is a placeholder that
 # only deployment_env.py rejects; docker stack config reads no .env file at all.
-cp deploy/compose/.env.example "$env_file"
 created=1
+cp deploy/compose/.env.example "$env_file"
 
 compose=(docker compose -f deploy/compose/docker-compose.yml config --quiet)
 stack=(docker stack config -c deploy/swarm/docker-stack.yml)

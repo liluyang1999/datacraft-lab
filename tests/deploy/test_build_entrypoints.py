@@ -4,6 +4,7 @@ import os
 from pathlib import Path
 import re
 import unittest
+import xml.etree.ElementTree as ElementTree
 
 ROOT = Path(__file__).resolve().parents[2]
 WRAPPER_PROPERTIES = ROOT / ".mvn" / "wrapper" / "maven-wrapper.properties"
@@ -30,6 +31,17 @@ class BuildEntrypointTests(unittest.TestCase):
             self.fail("Dockerfile.build must declare an ARG MAVEN_IMAGE default")
         self.assertTrue(image.group(1).startswith(f"maven:{match.group(1)}-eclipse-temurin-25"),
                         f"{image.group(1)} does not match wrapper Maven {match.group(1)}")
+
+    def test_builder_image_dependency_layer_copies_every_module_pom(self):
+        # The POM-only layer resolves dependencies before the sources are copied; a module missing
+        # from it fails that step (silently, by design) and the cache layer stops helping.
+        pom = ElementTree.parse(ROOT / "pom.xml").getroot()
+        modules = [(module.text or "").strip() for module in pom.findall("{*}modules/{*}module")]
+        self.assertTrue(modules)
+        dockerfile = (ROOT / "deploy" / "docker" / "Dockerfile.build").read_text(encoding="utf-8")
+        copied = re.findall(r"^COPY (\S+)/pom\.xml (\S+)/$", dockerfile, re.MULTILINE)
+        self.assertEqual(sorted((module, module) for module in modules), sorted(copied))
+        self.assertRegex(dockerfile, re.compile(r"^COPY pom\.xml \./$", re.MULTILINE))
 
     def test_build_scripts_prefer_the_pinned_wrapper(self):
         shell = (ROOT / "deploy" / "scripts" / "build-jar.sh").read_text(encoding="utf-8")

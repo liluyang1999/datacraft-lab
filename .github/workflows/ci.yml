@@ -26,14 +26,18 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
+      # check-latest: the build enforces a JDK patch floor (pom.xml requireJavaVersion), and the
+      # runner's preinstalled Temurin 25 may be older than the newest release.
       - name: Set up JDK 25
         uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
         with:
           distribution: temurin
           java-version: "25"
+          check-latest: true
           cache: maven
 
-      # Every step's logic lives in cicd/ so it can run and be reviewed outside GitHub Actions.
+      # Each step runs one command: a script in cicd/, a test entry point in tests/, or a single
+      # tool, so the pipeline logic can run and be reviewed outside GitHub Actions.
       - name: Maven Wrapper verifies the Maven distribution
         run: bash cicd/build/check-maven-wrapper.sh
 
@@ -55,6 +59,12 @@ jobs:
 
       - name: Check CLI exit codes and failure results
         run: bash cicd/build/check-cli-exit-codes.sh
+
+      # The builder image compiles from the Docker build context, which has no tests/ or cicd/. This
+      # runs its Maven command in a copy of that context, so such a build cannot break only later,
+      # in the containers job, where Docker hides the cause in the image build log.
+      - name: Builder image's Maven command works in the Docker build context
+        run: bash cicd/build/check-image-build.sh
 
       - name: Upload test reports
         if: failure()
@@ -106,13 +116,13 @@ jobs:
         run: bash cicd/airflow/install-airflow.sh
 
       - name: Enforce the Airflow security floor
-        run: python -B cicd/airflow/check_security_floor.py
+        run: python3 -B cicd/airflow/check_security_floor.py
 
       - name: Verify real DAG parsing and task execution boundaries
-        run: python -B -m unittest discover -s tests/orchestration -v
+        run: python3 -B -m unittest discover -s tests/orchestration -v
 
       - name: Execute packaged engine, ETL retry and SFTP pipelines
-        run: python -B tests/smoke/airflow_runtime_smoke.py --jar target/runtime/datacraft-cli.jar
+        run: python3 -B tests/smoke/airflow_runtime_smoke.py --jar target/runtime/datacraft-cli.jar
 
       - name: Remove isolated Airflow state
         if: always()
@@ -138,14 +148,12 @@ jobs:
         with:
           node-version: "24"
 
-      - name: Install ShellCheck when the runner lacks it
-        run: command -v shellcheck || { sudo apt-get update -qq && sudo apt-get install -y -qq shellcheck; }
+      # A fixed ShellCheck release, not the one the runner image happens to ship.
+      - name: Install the pinned ShellCheck
+        run: bash cicd/lint/install-shellcheck.sh
 
       - name: Shell syntax and ShellCheck
         run: bash cicd/lint/check-shell-scripts.sh
-
-      - name: Record toolchain versions
-        run: python3 --version && node --version
 
       - name: Deployment script and template tests
         run: python3 -B -m unittest discover -s tests/deploy -v
@@ -178,12 +186,17 @@ jobs:
         run: bash cicd/stacks/check-stack-files.sh
 
   containers:
+    # The longest job: it starts only when the cheaper gates have passed, which include the
+    # builder image's Maven command (build) and the stack files it deploys (compose).
     name: Build and smoke-test runtime images
+    needs: [build, scripts, compose]
     runs-on: ubuntu-24.04
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
       - name: Build images and run packaged API and Airflow pipelines
-        run: bash tests/smoke/container_smoke.sh
+        run: bash cicd/images/smoke-images.sh
+
       - name: Verify the complete Compose stack and metadata backup recovery
-        run: bash tests/smoke/compose_smoke.sh
+        run: bash cicd/images/smoke-compose.sh

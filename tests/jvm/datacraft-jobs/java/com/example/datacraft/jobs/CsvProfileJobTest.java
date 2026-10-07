@@ -1,12 +1,16 @@
 package com.example.datacraft.jobs;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.fail;
 
 import com.example.datacraft.common.Lifecycle;
+import com.example.datacraft.engine.JobExecutionEngine;
 import com.example.datacraft.engine.JobExecutionRequest;
 import com.example.datacraft.engine.JobExecutionResult;
+import com.example.datacraft.engine.JobRegistry;
 import com.example.datacraft.engine.JobStatus;
 import java.io.IOException;
 import java.io.RandomAccessFile;
@@ -19,7 +23,15 @@ import java.util.HexFormat;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.logging.Handler;
+import java.util.logging.LogRecord;
+import java.util.logging.Logger;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.Timeout;
 import org.junit.jupiter.api.io.TempDir;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
@@ -172,6 +184,41 @@ class CsvProfileJobTest {
   }
 
   @Test
+  void aRejectedNumberReachesNeitherTheResultNorTheLoggedThrowable() throws Exception {
+    Path input = write("in.csv", "id\n1\n");
+    // A value with a line break could forge a log line if any logged message quoted it.
+    String rejected = "7x\n2026-10-07 INFO forged line";
+    JobRegistry registry = new JobRegistry();
+    registry.register(new CsvProfileJob(Optional.empty()));
+    // Strong reference: JUL holds loggers weakly, and the handler must stay attached.
+    Logger engineLogger = Logger.getLogger(JobExecutionEngine.class.getName());
+    List<LogRecord> records = new CopyOnWriteArrayList<>();
+    Handler capture = new CapturingHandler(records);
+    engineLogger.addHandler(capture);
+    JobExecutionResult result;
+    try {
+      result =
+          new JobExecutionEngine(registry)
+              .execute(
+                  JobExecutionRequest.of(
+                      "csv-profile",
+                      Lifecycle.DEV,
+                      Map.of("input", input.toString(), "expectedRows", rejected)));
+    } finally {
+      engineLogger.removeHandler(capture);
+    }
+
+    assertEquals(JobStatus.FAILED, result.status());
+    assertEquals("expectedRows must be a 64-bit integer >= 0", result.message());
+    assertEquals(1, records.size(), () -> "records: " + records);
+    for (Throwable logged = records.get(0).getThrown();
+        logged != null;
+        logged = logged.getCause()) {
+      assertFalse(String.valueOf(logged.getMessage()).contains("forged"), logged.toString());
+    }
+  }
+
+  @Test
   void rejectsACaseVariantOfAKnownParameterButIgnoresUnrelatedKeys() throws Exception {
     Path input = write("in.csv", "id\n1\n");
 
@@ -218,7 +265,7 @@ class CsvProfileJobTest {
   }
 
   @ParameterizedTest
-  @ValueSource(strings = {"0", "-1", "", "x", "2147483640", "9223372036854775807"})
+  @ValueSource(strings = {"0", "-1", "", "x", "1073741820", "2147483639", "9223372036854775807"})
   void rejectsMaxBytesOutsideTheLoadableRange(String maxBytes) throws Exception {
     Path input = write("in.csv", "id\n1\n");
 
@@ -227,7 +274,9 @@ class CsvProfileJobTest {
             IllegalArgumentException.class,
             () -> run(Map.of("input", input.toString(), "maxBytes", maxBytes)));
 
-    assertEquals("maxBytes must be an integer from 1 to 2147483639", error.getMessage());
+    // Half the largest array: a String with any char above U+00FF needs two bytes per char.
+    assertEquals("maxBytes must be an integer from 1 to 1073741819", error.getMessage());
+    assertEquals(1_073_741_819L, CsvProfileJob.MAX_LOADABLE_BYTES);
   }
 
   @Test
@@ -319,6 +368,12 @@ class CsvProfileJobTest {
         assertThrows(
                 IllegalArgumentException.class, () -> run(Map.of("input", directory.toString())))
             .getMessage());
+    // No file system accepts NUL in a name, so this is rejected before any file is looked up.
+    String invalid =
+        assertThrows(
+                IllegalArgumentException.class, () -> run(Map.of("input", "in\u0000valid.csv")))
+            .getMessage();
+    assertTrue(invalid.startsWith("input is not a valid path: "), invalid);
   }
 
   @Test
@@ -361,6 +416,74 @@ class CsvProfileJobTest {
     assertEquals(2 * 96 + 56 + 3 * 8 + 3 * 2L, CsvProfileJob.estimateHeapBytes(",,\n", ','));
   }
 
+  @Test
+  @Timeout(60)
+  void loadsOneFileAtATimeSoTheHeapBudgetCoversConcurrentRuns() throws Exception {
+    Path input = write("in.csv", "id\n1\n");
+    AtomicInteger budgetChecks = new AtomicInteger();
+    CountDownLatch firstRunInside = new CountDownLatch(1);
+    CountDownLatch release = new CountDownLatch(1);
+    // The budget is read where a run holds its file (twice per run), so the first read marks a
+    // run that is inside, and it stays there until released.
+    CsvProfileJob job =
+        new CsvProfileJob(
+            InputFiles.confinedTo(Optional.empty()),
+            () -> {
+              if (budgetChecks.incrementAndGet() == 1) {
+                firstRunInside.countDown();
+                awaitUninterruptibly(release);
+              }
+              return Long.MAX_VALUE;
+            });
+    JobExecutionRequest request =
+        JobExecutionRequest.of("csv-profile", Lifecycle.DEV, Map.of("input", input.toString()));
+    List<JobStatus> statuses = new CopyOnWriteArrayList<>();
+    Thread first = new Thread(() -> statuses.add(job.run(request).status()), "profile-first");
+    Thread second = new Thread(() -> statuses.add(job.run(request).status()), "profile-second");
+
+    first.start();
+    try {
+      assertTrue(firstRunInside.await(20, TimeUnit.SECONDS), "the first run never started");
+      second.start();
+      // Unserialised, the second run finishes on its own; serialised, it parks behind the first.
+      awaitParkedOrFinished(second);
+      assertEquals(1, budgetChecks.get(), "a second run loaded its file beside the first");
+    } finally {
+      release.countDown();
+      first.join(20_000);
+      second.join(20_000);
+    }
+
+    assertEquals(List.of(JobStatus.SUCCEEDED, JobStatus.SUCCEEDED), statuses);
+    assertEquals(4, budgetChecks.get());
+  }
+
+  private static void awaitParkedOrFinished(Thread thread) throws InterruptedException {
+    long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(20);
+    while (thread.getState() != Thread.State.WAITING
+        && thread.getState() != Thread.State.TERMINATED) {
+      if (System.nanoTime() > deadline) {
+        fail("the second run neither waited nor finished: " + thread.getState());
+      }
+      Thread.sleep(5);
+    }
+  }
+
+  private static void awaitUninterruptibly(CountDownLatch latch) {
+    boolean interrupted = false;
+    while (true) {
+      try {
+        latch.await();
+        break;
+      } catch (InterruptedException exception) {
+        interrupted = true;
+      }
+    }
+    if (interrupted) {
+      Thread.currentThread().interrupt();
+    }
+  }
+
   private JobExecutionResult run(Map<String, String> parameters) {
     return new CsvProfileJob(Optional.empty())
         .run(JobExecutionRequest.of("csv-profile", Lifecycle.DEV, parameters));
@@ -377,5 +500,24 @@ class CsvProfileJobTest {
 
   static String sha256(byte[] bytes) throws Exception {
     return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(bytes));
+  }
+
+  private static final class CapturingHandler extends Handler {
+    private final List<LogRecord> records;
+
+    CapturingHandler(List<LogRecord> records) {
+      this.records = records;
+    }
+
+    @Override
+    public void publish(LogRecord logRecord) {
+      records.add(logRecord);
+    }
+
+    @Override
+    public void flush() {}
+
+    @Override
+    public void close() {}
   }
 }

@@ -40,6 +40,33 @@ class CliParserSpec extends AnyFunSuite {
 
   test("rejects parameters that are not key value pairs") {
     assert(CliParser.parseQuietly(Seq("--command", "inspect", "--param", "broken")).isEmpty)
+    assert(CliParser.parseQuietly(Seq("--command", "inspect", "--param", "=value")).isEmpty)
+  }
+
+  test("a parameter value is everything after the first '=', may be empty, and the last one wins") {
+    val parsed = CliParser.parseQuietly(
+      Seq("--command", "echo") ++
+        Seq("expr=a=b=c", "empty=", "key=1", "key=2").flatMap(Seq("--param", _))
+    )
+    assert(parsed.map(_.parameters).contains(Map("expr" -> "a=b=c", "empty" -> "", "key" -> "2")))
+  }
+
+  test("the port must be between 0 and 65535") {
+    for (port <- Seq(0, 65535))
+      assert(
+        CliParser
+          .parseQuietly(Seq("--command", "serve-api", "--port", port.toString))
+          .exists(_.port == port)
+      )
+    for (port <- Seq("65536", "-1", "http"))
+      assert(CliParser.parseQuietly(Seq("--command", "serve-api", "--port", port)).isEmpty, port)
+  }
+
+  test("an option other than --param may be given only once") {
+    assert(CliParser.parseQuietly(Seq("--command", "echo", "--json", "--json")).isEmpty)
+    assert(
+      CliParser.parseQuietly(Seq("--command", "echo", "--master", "a", "--master", "b")).isEmpty
+    )
   }
 
   test("invalid lifecycle is a parse error rather than an uncaught exception") {

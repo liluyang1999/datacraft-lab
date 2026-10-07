@@ -43,9 +43,9 @@ def write_report(root, module, name, tests, skipped=None, skipped_cases=0):
     return reports
 
 
-def write_reports_at_floors(root):
+def write_reports_at_floors(root, floors=None):
     """Every module meets its floor exactly; one is split across files, ScalaTest adds empties."""
-    for module, floor in counts.FLOORS.items():
+    for module, floor in (counts.FLOORS if floors is None else floors).items():
         if module == "datacraft-spark":
             write_report(root, module, "com.example.FirstSpec", floor - 1)
             write_report(root, module, "com.example.SecondSpec", 1)
@@ -54,10 +54,11 @@ def write_reports_at_floors(root):
             write_report(root, module, f"com.example.{module}.Test", floor, skipped=0)
 
 
-def run_check(root):
+def run_check(root, platform="linux"):
+    """Runs the check against the Linux floors, whatever host runs this test, unless told."""
     output = io.StringIO()
     with contextlib.redirect_stdout(output):
-        status = counts.main([str(root)])
+        status = counts.main(["--platform", platform, str(root)])
     return status, output.getvalue()
 
 
@@ -74,6 +75,27 @@ class CheckTestCountsTests(unittest.TestCase):
         self.assertNotIn("::error::", output)
         for module in counts.FLOORS:
             self.assertIn(module, output)
+
+    def test_floors_follow_the_platform_that_ran_the_tests(self):
+        # A Windows build runs other tagged tests, so Linux counts do not satisfy its floors.
+        status, output = run_check(self.root, platform="windows")
+        self.assertEqual(1, status, output)
+        self.assertIn("floors for tests run on windows", output)
+        linux, windows = counts.FLOORS["datacraft-io"], counts.WINDOWS_FLOORS["datacraft-io"]
+        self.assertGreater(windows, linux)
+        self.assertIn(f"::error::datacraft-io executed {linux} tests, expected at least {windows}",
+                      output)
+        with tempfile.TemporaryDirectory() as directory:
+            write_reports_at_floors(Path(directory), counts.WINDOWS_FLOORS)
+            status, output = run_check(Path(directory), platform="windows")
+            self.assertEqual(0, status, output)
+            # The posix-only tests did not run there, so the Linux floors are not met.
+            self.assertEqual(1, run_check(Path(directory))[0])
+
+    def test_the_default_platform_is_the_host_and_both_cover_every_module(self):
+        self.assertEqual("windows" if sys.platform == "win32" else "linux", counts.host_platform())
+        self.assertEqual({"linux", "windows"}, set(counts.PLATFORM_FLOORS))
+        self.assertEqual(set(counts.FLOORS), set(counts.WINDOWS_FLOORS))
 
     def test_module_that_ran_no_tests_fails_and_is_named(self):
         for report in (reports_dir(self.root, "datacraft-io")).iterdir():
@@ -155,12 +177,11 @@ class CheckTestCountsTests(unittest.TestCase):
         self.assertIn("::error::datacraft-cli: TEST-bad.xml: non-integer tests='many'", output)
 
     def test_command_line_reports_errors_and_exit_status(self):
-        passing = subprocess.run([sys.executable, "-B", str(SCRIPT), str(self.root)],
-                                 capture_output=True, text=True)
+        command = [sys.executable, "-B", str(SCRIPT), "--platform", "linux", str(self.root)]
+        passing = subprocess.run(command, capture_output=True, text=True)
         self.assertEqual(0, passing.returncode, passing.stdout + passing.stderr)
         write_report(self.root, "datacraft-spark", "com.example.FirstSpec", 0)
-        failing = subprocess.run([sys.executable, "-B", str(SCRIPT), str(self.root)],
-                                 capture_output=True, text=True)
+        failing = subprocess.run(command, capture_output=True, text=True)
         self.assertEqual(1, failing.returncode, failing.stdout + failing.stderr)
         self.assertIn("::error::datacraft-spark executed 1 tests", failing.stdout)
         self.assertEqual("", failing.stderr)

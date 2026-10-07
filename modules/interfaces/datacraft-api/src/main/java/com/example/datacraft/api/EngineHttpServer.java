@@ -178,19 +178,26 @@ public final class EngineHttpServer implements AutoCloseable {
         HttpJsonResponse.write(exchange, 403, EngineJson.error("cross_origin_forbidden"));
         return;
       }
+      JobExecutionRequest request;
       try {
-        runJob(exchange, catalog, engine, path);
+        request = runRequest(exchange.getRequestURI(), path);
       } catch (IllegalArgumentException exception) {
         HttpJsonResponse.write(exchange, 400, EngineJson.error("invalid_request"));
+        return;
       }
+      runJob(exchange, catalog, engine, request);
       return;
     }
     HttpJsonResponse.write(exchange, 404, EngineJson.error("not_found"));
   }
 
-  private void runJob(
-      HttpExchange exchange, JobCatalog catalog, JobExecutionEngine engine, String path)
-      throws IOException {
+  /**
+   * Reads the job name, the lifecycle and the parameters of a run request. Nothing after this step
+   * answers 400, so an IllegalArgumentException from the catalog or a response is a 500.
+   *
+   * @throws IllegalArgumentException when the job path, the lifecycle or the query is malformed
+   */
+  private static JobExecutionRequest runRequest(URI uri, String path) {
     // URI.getPath() is already percent-decoded, and '+' is a literal path character.
     if (path.length() <= "/jobs/".length() + "/runs".length()) {
       throw new IllegalArgumentException("Missing job name.");
@@ -199,14 +206,23 @@ public final class EngineHttpServer implements AutoCloseable {
     if (jobName.isBlank() || jobName.contains("/")) {
       throw new IllegalArgumentException("Invalid job path.");
     }
-    Map<String, String> query = parseQuery(exchange.getRequestURI().getRawQuery());
+    Map<String, String> query = parseQuery(uri.getRawQuery());
     Lifecycle lifecycle = Lifecycle.fromName(query.getOrDefault("lifecycle", "dev"));
     query.remove("lifecycle");
-    if (catalog.find(jobName).isEmpty()) {
+    return JobExecutionRequest.of(jobName, lifecycle, query);
+  }
+
+  private void runJob(
+      HttpExchange exchange,
+      JobCatalog catalog,
+      JobExecutionEngine engine,
+      JobExecutionRequest request)
+      throws IOException {
+    if (catalog.find(request.jobName()).isEmpty()) {
       HttpJsonResponse.write(exchange, 404, EngineJson.error("unknown_job"));
       return;
     }
-    JobExecutionResult result = engine.execute(JobExecutionRequest.of(jobName, lifecycle, query));
+    JobExecutionResult result = engine.execute(request);
     HttpJsonResponse.write(
         exchange,
         result.status().name().equals("SUCCEEDED") ? 200 : 500,

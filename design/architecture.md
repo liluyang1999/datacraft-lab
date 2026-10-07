@@ -22,10 +22,12 @@ datacraft-lab/
 ├── config/checkstyle/checkstyle.xml   Checkstyle rules
 ├── .github/workflows/ci.yml           CI workflow: triggers, runners and job order only
 ├── cicd/                              the scripts the CI jobs run
-│   ├── build/        Maven Wrapper checksum, test-count floors, Spark suite, CLI jar checks
+│   ├── build/        Maven Wrapper checksum, test-count floors, Spark suite, CLI jar checks,
+│   │                 the builder image's Maven command in the Docker build context
 │   ├── airflow/      constrained Airflow install and security floor
-│   ├── lint/         shell syntax and ShellCheck, pinned actions
-│   └── stacks/       Compose and Swarm definitions
+│   ├── lint/         pinned ShellCheck, shell syntax and ShellCheck, pinned actions
+│   ├── stacks/       Compose and Swarm definitions
+│   └── images/       image build and smoke test, Compose stack smoke test
 ├── modules/                           JVM source modules, grouped by responsibility
 │   ├── core/         datacraft-common, datacraft-config, datacraft-engine
 │   ├── io/           datacraft-io
@@ -39,15 +41,17 @@ datacraft-lab/
     ├── jvm/<artifactId>/{java,scala}  JVM tests of each module, run by that module's build
     ├── jvm/resources/                 shared logging.properties and log4j2-test.properties
     ├── orchestration/                 Airflow DAG contract tests (need Airflow)
-    ├── smoke/                         Airflow pipeline, container and Compose smoke tests
+    ├── smoke/                         Airflow pipeline smoke test
     ├── deploy/                        deployment script and template tests (standard library only)
     ├── ci/                            tests of the cicd/ scripts and of the workflow structure
     └── docs/                          documentation consistency and cost calculator tests
 ```
 
 - GitHub reads workflows only from `.github/workflows`, so `ci.yml` stays there, but it only
-  orchestrates; every step runs a script in `cicd/` or a test entry point in `tests/`, and
-  `tests/ci/test_workflow.py` keeps it that way.
+  orchestrates; every step runs one command, a script in `cicd/`, a test entry point in `tests/`
+  or a single tool, and `tests/ci/test_workflow.py` keeps it that way.
+- `cicd/` holds what a pipeline job runs, `tests/` the suites a test runner or a developer runs,
+  and `deploy/scripts` what an operator runs on the host.
 - The grouping directories are not part of any coordinate: artifactIds and Java/Scala packages
   are the same as before the grouping, so select a module by artifactId, for example
   `./mvnw -pl :datacraft-cli -am package`.
@@ -285,12 +289,14 @@ Adding a JVM module:
    above.
 3. Put its tests in `tests/jvm/<artifactId>/{java,scala}`; the build finds them without further
    configuration. A Scala module also declares `scala-maven-plugin` and `scalatest-maven-plugin`
-   and sets `surefire.skip=true` when it has no JUnit tests, as `datacraft-spark` and
-   `datacraft-cli` do.
-4. Add it to `MODULE_DIRS` and `FLOORS` in `cicd/build/check_test_counts.py`; a test in `tests/ci`
-   checks that `MODULE_DIRS` matches `<modules>`.
+   and, when it has no JUnit tests, switches Surefire off in its POM (`<skip>true</skip>`), as
+   `datacraft-spark` and `datacraft-cli` do.
+4. Add it to `MODULE_DIRS` and `FLOORS` in `cicd/build/check_test_counts.py` (and to
+   `WINDOWS_FLOORS` when its count differs there); a test in `tests/ci` checks that `MODULE_DIRS`
+   matches `<modules>`.
 5. Add its POM to the `COPY` list of `deploy/docker/Dockerfile.build`, so the dependency layer that
-   the builder resolves from the POMs, before it copies the sources, still covers every module.
+   the builder resolves from the POMs, before it copies the sources, still covers every module; a
+   test in `tests/deploy` compares that list with `<modules>`.
 6. If it contributes jobs, make `datacraft-cli` depend on it and register the jobs in
    `Runner.registry()`.
 

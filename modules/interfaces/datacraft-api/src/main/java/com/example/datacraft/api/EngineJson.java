@@ -8,7 +8,10 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import java.util.List;
 import java.util.Map;
 
-/** Serialises engine domain objects into the JSON responses exposed by the HTTP API. */
+/**
+ * Serialises engine domain objects to JSON: the HTTP API's responses, and through {@link #result}
+ * the line the CLI prints for {@code --json} and writes to {@code --result-file}.
+ */
 public final class EngineJson {
 
   private static final ObjectMapper MAPPER = new ObjectMapper();
@@ -51,7 +54,7 @@ public final class EngineJson {
     try {
       return MAPPER.writeValueAsString(value);
     } catch (JsonProcessingException exception) {
-      throw new DataCraftException("Failed to serialise HTTP response.", exception);
+      throw new DataCraftException("Failed to serialise JSON.", exception);
     }
   }
 }

@@ -34,6 +34,8 @@
 ### secrets / local env (keep .env.example tracked) ###
 .env
 **/.env
+# Copies of it, such as .env.bak or .env.2026-10-07, hold the same secrets.
+**/.env.*
 !**/.env.example
 
 ### Python (Airflow DAG tooling and tests) ###

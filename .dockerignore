@@ -5,15 +5,15 @@
 .venv/
 **/__pycache__/
 .idea/
-*.iml
-*.ipr
-*.iws
+**/*.iml
+**/*.ipr
+**/*.iws
 .vscode/
 .worktrees/
 data/
 logs/
 tmp/
-*.log
+**/*.log
 # Documentation, design notes, tests and CI/CD scripts are not image inputs (the builder skips test
 # compilation).
 docs/
@@ -23,12 +23,15 @@ cicd/
 deploy/compose/.env
 
 # Runtime state, database dumps and env files that .gitignore already excludes: never send them to
-# the daemon, where Dockerfile.build's `COPY . .` would bake them into an image layer.
+# the daemon, where Dockerfile.build's `COPY . .` would bake them into an image layer. Copies of
+# an env file (.env.bak, .env.2026-10-07) hold the same secrets; only the template is an input.
 backups/
 warehouse/
 spark-warehouse/
 .airflow/
 **/.env
+**/.env.*
+!deploy/compose/.env.example
 
 # Local assistant state, including nested git worktrees (full source copies).
 .claude/

@@ -3,8 +3,10 @@ package com.example.datacraft.io;
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import com.example.datacraft.common.DataCraftException;
 import java.nio.file.Files;
 import java.nio.file.LinkOption;
 import java.nio.file.Path;
@@ -62,6 +64,47 @@ class LocalFilesTest {
     assertEquals(
         "daa501f37955ee127679730f5a68588e36ed357b34448ed6e244a80a2bf2da4b",
         LocalFiles.sha256Hex(target));
+  }
+
+  @Test
+  void copyRefusesASourceThatIsNotARegularFileAndKeepsTheTarget() {
+    Path directory = tempDir.resolve("folder");
+    LocalFiles.ensureDirectory(directory);
+    Path target = tempDir.resolve("target.txt");
+    LocalFiles.writeUtf8String(target, "keep");
+
+    // Files.copy would replace the target file with an empty directory and report success.
+    DataCraftException fromDirectory =
+        assertThrows(DataCraftException.class, () -> LocalFiles.copy(directory, target));
+    DataCraftException fromMissing =
+        assertThrows(
+            DataCraftException.class, () -> LocalFiles.copy(tempDir.resolve("missing"), target));
+
+    assertEquals("Copy source is not a regular file: " + directory, fromDirectory.getMessage());
+    assertTrue(fromMissing.getMessage().startsWith("Copy source is not a regular file: "));
+    assertEquals("keep", LocalFiles.readUtf8String(target));
+  }
+
+  @Test
+  @Tag("windows-only")
+  @EnabledOnOs(OS.WINDOWS)
+  void listsRegularFilesRecursivelyWithoutEnteringJunctions() throws Exception {
+    Path outside = tempDir.resolve("outside");
+    LocalFiles.writeUtf8String(outside.resolve("elsewhere.txt"), "x");
+    Path tree = tempDir.resolve("tree");
+    LocalFiles.writeUtf8String(tree.resolve("a.txt"), "a");
+    LocalFiles.writeUtf8String(tree.resolve("sub").resolve("b.txt"), "b");
+    // A junction to an ancestor would otherwise be walked until the path grows too long.
+    Path loop = TestLinks.createJunction(tree.resolve("sub").resolve("loop"), tree);
+    Path away = TestLinks.createJunction(tree.resolve("away"), outside);
+    try {
+      assertEquals(
+          List.of(tree.resolve("a.txt"), tree.resolve("sub").resolve("b.txt")),
+          LocalFiles.listRegularFilesRecursively(tree));
+    } finally {
+      Files.deleteIfExists(loop);
+      Files.deleteIfExists(away);
+    }
   }
 
   @Test

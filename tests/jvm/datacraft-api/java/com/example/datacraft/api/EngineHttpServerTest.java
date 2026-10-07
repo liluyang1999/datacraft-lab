@@ -13,11 +13,11 @@ import com.example.datacraft.engine.JobExecutionRequest;
 import com.example.datacraft.engine.JobExecutionResult;
 import com.example.datacraft.engine.JobRegistry;
 import java.io.IOException;
-import java.io.InputStream;
 import java.io.OutputStream;
 import java.net.ConnectException;
 import java.net.InetSocketAddress;
 import java.net.Socket;
+import java.net.SocketException;
 import java.net.SocketTimeoutException;
 import java.net.URI;
 import java.net.http.HttpClient;
@@ -65,6 +65,9 @@ class EngineHttpServerTest {
             "/jobs/echo/runs?lifecycle=invalid",
             "/jobs//runs",
             "/jobs/runs",
+            "/jobs/%20/runs",
+            "/jobs/echo/extra/runs",
+            "/jobs/echo%2Fextra/runs",
             "/jobs/echo/runs?message=%FF"
           }) {
         HttpResponse<String> response =
@@ -129,6 +132,49 @@ class EngineHttpServerTest {
                   .build(),
               HttpResponse.BodyHandlers.ofString());
       assertEquals(200, response.statusCode());
+    }
+  }
+
+  @Test
+  void decodesPlusAsASpaceInTheQueryOnly() throws Exception {
+    JobRegistry registry = new JobRegistry();
+    registry.register(new EchoJob());
+    try (HttpClient client = HttpClient.newHttpClient();
+        EngineHttpServer server =
+            EngineHttpServer.start(EngineHttpServerConfig.localEphemeral(), registry)) {
+      HttpResponse<String> response =
+          send(client, post(server, "/jobs/echo/runs?message=a+b%2Bc%20d"));
+
+      assertEquals(200, response.statusCode());
+      assertTrue(response.body().contains("\"message\":\"a b+c d\""), response.body());
+    }
+  }
+
+  @Test
+  void checksMethodThenOriginThenRequestSyntaxThenJobName() throws Exception {
+    JobRegistry registry = new JobRegistry();
+    registry.register(new EchoJob());
+    try (HttpClient client = HttpClient.newHttpClient();
+        EngineHttpServer server =
+            EngineHttpServer.start(EngineHttpServerConfig.localEphemeral(), registry)) {
+      // Each request fails every later check as well, so the status names the first one.
+      String everythingWrong = "/jobs/missing/runs?lifecycle=bogus";
+      HttpResponse<String> wrongMethod =
+          send(client, request(server, everythingWrong).header("Origin", "null").GET());
+      HttpResponse<String> crossOrigin =
+          send(
+              client,
+              request(server, everythingWrong)
+                  .header("Origin", "null")
+                  .POST(HttpRequest.BodyPublishers.noBody()));
+      HttpResponse<String> malformed = send(client, post(server, everythingWrong));
+      HttpResponse<String> unknownJob = send(client, post(server, "/jobs/missing/runs"));
+
+      assertEquals(405, wrongMethod.statusCode());
+      assertEquals(403, crossOrigin.statusCode());
+      assertEquals(400, malformed.statusCode());
+      assertEquals(404, unknownJob.statusCode());
+      assertEquals("{\"error\":\"unknown_job\"}", unknownJob.body());
     }
   }
 
@@ -257,25 +303,33 @@ class EngineHttpServerTest {
   }
 
   @Test
+  void aCatalogFailureIsNeverReportedAsAnInvalidRequest() throws Exception {
+    // Only parsing the request may answer 400; the same exception type from the catalog is a bug.
+    IllegalArgumentException catalogFailure = new IllegalArgumentException("catalog bug");
+    // Strong reference: JUL holds loggers weakly, and the handler must stay attached.
+    Logger serverLogger = Logger.getLogger(EngineHttpServer.class.getName());
+    List<LogRecord> records = new CopyOnWriteArrayList<>();
+    Handler capture = new CapturingHandler(records, Level.SEVERE);
+    serverLogger.addHandler(capture);
+    try (HttpClient client = HttpClient.newHttpClient();
+        EngineHttpServer server =
+            EngineHttpServer.start(
+                EngineHttpServerConfig.localEphemeral(), brokenCatalog(catalogFailure))) {
+      HttpResponse<String> run = send(client, post(server, "/jobs/any/runs"));
+
+      assertEquals(500, run.statusCode());
+      assertEquals("{\"error\":\"internal_error\"}", run.body());
+      assertEquals(1, records.size(), () -> "records: " + records);
+      assertSame(catalogFailure, records.get(0).getThrown());
+    } finally {
+      serverLogger.removeHandler(capture);
+    }
+  }
+
+  @Test
   void answersWithInternalErrorWhenTheCatalogFails() throws Exception {
     IllegalStateException catalogFailure = new IllegalStateException("catalog offline");
-    JobCatalog brokenCatalog =
-        new JobCatalog() {
-          @Override
-          public Optional<DataJob> find(String jobName) {
-            throw catalogFailure;
-          }
-
-          @Override
-          public List<String> jobNames() {
-            return List.of();
-          }
-
-          @Override
-          public Map<String, DataJob> jobs() {
-            throw new AssertionError("broken catalog");
-          }
-        };
+    JobCatalog brokenCatalog = brokenCatalog(catalogFailure);
     // Strong reference: JUL holds loggers weakly, and the handler must stay attached.
     Logger serverLogger = Logger.getLogger(EngineHttpServer.class.getName());
     List<LogRecord> records = new CopyOnWriteArrayList<>();
@@ -351,21 +405,9 @@ class EngineHttpServerTest {
     try (HttpClient client = HttpClient.newHttpClient();
         EngineHttpServer server =
             EngineHttpServer.start(EngineHttpServerConfig.localEphemeral(), registry)) {
-      URI root = server.uri("/");
-      String response;
       // curl sends UTF-8 bytes unencoded; the JDK reads each request-line byte as one char.
-      try (Socket socket = new Socket(root.getHost(), root.getPort())) {
-        socket.setSoTimeout((int) REQUEST_TIMEOUT.toMillis());
-        OutputStream out = socket.getOutputStream();
-        out.write("POST /jobs/echo/runs?message=caf".getBytes(StandardCharsets.US_ASCII));
-        out.write(new byte[] {(byte) 0xC3, (byte) 0xA9});
-        out.write(
-            " HTTP/1.1\r\nHost: localhost\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"
-                .getBytes(StandardCharsets.US_ASCII));
-        out.flush();
-        InputStream in = socket.getInputStream();
-        response = new String(in.readAllBytes(), StandardCharsets.UTF_8);
-      }
+      String response =
+          rawPost(server, "/jobs/echo/runs?message=café".getBytes(StandardCharsets.UTF_8));
       HttpResponse<String> encoded =
           send(client, post(server, "/jobs/echo/runs?message=caf%C3%A9"));
 
@@ -374,6 +416,44 @@ class EngineHttpServerTest {
       assertFalse(response.contains("cafÃ©"), response);
       assertEquals(200, encoded.statusCode());
       assertTrue(encoded.body().contains("\"message\":\"café\""), encoded.body());
+    }
+  }
+
+  @Test
+  void requestTargetsThatAreNotUrisGet400BeforeAnyHandlerRuns() throws Exception {
+    AtomicInteger runs = new AtomicInteger();
+    JobRegistry registry = new JobRegistry();
+    registry.register(
+        new FunctionJob(
+            "count",
+            request -> {
+              runs.incrementAndGet();
+              return JobExecutionResult.success(
+                  request.jobName(), "counted", request.startedAt(), request.startedAt());
+            }));
+    try (EngineHttpServer server =
+        EngineHttpServer.start(EngineHttpServerConfig.localEphemeral(), registry)) {
+      // java.net.URI rejects both, so the JDK server answers itself; the body is its HTML, not
+      // JSON.
+      for (String target : new String[] {"/jobs/count/runs?x=%zz", "/jobs/count/runs?x=€"}) {
+        String response = rawPost(server, target.getBytes(StandardCharsets.UTF_8));
+
+        assertTrue(response.startsWith("HTTP/1.1 400"), target + ": " + response);
+        assertFalse(response.contains("invalid_request"), target + ": " + response);
+      }
+      assertEquals(0, runs.get());
+    }
+  }
+
+  @Test
+  void aRequestTargetWithoutALeadingSlashGetsTheJdkNotFound() throws Exception {
+    try (EngineHttpServer server =
+        EngineHttpServer.start(EngineHttpServerConfig.localEphemeral(), new JobRegistry())) {
+      // "*" matches no context, not even the catch-all at "/", so the JSON 404 cannot answer it.
+      String response = rawRequest(server, "OPTIONS", "*".getBytes(StandardCharsets.US_ASCII));
+
+      assertTrue(response.startsWith("HTTP/1.1 404"), response);
+      assertFalse(response.contains("not_found"), response);
     }
   }
 
@@ -459,6 +539,26 @@ class EngineHttpServerTest {
     }
   }
 
+  /** A catalog whose lookup throws {@code failure} and whose listing throws an AssertionError. */
+  private static JobCatalog brokenCatalog(RuntimeException failure) {
+    return new JobCatalog() {
+      @Override
+      public Optional<DataJob> find(String jobName) {
+        throw failure;
+      }
+
+      @Override
+      public List<String> jobNames() {
+        return List.of();
+      }
+
+      @Override
+      public Map<String, DataJob> jobs() {
+        throw new AssertionError("broken catalog");
+      }
+    };
+  }
+
   private static HttpRequest.Builder request(EngineHttpServer server, String path) {
     return HttpRequest.newBuilder(server.uri(path)).timeout(REQUEST_TIMEOUT);
   }
@@ -472,6 +572,27 @@ class EngineHttpServerTest {
     return client.send(request.build(), HttpResponse.BodyHandlers.ofString());
   }
 
+  /** Sends a POST whose request target is exactly these bytes and returns the whole response. */
+  private static String rawPost(EngineHttpServer server, byte[] target) throws IOException {
+    return rawRequest(server, "POST", target);
+  }
+
+  private static String rawRequest(EngineHttpServer server, String method, byte[] target)
+      throws IOException {
+    URI root = server.uri("/");
+    try (Socket socket = new Socket(root.getHost(), root.getPort())) {
+      socket.setSoTimeout((int) REQUEST_TIMEOUT.toMillis());
+      OutputStream out = socket.getOutputStream();
+      out.write((method + " ").getBytes(StandardCharsets.US_ASCII));
+      out.write(target);
+      out.write(
+          " HTTP/1.1\r\nHost: localhost\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"
+              .getBytes(StandardCharsets.US_ASCII));
+      out.flush();
+      return new String(socket.getInputStream().readAllBytes(), StandardCharsets.UTF_8);
+    }
+  }
+
   /** Polls until a connect attempt is refused; Windows takes about 2 s to report a refusal. */
   private static boolean connectionRefusedWithin(InetSocketAddress address, long millis)
       throws IOException, InterruptedException {
@@ -482,6 +603,10 @@ class EngineHttpServerTest {
       } catch (ConnectException refused) {
         return true;
       } catch (SocketTimeoutException timedOut) {
+        continue;
+      } catch (SocketException reset) {
+        // Linux can reset a connection that reached the backlog just as the listener closed
+        // ("Connection reset by peer (connect failed)"); the next attempt is refused.
         continue;
       }
       // Connected: close() has not closed the listener yet.

@@ -79,27 +79,26 @@
         <test.excluded.tags></test.excluded.tags>
 
         <!-- A module whose JUnit tests all vanish (renamed class, provider mismatch) fails instead of
-             passing green. Modules tested through scalatest skip Surefire (surefire.skip). An ad-hoc
-             multi-module -Dtest=... run also needs -Dsurefire.failIfNoTests=false (with
+             passing green. The modules tested through scalatest skip Surefire in their own POM. An
+             ad-hoc multi-module -Dtest=... run also needs -Dsurefire.failIfNoTests=false (with
              -Dsurefire.failIfNoSpecifiedTests=false) for modules without a matching test. -->
         <surefire.failIfNoTests>true</surefire.failIfNoTests>
-        <surefire.skip>false</surefire.skip>
 
         <jackson.version>2.22.3</jackson.version>
         <jsch.version>2.28.7</jsch.version>
         <junit.jupiter.version>6.1.3</junit.jupiter.version>
-        <scala.maven.plugin.version>4.9.10</scala.maven.plugin.version>
+        <scala.maven.plugin.version>4.10.0</scala.maven.plugin.version>
         <scalatest.version>3.2.20</scalatest.version>
         <scalatest.maven.plugin.version>2.2.0</scalatest.maven.plugin.version>
-        <scopt.version>4.1.0</scopt.version>
+        <scopt.version>4.2.0</scopt.version>
         <spotless.version>3.10.3</spotless.version>
-        <sshd.version>2.19.0</sshd.version>
+        <sshd.version>2.20.0</sshd.version>
         <slf4j.version>2.0.20</slf4j.version>
         <google.java.format.version>1.36.1</google.java.format.version>
         <!-- Checkstyle engine run by maven-checkstyle-plugin. The plugin's default engine (9.3)
              cannot parse Java 21/25 syntax such as record patterns, guarded switch labels and
              flexible constructor bodies; ModernSyntaxFixtureTest keeps that syntax in the build. -->
-        <checkstyle.version>14.1.0</checkstyle.version>
+        <checkstyle.version>14.3.0</checkstyle.version>
         <maven.clean.plugin.version>3.5.0</maven.clean.plugin.version>
         <maven.checkstyle.plugin.version>3.6.0</maven.checkstyle.plugin.version>
         <maven.compiler.plugin.version>3.16.0</maven.compiler.plugin.version>
@@ -271,7 +270,8 @@
                         <tagsToExclude>${test.excluded.tags}</tagsToExclude>
                         <reportsDirectory>${project.build.directory}/surefire-reports</reportsDirectory>
                         <junitxml>.</junitxml>
-                        <filereports>${project.artifactId}-scalatest.txt</filereports>
+                        <!-- W: no ANSI colour codes in the text report that CI reads. -->
+                        <filereports>W ${project.artifactId}-scalatest.txt</filereports>
                     </configuration>
                     <executions>
                         <execution>
@@ -290,7 +290,8 @@
                         <argLine>${test.jvm.args}</argLine>
                         <excludedGroups>${test.excluded.tags}</excludedGroups>
                         <failIfNoTests>${surefire.failIfNoTests}</failIfNoTests>
-                        <skip>${surefire.skip}</skip>
+                        <!-- No <skip> here: an explicit value would override -Dmaven.test.skip, which
+                             the builder image relies on (its build context has no tests). -->
                         <trimStackTrace>false</trimStackTrace>
                         <useModulePath>false</useModulePath>
                     </configuration>
@@ -500,6 +501,21 @@
             </activation>
             <properties>
                 <test.excluded.tags>windows-only</test.excluded.tags>
+            </properties>
+        </profile>
+        <profile>
+            <!-- -Dmaven.test.skip=true skips compiling tests, and Surefire follows it, but
+                 scalatest-maven-plugin only knows skipTests: without this it would still start and
+                 warn that target/test-classes does not exist. The builder image builds this way. -->
+            <id>maven-test-skip</id>
+            <activation>
+                <property>
+                    <name>maven.test.skip</name>
+                    <value>true</value>
+                </property>
+            </activation>
+            <properties>
+                <skipTests>true</skipTests>
             </properties>
         </profile>
         <profile>

@@ -31,7 +31,7 @@ datacraft-lab/
 ├── pyrightconfig.json               Python type checking
 ├── config/checkstyle/checkstyle.xml Checkstyle rules
 ├── .github/workflows/ci.yml         CI workflow: triggers, runners and job order only
-├── cicd/                            the scripts the CI jobs run: build, airflow, lint, stacks
+├── cicd/                            the scripts the CI jobs run: build, airflow, lint, stacks, images
 ├── modules/                         JVM source modules, grouped by responsibility
 │   ├── core/          datacraft-common, datacraft-config, datacraft-engine
 │   ├── io/            datacraft-io

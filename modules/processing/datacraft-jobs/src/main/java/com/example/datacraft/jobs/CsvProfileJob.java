@@ -22,6 +22,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.OptionalLong;
 import java.util.Set;
+import java.util.concurrent.locks.ReentrantLock;
 import java.util.function.LongSupplier;
 
 /**
@@ -30,7 +31,7 @@ import java.util.function.LongSupplier;
  * <p>Parameters: {@code input} (required file path), {@code header} ({@code true}/{@code false},
  * default {@code true}), {@code delimiter} (exactly one character other than a quote, CR, LF or
  * NUL; default comma), {@code expectedRows} (optional nonnegative 64-bit integer; a different row
- * count fails the job) and {@code maxBytes} (optional, 1 to 2147483639; default 64 MiB). Metrics:
+ * count fails the job) and {@code maxBytes} (optional, 1 to 1073741819; default 64 MiB). Metrics:
  * {@code rows} (data records, excluding the header), {@code columns}, {@code bytes} and {@code
  * sha256} of the profiled file.
  *
@@ -39,7 +40,9 @@ import java.util.function.LongSupplier;
  * times the file size in heap for typical fields and far more for very short fields or blank lines,
  * so the job also fails when a conservative estimate exceeds a quarter of the JVM's maximum heap:
  * before reading, when three times the file size (the bytes plus their decoded text) is above that
- * budget, and before parsing, when the estimate for the parsed records is.
+ * budget, and before parsing, when the estimate for the parsed records is. The budget is for one
+ * run, so a JVM loads one file at a time: concurrent runs, which the HTTP API allows, wait their
+ * turn instead of each taking a quarter of the heap.
  *
  * <p>Records follow {@link CsvFiles} semantics: quoted fields may contain delimiters, quotes and
  * line breaks, a leading BOM is ignored, and a blank line is a record with one empty field. Every
@@ -54,8 +57,15 @@ public final class CsvProfileJob implements DataJob {
   /** Default {@code maxBytes}: 64 MiB. */
   public static final long DEFAULT_MAX_BYTES = 64L * 1024 * 1024;
 
-  /** The largest array {@code Files.readAllBytes} can return. */
-  static final long MAX_ARRAY_BYTES = Integer.MAX_VALUE - 8;
+  /**
+   * The largest file whose decoded text is sure to fit one String: a String with any char above
+   * U+00FF stores two bytes per char, in an array of at most {@code Integer.MAX_VALUE - 8} bytes.
+   * Above it, decoding would end in an OutOfMemoryError whatever the heap size.
+   */
+  static final long MAX_LOADABLE_BYTES = (Integer.MAX_VALUE - 8) / 2;
+
+  /** Held while a run loads and parses its file, so one heap budget covers the whole JVM. */
+  private static final ReentrantLock ONE_RUN = new ReentrantLock(true);
 
   // Conservative heap costs with compressed pointers, checked against CsvFiles.parse on JDK 25: a
   // record's list plus its slot in the outer list, a field's String plus its array header and list
@@ -117,10 +127,57 @@ public final class CsvProfileJob implements DataJob {
     OptionalLong expectedRows =
         JobParameters.longInRange(parameters, ParameterKeys.EXPECTED_ROWS, 0L, Long.MAX_VALUE);
     long maxBytes =
-        JobParameters.longInRange(parameters, MAX_BYTES, 1L, MAX_ARRAY_BYTES)
+        JobParameters.longInRange(parameters, MAX_BYTES, 1L, MAX_LOADABLE_BYTES)
             .orElse(DEFAULT_MAX_BYTES);
 
     InputFiles.InputFile file = inputs.open(input);
+    Profile profile;
+    awaitTurn();
+    try {
+      profile = profile(file, input, maxBytes, delimiter, header);
+    } finally {
+      ONE_RUN.unlock();
+    }
+
+    Map<String, String> metrics =
+        Map.of(
+            "rows", Long.toString(profile.rows()),
+            "columns", Integer.toString(profile.columns()),
+            "bytes", Long.toString(profile.bytes()),
+            "sha256", profile.sha256());
+    if (expectedRows.isPresent() && expectedRows.getAsLong() != profile.rows()) {
+      return JobExecutionResult.failed(
+          name(),
+          "Expected " + expectedRows.getAsLong() + " rows but found " + profile.rows(),
+          metrics,
+          request.startedAt(),
+          Instant.now());
+    }
+    return JobExecutionResult.succeeded(
+        name(),
+        profile.rows() + " rows, " + profile.columns() + " columns in " + input,
+        metrics,
+        request.startedAt(),
+        Instant.now());
+  }
+
+  /** Waits for the runs ahead; an interrupt while waiting fails this run and stays set. */
+  private static void awaitTurn() {
+    try {
+      ONE_RUN.lockInterruptibly();
+    } catch (InterruptedException exception) {
+      Thread.currentThread().interrupt();
+      throw new DataCraftException(
+          "Interrupted while waiting for another csv-profile run to finish.", exception);
+    }
+  }
+
+  /**
+   * Loads, parses and measures the file. The caller holds {@link #ONE_RUN}, and the file content
+   * and its records are garbage when this returns.
+   */
+  private Profile profile(
+      InputFiles.InputFile file, String input, long maxBytes, char delimiter, boolean header) {
     long size = file.size();
     requireWithinLimit(size, input, maxBytes);
     // Loading holds the bytes plus their decoded copy (up to two bytes per char): refuse a file
@@ -145,27 +202,7 @@ public final class CsvProfileJob implements DataJob {
       }
     }
     long rows = header && !records.isEmpty() ? records.size() - 1L : records.size();
-
-    Map<String, String> metrics =
-        Map.of(
-            "rows", Long.toString(rows),
-            "columns", Integer.toString(columns),
-            "bytes", Long.toString(snapshot.bytes()),
-            "sha256", snapshot.sha256());
-    if (expectedRows.isPresent() && expectedRows.getAsLong() != rows) {
-      return JobExecutionResult.failed(
-          name(),
-          "Expected " + expectedRows.getAsLong() + " rows but found " + rows,
-          metrics,
-          request.startedAt(),
-          Instant.now());
-    }
-    return JobExecutionResult.succeeded(
-        name(),
-        rows + " rows, " + columns + " columns in " + input,
-        metrics,
-        request.startedAt(),
-        Instant.now());
+    return new Profile(rows, columns, snapshot.bytes(), snapshot.sha256());
   }
 
   /**
@@ -232,7 +269,6 @@ public final class CsvProfileJob implements DataJob {
 
   /** Reads the file once, so every metric describes the same bytes. */
   private static Snapshot read(InputFiles.InputFile file, String input, long maxBytes) {
-    requireWithinLimit(file.size(), input, maxBytes);
     byte[] bytes = file.readBytes();
     // The file may have grown after its size was checked.
     requireWithinLimit(bytes.length, input, maxBytes);
@@ -295,4 +331,6 @@ public final class CsvProfileJob implements DataJob {
   }
 
   private record Snapshot(String content, long bytes, String sha256) {}
+
+  private record Profile(long rows, int columns, long bytes, String sha256) {}
 }

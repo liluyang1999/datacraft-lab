@@ -1,52 +1,32 @@
 """The Docker build context must exclude local runtime state and secrets, but keep build inputs."""
 
-import posixpath
+import importlib.util
 from pathlib import Path
 import re
+import subprocess
 import unittest
 
 ROOT = Path(__file__).resolve().parents[2]
 
-
-def dockerignore_patterns(text):
-    """Parse .dockerignore like Docker (moby/patternmatcher): Clean, strip a leading '/', keep '!'."""
-    patterns = []
-    for line in text.splitlines():
-        line = line.strip()
-        if not line or line.startswith("#"):
-            continue
-        exclude = not line.startswith("!")
-        pattern = posixpath.normpath(line.lstrip("!").strip())
-        if len(pattern) > 1 and pattern.startswith("/"):
-            pattern = pattern[1:]
-        patterns.append((exclude, pattern))
-    return patterns
+# The matcher is the one the CI checks use to compute the build context without Docker.
+_spec = importlib.util.spec_from_file_location(
+    "docker_context", ROOT / "cicd" / "build" / "docker_context.py")
+assert _spec is not None and _spec.loader is not None
+docker_context = importlib.util.module_from_spec(_spec)
+_spec.loader.exec_module(docker_context)
+dockerignore_patterns = docker_context.dockerignore_patterns
+is_excluded = docker_context.is_excluded
 
 
-def pattern_regex(pattern):
-    out, index = "^", 0
-    while index < len(pattern):
-        if pattern.startswith("**", index):
-            index += 3 if pattern.startswith("**/", index) else 2
-            out += ".*" if index >= len(pattern) else "(.*/)?"
-        elif pattern[index] == "*":
-            out, index = out + "[^/]*", index + 1
-        elif pattern[index] == "?":
-            out, index = out + "[^/]", index + 1
-        else:
-            out, index = out + re.escape(pattern[index]), index + 1
-    return re.compile(out + "$")
-
-
-def is_excluded(patterns, path):
-    """The last matching pattern wins; a pattern also matches a path through any parent directory."""
-    excluded, parts = False, path.split("/")
-    parents = ["/".join(parts[:depth]) for depth in range(1, len(parts))]
-    for exclude, pattern in patterns:
-        regex = pattern_regex(pattern)
-        if regex.match(path) or any(regex.match(parent) for parent in parents):
-            excluded = exclude
-    return excluded
+def copied_from_the_context(dockerfile_text):
+    """Sources of every COPY that reads the build context, not another stage or image."""
+    sources = []
+    for line in re.sub(r"\\\r?\n", " ", dockerfile_text).splitlines():
+        words = line.split()
+        if words[:1] == ["COPY"] and not any(word.startswith("--from=") for word in words):
+            paths = [word for word in words[1:] if not word.startswith("--")]
+            sources.extend(paths[:-1])
+    return sources
 
 
 def gitignore_entries(sections):
@@ -82,7 +62,9 @@ class DockerignoreTests(unittest.TestCase):
     def test_local_state_is_excluded(self):
         cli = "modules/interfaces/datacraft-cli"
         for path in ("backups/airflow-20260925T000000Z.dump", ".env", f"{cli}/.env",
-                     "deploy/compose/.env", "warehouse/t/part-0.parquet", "spark-warehouse/x",
+                     "deploy/compose/.env", "deploy/compose/.env.bak", ".env.2026-10-07",
+                     f"{cli}/.env.local", f"{cli}/build.log", f"{cli}/datacraft-cli.iml",
+                     "warehouse/t/part-0.parquet", "spark-warehouse/x",
                      ".airflow/airflow.db", f"{cli}/target/datacraft-cli.jar",
                      ".claude/worktrees/wf/pom.xml", "tests/jvm/datacraft-io/java/X.java",
                      "docs/README.md", "design/architecture.md", "cicd/build/check-jar-contents.sh"):
@@ -94,6 +76,36 @@ class DockerignoreTests(unittest.TestCase):
                      "deploy/compose/.env.example", "orchestration/airflow/requirements.txt",
                      "orchestration/airflow/dags/datacraft_common.py", "deploy/scripts/airflow-bootstrap.sh"):
             self.assertFalse(is_excluded(self.patterns, path), path)
+
+    def test_git_ignores_env_file_copies_but_tracks_the_template(self):
+        paths = ["deploy/compose/.env", "deploy/compose/.env.bak", ".env.2026-10-07",
+                 "deploy/compose/.env.example"]
+        try:
+            # NUL-separated bytes: text mode on Windows would append a carriage return.
+            result = subprocess.run(["git", "check-ignore", "--no-index", "-z", "--stdin"],
+                                    input="\0".join(paths).encode(), cwd=ROOT,
+                                    capture_output=True, timeout=60)
+        except OSError:
+            self.skipTest("git is not available")
+        self.assertIn(result.returncode, (0, 1), result.stderr.decode(errors="replace"))
+        ignored = [name for name in result.stdout.decode().split("\0") if name]
+        self.assertEqual(paths[:3], ignored)
+
+    def test_every_path_a_dockerfile_copies_is_in_the_build_context(self):
+        # A moved module or a newly ignored directory would otherwise fail only inside `docker build`.
+        context = docker_context.context_files(ROOT)
+        dockerfiles = sorted((ROOT / "deploy" / "docker").glob("Dockerfile.*"))
+        copied = {dockerfile.name: copied_from_the_context(dockerfile.read_text(encoding="utf-8"))
+                  for dockerfile in dockerfiles}
+        self.assertIn("pom.xml", copied["Dockerfile.build"])
+        self.assertIn("orchestration/airflow/dags/", copied["Dockerfile.airflow"])
+        for name, sources in copied.items():
+            for source in sources:
+                with self.subTest(dockerfile=name, source=source):
+                    path = source.rstrip("/")
+                    self.assertTrue(path == "." or path in context
+                                    or any(file.startswith(f"{path}/") for file in context),
+                                    f"{name} copies {source}, which is not in the build context")
 
 
 if __name__ == "__main__":

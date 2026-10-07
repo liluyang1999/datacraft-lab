@@ -31,6 +31,11 @@ on stderr, by default); stdout JSON and `--result-file` do not change. A FAILED 
 returns itself, such as a quality-gate mismatch of a plain-JVM job or the Spark runtime hint above,
 and a `null` result are not logged.
 
+The logged throwable carries the result's message, so the log can contain text the caller sent,
+such as an `input` path, with a line break in it on a file system that allows one: read the log as
+free text, not as one record per line. A rejected number is never logged. The exceptions for
+`expectedRows` and `maxBytes` name the key and the range and carry no cause that quotes the value.
+
 Parameter rejections are FAILED results too, not usage errors: the CLI exits 1 and still prints
 the `--json` result and writes `--result-file`, and the HTTP API answers 500 with the result body.
 Spark messages raised by Scala `require` carry the prefix `requirement failed: `; messages quoted
@@ -84,6 +89,12 @@ records fail visibly; headers must agree with an explicit schema. Use `multiLine
 single-line CSV files when splitting large files across tasks matters. Backslash-escaped sources
 can set `escape=\`.
 
+The Spark CSV reader decodes UTF-8 and has no encoding parameter. Bytes that are not valid UTF-8 do
+not fail the job: they become U+FFFD, so a GBK or Latin-1 export converts with SUCCEEDED and
+damaged text. Check such a file first (`csv-profile` rejects it and names the byte offset) or
+convert it to UTF-8. With the default `multiLine=true`, a CRLF inside a quoted field is stored as
+LF, whereas [`CsvFiles`](#csvfiles) keeps it.
+
 Schema inference is convenient, but it cannot know whether `001` is an identifier or whether a
 number requires decimal precision. For identifiers, money, and contractual schemas, pass explicit
 types:
@@ -109,6 +120,13 @@ on different file systems never overlap. Conversion validates and caches a compl
 before writing; counting and writing reuse the snapshot, and the cache is released on failure as
 well as success. Malformed input cannot erase a previously valid destination. Source files must
 remain immutable while a job is running.
+
+An input without data files fails with "requirement failed: input contains no data files (Spark
+skips names starting with _ or .)", in `csv-to-parquet` before anything is written and in
+`row-count` instead of counting 0. Spark's file listing ignores names that start with `_` or `.`,
+so such a file, a directory holding only such files and an empty directory would otherwise read as
+zero rows whenever a `schema` is given, and the default overwrite would replace the destination
+with an empty dataset. A header-only file is a data file: it converts to zero rows.
 
 | Mode | Existing destination | `metrics.rows` |
 | --- | --- | --- |
@@ -162,7 +180,8 @@ root.
 - `serve-api` refuses to start (exit 2, one stderr line) on a non-loopback `--host` while the
   variable is unset or blank, for `--host 0.0.0.0` with "serve-api refuses --host 0.0.0.0 without
   DATACRAFT_DATA_ROOT: the API is unauthenticated and its file jobs could read any path. Bind
-  127.0.0.1 or set DATACRAFT_DATA_ROOT."
+  127.0.0.1 or set DATACRAFT_DATA_ROOT." When it cannot open its socket (the port is in use, or
+  the host cannot be bound) it exits 1 with "serve-api cannot listen on <host>:<port>: <cause>".
 - Airflow checks the trigger-conf paths `input`/`output` of `datacraft_spark_etl` and
   `local_path`/`output` of `datacraft_sftp_ingest` against the same root (default
   `$DATACRAFT_HOME/data`) when a run is created. A path must be absolute with at least one segment
@@ -183,6 +202,8 @@ Rules for both jobs:
 - `input` is required and trimmed; it is a local file path, not a URI. A missing or blank value
   fails with "Missing required parameter: input", a missing file with "Input file does not exist:
   <input>", and a directory or other non-regular file with "Input is not a regular file: <input>".
+  A value the platform cannot parse as a path fails with "input is not a valid path: <reason>": a
+  NUL character anywhere, and on Windows also characters such as `<`, `>`, `"`, `|`, `?` and `*`.
 - Parameter names are case-sensitive: a case variant of a documented name fails, for example
   "Unknown parameter expectedrows; did you mean expectedRows?". Other unknown keys are ignored.
   Messages for malformed or out-of-range `header`, `delimiter`, `expectedRows`, `maxBytes` and
@@ -212,7 +233,7 @@ Rules for both jobs:
 | `header` | `true` | `true`/`false` in any case, surrounding spaces allowed; else "header must be true or false" |
 | `delimiter` | `,` | Exactly one character other than `"`, CR, LF or NUL, not trimmed (TAB works); else "delimiter must be exactly one character other than a quote, newline or NUL". Multi-character delimiters are Spark-only |
 | `expectedRows` | none | 64-bit integer >= 0, else "expectedRows must be a 64-bit integer >= 0"; a different count fails with "Expected <n> rows but found <m>" |
-| `maxBytes` | 67108864 (64 MiB) | Integer from 1 to 2147483639, else "maxBytes must be an integer from 1 to 2147483639" |
+| `maxBytes` | 67108864 (64 MiB) | Integer from 1 to 1073741819, else "maxBytes must be an integer from 1 to 1073741819". The ceiling is half the largest Java array: the decoded text of a larger file may not fit one String, whatever the heap |
 
 Metrics: `rows` (data records, excluding the header when `header=true`), `columns` (fields in the
 first record), `bytes` (file size, including any BOM), `sha256` (lower-case hex of the profiled
@@ -238,6 +259,9 @@ bytes) and `durationMillis`. The success message is "<rows> rows, <columns> colu
   "Input <input> needs up to <n> MiB of heap to profile, above the csv-profile budget of <m> MiB (a
   quarter of the maximum heap); use the Spark row-count job (inputFormat=csv) or give the JVM more
   heap".
+- The budget is for one run, so a JVM loads one file at a time. Concurrent runs, which the HTTP API
+  allows, wait their turn instead of each taking a quarter of the heap; a run interrupted while it
+  waits fails with "Interrupted while waiting for another csv-profile run to finish.".
 
 `file-checksum` streams any regular file, text or binary and of any size, through SHA-256 with a
 bounded buffer. Parameters: `input` and optional `expectedSha256` (64 hexadecimal characters in any
@@ -345,7 +369,9 @@ curl -X POST -G --data-urlencode 'input=/opt/datacraft/data/résumé.csv' \
 Path segments are decoded once and keep `+`. JSON escaping is shared with the CLI. The JDK server
 itself refuses request targets that `java.net.URI` cannot parse, such as a malformed percent-escape
 or raw bytes 0x80-0xA0 (present in unencoded UTF-8 for `€`, `日` or `à`), with its plain HTML 400
-before any handler runs; other raw non-ASCII bytes reach the handler and get the JSON 400.
+before any handler runs; other raw non-ASCII bytes reach the handler and get the JSON 400. A request
+target that does not start with `/`, such as `OPTIONS *`, matches no route and gets the JDK's own
+404 instead of the JSON one.
 
 The API has no authentication. Binding to loopback does not stop a browser on the same machine, or
 one reaching the port through an SSH tunnel, from sending requests; the `Origin` check blocks

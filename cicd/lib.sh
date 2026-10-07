@@ -23,3 +23,22 @@ fail() {
 scratch_dir() {
   mktemp -d "${RUNNER_TEMP:-${TMPDIR:-/tmp}}/$1.XXXXXX"
 }
+
+# python_command: prints the interpreter to use: PYTHON when it is set, otherwise the first of
+# python3 and python that actually runs (on Windows a Store alias named python3 can sit on PATH
+# and only exit non-zero). Fails when none works.
+python_command() {
+  local candidate
+  if [ -n "${PYTHON:-}" ]; then
+    "$PYTHON" -c '' > /dev/null 2>&1 || return 1
+    echo "$PYTHON"
+    return 0
+  fi
+  for candidate in python3 python; do
+    if "$candidate" -c '' > /dev/null 2>&1; then
+      echo "$candidate"
+      return 0
+    fi
+  done
+  return 1
+}

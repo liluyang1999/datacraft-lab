@@ -61,7 +61,10 @@ final class CsvToParquetJob(dataRoot: Option[String] = DataRoot.fromEnvironment(
     )
     // Materialize and validate every column before overwrite; count and write share this snapshot.
     val dataFrame = DataFrames
-      .read(spark, "csv", input, readOptions, CsvReadOptions.schema(parameters))
+      .requireDataFiles(
+        DataFrames.read(spark, "csv", input, readOptions, CsvReadOptions.schema(parameters)),
+        ParameterKeys.INPUT
+      )
       .persist(StorageLevel.MEMORY_AND_DISK)
     try {
       val rows = dataFrame.count()
@@ -108,7 +111,8 @@ final class CsvToParquetJob(dataRoot: Option[String] = DataRoot.fromEnvironment(
  * Counts rows in a dataset. Parameters: input, inputFormat (default parquet), optional expectedRows
  * (fails on mismatch), schema, and for inputFormat=csv the shared CSV options (contract:
  * design/data-contracts.md). CSV and JSON are read in FAILFAST mode and counted over complete
- * records; other formats use Spark's reader defaults.
+ * records; other formats use Spark's reader defaults. An input without any data file fails rather
+ * than counting zero rows.
  */
 final class RowCountJob extends AbstractSparkDataJob {
 
@@ -125,7 +129,10 @@ final class RowCountJob extends AbstractSparkDataJob {
       parameters: Map[String, String]
   ): Map[String, String] = {
     val (input, format, expected, options) = settings(parameters)
-    val data = DataFrames.read(spark, format, input, options, CsvReadOptions.schema(parameters))
+    val data                               = DataFrames.requireDataFiles(
+      DataFrames.read(spark, format, input, options, CsvReadOptions.schema(parameters)),
+      ParameterKeys.INPUT
+    )
     // count() can prune every column and bypass FAILFAST validation. Read complete rows here.
     val rows =
       if (RowCountJob.CompleteRecordFormats.contains(format.toLowerCase(java.util.Locale.ROOT)))

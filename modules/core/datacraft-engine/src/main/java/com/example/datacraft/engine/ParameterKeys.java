@@ -1,9 +1,9 @@
 package com.example.datacraft.engine;
 
 /**
- * Well-known {@link JobExecutionRequest} parameter keys shared across the CLI, the Spark jobs, and
- * the HTTP API. Centralising them here keeps the bridge between layers free of duplicated magic
- * strings.
+ * {@link JobExecutionRequest} parameter keys that more than one module reads: the CLI (for {@code
+ * spark.master}), the Spark jobs, the plain-JVM jobs and the built-in jobs. Each job's own class
+ * documents the values it accepts; a key that only one job uses belongs on that job's class.
  */
 public final class ParameterKeys {
 
@@ -24,7 +24,10 @@ public final class ParameterKeys {
   /** Whether to enable Hive support on the Spark session ({@code true}/{@code false}). */
   public static final String SPARK_ENABLE_HIVE = "spark.enableHive";
 
-  /** Source path (local or Hadoop-compatible URI) for a data job. */
+  /**
+   * Source path of a data job: a local path or a Hadoop-compatible URI for the Spark jobs, a local
+   * file path for the plain-JVM jobs.
+   */
   public static final String INPUT = "input";
 
   /** Destination path for a data job. */
@@ -40,8 +43,8 @@ public final class ParameterKeys {
   public static final String HEADER = "header";
 
   /**
-   * CSV field delimiter: non-empty, may be multi-character; must not contain a double quote, CR, LF
-   * or NUL.
+   * CSV field delimiter, without a double quote, CR, LF or NUL: non-empty and possibly
+   * multi-character for the Spark jobs, exactly one character for {@code csv-profile}.
    */
   public static final String DELIMITER = "delimiter";
 

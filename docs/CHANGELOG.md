@@ -6,6 +6,122 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### CI repair, module review and pipeline layout (2026-10-07)
+
+The `containers` job had failed on GitHub since the 2026-09-26 restructure: runs 36220947705 and
+36247558847 passed `build`, `dags`, `scripts` and `compose` and failed in the image build. The
+2026-09-26 round did not record this, because it assumed that pushes would not start a run and
+never looked. This round fixes the cause, adds a check that reproduces it without Docker, moves the
+remaining pipeline logic into `cicd/`, and fixes what a review of every module found. The JVM
+suite was also run on Linux (WSL, Temurin 25.0.4.1) before the push, which is how the last item
+under Fixed was found. Items marked **BREAKING** need action from callers or scripts.
+
+#### Fixed
+- **The builder image could not package the jar.** The root POM gave Surefire
+  `<skip>${surefire.skip}</skip>` (added on 2026-09-26). An explicit `skip`, even one that resolves
+  to `false`, replaces the parameter's default `${maven.test.skip}`, and `Dockerfile.build`
+  packages with `-Dmaven.test.skip=true` in a Docker build context that has no `tests/`. Surefire
+  therefore ran, found nothing and failed with "No tests to run!". The `surefire.skip` property is
+  removed: the root configuration sets no `skip`, `datacraft-spark` and `datacraft-cli` set a
+  literal `<skip>true</skip>` in their own POM, and the new `maven-test-skip` profile maps
+  `maven.test.skip=true` to `skipTests`, the only flag scalatest-maven-plugin reads.
+- `csv-to-parquet` could replace an existing destination with an empty dataset and report
+  SUCCEEDED. Spark's file listing skips names that start with `_` or `.`, so with a `schema` such
+  an input file, a directory of such files and an empty directory all read as zero rows. Both
+  Spark jobs now fail with "requirement failed: input contains no data files (Spark skips names
+  starting with _ or .)", `csv-to-parquet` before it writes and `row-count` instead of counting 0.
+- The `csv-profile` heap budget, a quarter of the heap, was per run, while the HTTP API runs
+  requests concurrently, so a handful of simultaneous requests could exhaust the heap. A JVM now
+  loads one file at a time and further runs wait their turn.
+- `serve-api` ended in an uncaught `BindException` with a stack trace when its port was in use.
+  It now prints one line, "serve-api cannot listen on <host>:<port>: <cause>", and exits 1.
+- The HTTP API answered 400 `invalid_request`, without a log record, to any
+  `IllegalArgumentException` raised after request parsing, for example by a job catalog. Only
+  parsing the request answers 400 now; anything later is a logged 500.
+- `LocalFiles.copy`, and so `LocalStorageService.copy`, turned a directory source into an empty
+  directory that replaced the target file; it now fails with "Copy source is not a regular file:
+  <source>". `LocalFiles.listRegularFilesRecursively` followed a Windows junction to an ancestor
+  until the path grew too long; it no longer enters junctions.
+- `DataCraftConfig.withPrefix` produced a blank key for an entry whose key equals the prefix; that
+  entry is now left out.
+- A rejected `expectedRows` or `maxBytes` reached the engine's ERROR log, line breaks included,
+  through the chained `NumberFormatException`; the exception no longer has that cause.
+- `cicd/lint/check-actions-pinned.sh` could be bypassed: a flow-style step
+  (`- { uses: owner/repo@v1 }`), a quoted key or a value on the next line passed unseen, and the
+  release comment its message demanded was never checked. It now accepts only
+  `uses: owner/repo@<40-character SHA> # vX.Y.Z` and local `./` actions. As a line check it also
+  fails on what it could misread: another spelling of the key (flow style, a quoted or explicit
+  key), a `uses:` in a comment, an escape in a quoted key, an alias used as a key. It fails as
+  well when the workflow directory has no workflow file or the default directory uses no action.
+- `cicd/build/check-jar-contents.sh` passed its `module-info.class` check when `unzip` itself
+  failed, and a jar without the Jackson `pom.properties` stopped it without a message.
+  `check-spark-suite.sh` and `check-stack-files.sh` could exit non-zero without saying why.
+- `EngineHttpServerTest.closeDrainsInFlightRunBeforeStopping` failed on Linux when a connection
+  that reached the backlog was reset as the listener closed ("Connection reset by peer"); the
+  test now retries until the connection is refused.
+
+#### Changed
+- **BREAKING:** the two image smoke scripts are pipeline steps and moved into `cicd/`:
+  `tests/smoke/container_smoke.sh` is `cicd/images/smoke-images.sh`, and
+  `tests/smoke/compose_smoke.sh` is `cicd/images/smoke-compose.sh`. They use `cicd/lib.sh`, the
+  Airflow image runs `cicd/airflow/check_security_floor.py` instead of an inline copy of the
+  floors, the Compose smoke test waits for all three image-baked DAGs (it used to check one), and
+  a failed run prints the task logs before the stack is removed.
+- **BREAKING:** `csv-profile` accepts `maxBytes` from 1 to 1073741819 (it was 2147483639). The
+  decoded text of a larger file may not fit one String, so such a run ended in an
+  `OutOfMemoryError` whatever the heap size.
+- `.github/workflows/ci.yml`: every `run:` step is one command. The conditional
+  `apt-get install shellcheck` is replaced by `cicd/lint/install-shellcheck.sh`, which installs
+  ShellCheck 0.11.0 from the PyPI package `shellcheck-py` (the runner image ships 0.9.0), and the
+  "Record toolchain versions" step is gone. The `containers` job needs `build`, `scripts` and
+  `compose`. `setup-java` in `build` sets `check-latest: true`, because the build enforces a JDK
+  patch floor. The `dags` job calls `python3` throughout.
+- `cicd/lint/check-shell-scripts.sh` checks every `*.sh` git knows instead of four fixed globs,
+  follows sourced files, and fails on any ShellCheck finding, style notes included (it was
+  warning severity).
+- `cicd/build/check_test_counts.py` keeps floors per platform (`--platform linux|windows`, default
+  the host), so the gate also works on a Windows workstation, where it used to report two modules
+  below their Linux floors. Linux floors: api 17, common 7, config 13, engine 32, io 57, jobs 70,
+  cli 28, spark 52; on Windows io 59, jobs 68, spark 44.
+- The `datacraft/jvm` image starts the JVM with `-XX:+ExitOnOutOfMemoryError`, so an API that runs
+  out of memory exits and is restarted instead of staying up without answering.
+- `.gitignore` and `.dockerignore` exclude copies of an env file (`**/.env.*`, keeping
+  `deploy/compose/.env.example`), and `.dockerignore` excludes `*.log`, `*.iml`, `*.ipr` and
+  `*.iws` at any depth; Docker anchors a pattern without `**/` at the context root.
+- The ScalaTest text report is written without ANSI colour codes (`filereports` `W`).
+- The CLI help for `--lifecycle` says that no job reads it. `ParameterKeys` and `EngineJson`
+  document what they are used for today; the serialisation error message is "Failed to serialise
+  JSON.".
+- Dependencies, rechecked on 2026-10-07: scopt 4.1.0 -> 4.2.0, Apache MINA SSHD 2.19.0 -> 2.20.0
+  (test), Checkstyle 14.1.0 -> 14.3.0, scala-maven-plugin 4.9.10 -> 4.10.0. Not adopted:
+  google-java-format 1.37.0, with which Spotless 3.10.3, the newest release, fails on every Java
+  file; and Maven 3.10.0 (released 2026-09-27), which builds this project and produces a jar
+  with the same contents, but whose new Resolver adds a warning about an unreachable third-party
+  repository to an online build and changes the class-path order. Maven stays at 3.9.16, the
+  newest 3.9 release, until that is decided on its own.
+
+#### Added
+- `cicd/build/check-image-build.sh` runs the Maven command of `Dockerfile.build` in a copy of the
+  Docker build context, which `cicd/build/docker_context.py` computes from `.dockerignore` with
+  the rules of Docker's pattern matcher. It needs no Docker, so the `build` job, and any
+  workstation, shows whether the builder image would still compile.
+- `python_command` in `cicd/lib.sh` picks the first of `python3` and `python` that runs (a
+  Windows Store alias named `python3` only exits non-zero); `PYTHON` overrides it.
+- Tests. JVM: 21 new test cases, 283 in all (Linux runs 276, Windows 268), among them the
+  occupied port, the complete seven-job catalog, the HTTP check order and decoding rules, the
+  serialised `csv-profile` runs, inputs without data files, and the two limits of the Spark CSV
+  reader that the contract now states (bytes that are not UTF-8 become U+FFFD; a quoted CRLF is
+  stored as LF). `tests/ci` grew from 19 to 43: the build-context computation, a static guard on
+  the three POM settings above, the pinned-action and Spark-suite checks run against fixtures, and
+  stricter workflow rules (no shell operators in a `run:` step, a mention in a comment is not a
+  use, no shell script outside `cicd/` and `deploy/scripts/`). `tests/deploy` checks that every
+  path a Dockerfile copies is in the build context, that `Dockerfile.build` lists every module
+  POM, the API image's entry point and the env-copy ignore rules.
+
+#### Removed
+- Unused members: `AppInfo.PROJECT_ID` and `DISPLAY_NAME`, `CommandLineArgs.appName`,
+  `EngineHttpServerConfig.local` and `onAllInterfaces`.
+
 ### Repository restructure, warning cleanup and dependency currency (2026-09-26)
 
 The repository is organised by responsibility: JVM source modules under `modules/`, every test

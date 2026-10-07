@@ -159,6 +159,40 @@ class JobExecutionEngineTest {
   }
 
   @Test
+  void aFailedResultAJobReturnsAndANullResultAreNotLogged() {
+    JobRegistry registry = new JobRegistry();
+    registry.register(
+        new LambdaJob(
+            "gate",
+            request ->
+                JobExecutionResult.failure(
+                    "gate",
+                    "Expected 3 rows but found 2",
+                    request.startedAt(),
+                    request.startedAt())));
+    registry.register(new LambdaJob("silent", request -> null));
+    JobExecutionEngine engine = new JobExecutionEngine(registry);
+    // Strong reference: JUL holds loggers weakly, and the handler must stay attached.
+    Logger engineLogger = Logger.getLogger(JobExecutionEngine.class.getName());
+    List<LogRecord> records = new CopyOnWriteArrayList<>();
+    Handler capture = new CapturingHandler(records);
+    engineLogger.addHandler(capture);
+    JobExecutionResult gate;
+    JobExecutionResult silent;
+    try {
+      gate = engine.execute(JobExecutionRequest.of("gate", Lifecycle.DEV, Map.of()));
+      silent = engine.execute(JobExecutionRequest.of("silent", Lifecycle.DEV, Map.of()));
+    } finally {
+      engineLogger.removeHandler(capture);
+    }
+
+    // Only a throwable is logged: a quality gate is an expected outcome, not an incident.
+    assertEquals(JobStatus.FAILED, gate.status());
+    assertEquals(JobStatus.FAILED, silent.status());
+    assertEquals(List.of(), records);
+  }
+
+  @Test
   void interruptedJobFailsAndRestoresInterruptFlag() {
     JobExecutionEngine engine =
         engineWith(
