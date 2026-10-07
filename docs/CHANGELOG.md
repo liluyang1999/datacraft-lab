@@ -14,7 +14,9 @@ The `containers` job had failed on GitHub since the 2026-09-26 restructure: runs
 never looked. This round fixes the cause, adds a check that reproduces it without Docker, moves the
 remaining pipeline logic into `cicd/`, and fixes what a review of every module found. The JVM
 suite was also run on Linux (WSL, Temurin 25.0.4.1) before the push, which is how the last item
-under Fixed was found. Items marked **BREAKING** need action from callers or scripts.
+under Fixed was found. The push passed all five jobs (commit `0e97d8b`, run 37619216939), the first
+complete `containers` run since the restructure. Items marked **BREAKING** need action from
+callers or scripts.
 
 #### Fixed
 - **The builder image could not package the jar.** The root POM gave Surefire
