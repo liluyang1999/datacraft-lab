@@ -12,8 +12,8 @@ This round works through what the 2026-10-07 round left open and the residual ri
 listed. The HTTP API gets authentication and a bound on concurrent runs, the Spark CSV jobs get an
 `encoding` parameter and stop converting undecodable input into damaged text, every pipeline step
 reports the cause of a failure as a public annotation, a scheduled workflow checks every pinned
-version for advisories, and the build moves to Maven 3.10.0. Not changed, because nothing here can
-run them for real: the Swarm stack's network encryption and Redis authentication. The JVM suite
+version for advisories, and the build moves to Maven 3.10.0. The Swarm stack, which had only been
+parsed, is now deployed and upgraded for real in CI on a swarm of one node. The JVM suite
 was run on Windows and on Linux (WSL, Temurin 25.0.4.1), the three DAGs ran for real on Linux, and
 each new rule was checked by breaking it on purpose and requiring a test to fail. Items marked
 **BREAKING** need action from callers, operators or scripts.
@@ -75,6 +75,22 @@ each new rule was checked by breaking it on purpose and requiring a test to fail
   own. `smoke-compose.sh` reports the log of each service, the Airflow task logs and the container
   states this way before it removes a failed stack, and removes the stack silently, so the last
   lines of a failed step are no longer the removal of its containers.
+- `cicd/images/smoke-swarm.sh`, a third step of the `containers` job: the Swarm deployment of the
+  deployment guide, rehearsed on a swarm of one node. It starts a registry on loopback, pushes
+  both images under an exact tag and runs `swarm-deploy.sh` and `airflow-init.sh` as an operator
+  does. Every long-running service must run its current tasks (a service with a health check
+  counts once it is healthy), `datacraft-api` must have no published port and answer its token
+  only on the overlay network, the generated admin must sign in through the routing mesh, a worker
+  must be able to write the data volume the API only reads, and `datacraft_engine_jobs` must run
+  through Redis and a Celery worker. Then it deploys the same images under a second tag: the
+  one-shot initializer must run again, the idle worker must stop for its replacement, the earlier
+  run must still be there and the DAG must run again. One node says nothing about placement,
+  failover or traffic between nodes. The script refuses to run outside CI, next to an existing
+  `.env` and on a Docker engine that is already part of a swarm.
+- `cicd/images/check_access.py`: the credential check of a deployed stack, used by both stack
+  scripts in place of a script inside `smoke-compose.sh`. `--airflow URL` requires a token for the
+  admin password and none for another one; `--api URL` requires `/jobs` to open for the API token
+  only. It reads the credentials from the stack's `.env` or from the environment and prints none.
 - `notice` in `cicd/lib.sh`, and notices from `check_test_counts.py` (tests executed per module),
   `smoke-images.sh` and `smoke-compose.sh` (what was verified), as evidence of a passing run that
   can be read through the same public API.
@@ -82,15 +98,16 @@ each new rule was checked by breaking it on purpose and requiring a test to fail
 - Tests. JVM: 17 new test cases, 300 in all (Linux runs 293, Windows 284): the token and its
   order among the checks, the run limit and its release on every path, the configuration's
   validation and redaction, the `serve-api` rules, the encoding parameter, strict decoding for
-  UTF-8, GBK, Latin-1, gzip and directory input, and a GBK conversion. Python: `tests/ci` 75
-  (the step wrapper, the helpers of `cicd/lib.sh`, the advisory check, two workflow rules, the
-  count notice), `tests/deploy` 51 (the token in the stacks and in `deployment_env.py`, the
-  Resolver option), `tests/orchestration` 17 (the DAG parameter). The Airflow runtime smoke test
-  converts a GBK file with `encoding=GBK`.
-- Twenty deliberate breakages of the new rules, each of which a test must notice. One of them
-  found a weak test: with the token ignored, a test that expects `serve-api` to refuse a malformed
-  token blocked in the server it had started instead of failing. Every such call in `RunnerSpec`
-  now has a 30 second limit.
+  UTF-8, GBK, Latin-1, gzip and directory input, and a GBK conversion. Python: `tests/ci` 92
+  (the step wrapper, the helpers of `cicd/lib.sh`, the advisory check, the credential check
+  against a stand-in stack, the Swarm rehearsal against a recording Docker stub, two workflow
+  rules, the count notice), `tests/deploy` 51 (the token in the stacks and in
+  `deployment_env.py`, the Resolver option), `tests/orchestration` 17 (the DAG parameter). The
+  Airflow runtime smoke test converts a GBK file with `encoding=GBK`.
+- Thirty-eight deliberate breakages of the new rules, each of which a test must notice. One of
+  them found a weak test: with the token ignored, a test that expects `serve-api` to refuse a
+  malformed token blocked in the server it had started instead of failing. Every such call in
+  `RunnerSpec` now has a 30 second limit.
 
 #### Changed
 - Maven 3.9.16 -> 3.10.0, through the wrapper and in the builder image

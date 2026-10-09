@@ -2,9 +2,9 @@
 # Starts the complete Compose stack from the images smoke-images.sh built and exercises the real
 # scheduler -> Execution API -> LocalExecutor path: fresh generated secrets, the admin login, the
 # API token, the data volume's permissions, the three image-baked DAGs, one triggered run, and a
-# metadata backup
-# restored into a separate database. Needs Docker. Disposable CI runners only: it refuses to run
-# unless CI=true and when deploy/compose/.env exists, and it removes the stack and its volumes.
+# metadata backup restored into a separate database. Needs Docker. Disposable CI runners only: it
+# refuses to run unless CI=true and when deploy/compose/.env exists, and it removes the stack and
+# its volumes.
 set -euo pipefail
 # shellcheck source=cicd/lib.sh
 . "$(dirname "$0")/../lib.sh"
@@ -63,59 +63,11 @@ if pulled or mounted:
 '
 bash deploy/scripts/compose-up.sh
 
-# The admin password reached `airflow users create` on stdin and is the one that authenticates.
-python3 -B - "$env_file" <<'PY'
-import json
-import os
-import sys
-import urllib.error
-import urllib.request
-
-with open(sys.argv[1], encoding="utf-8") as source:
-    values = dict(line.split("=", 1) for line in source.read().splitlines()
-                  if line.strip() and not line.startswith("#"))
-port = os.environ.get("AIRFLOW_WEB_PORT") or values.get("AIRFLOW_WEB_PORT") or "8080"
-
-
-def token_status(password):
-    body = json.dumps({"username": values["AIRFLOW_ADMIN_USERNAME"], "password": password}).encode()
-    request = urllib.request.Request(f"http://127.0.0.1:{port}/auth/token", data=body, method="POST",
-                                     headers={"Content-Type": "application/json"})
-    try:
-        with urllib.request.urlopen(request, timeout=30) as response:
-            return response.status
-    except urllib.error.HTTPError as error:
-        return error.code
-
-
-if token_status(values["AIRFLOW_ADMIN_PASSWORD"]) != 201:
-    sys.exit("The configured admin password does not authenticate.")
-if token_status(values["AIRFLOW_ADMIN_PASSWORD"] + "-wrong") != 401:
-    sys.exit("The token endpoint did not reject a wrong password.")
-
-# The generated API token is the one datacraft-api demands on its loopback port.
-api_port = os.environ.get("DATACRAFT_API_PORT") or values.get("DATACRAFT_API_PORT") or "8088"
-
-
-def api_status(path, token=None):
-    headers = {"Authorization": f"Bearer {token}"} if token else {}
-    request = urllib.request.Request(f"http://127.0.0.1:{api_port}{path}", headers=headers)
-    try:
-        with urllib.request.urlopen(request, timeout=30) as response:
-            return response.status
-    except urllib.error.HTTPError as error:
-        return error.code
-
-
-if api_status("/health") != 200:
-    sys.exit("datacraft-api does not answer /health on its loopback port.")
-if api_status("/jobs") != 401:
-    sys.exit("datacraft-api listed its jobs without a token.")
-if api_status("/jobs", values["DATACRAFT_API_TOKEN"] + "0") != 401:
-    sys.exit("datacraft-api accepted a wrong token.")
-if api_status("/jobs", values["DATACRAFT_API_TOKEN"]) != 200:
-    sys.exit("The DATACRAFT_API_TOKEN in .env does not open datacraft-api.")
-PY
+# The admin password reached `airflow users create` on stdin and is the one that signs in, and the
+# generated API token is the one datacraft-api demands, each on the address Compose published.
+python3 -B cicd/images/check_access.py --env-file "$env_file" \
+  --airflow "http://$("${compose[@]}" port airflow-apiserver 8080)" \
+  --api "http://$("${compose[@]}" port datacraft-api 8080)"
 
 # Airflow tasks can write the shared data volume even though the API may have mounted it first; the
 # non-root API reads it through a read-only mount confined by DATACRAFT_DATA_ROOT.

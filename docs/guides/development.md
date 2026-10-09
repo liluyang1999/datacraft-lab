@@ -207,7 +207,7 @@ Python version; [airflow.md](airflow.md) shows the setup, and `cicd/airflow/inst
 does the same inside an activated virtual environment (CI runs it on Python 3.13). Then run
 `python -B -m unittest discover -s tests/orchestration -v`, or `make dags`.
 
-The smoke tests exercise real runtimes. The first is a test a developer can run; the other two are
+The smoke tests exercise real runtimes. The first is a test a developer can run; the others are
 steps of the `containers` job and live with the pipeline scripts in `cicd/images`:
 
 | Script | Needs | What it proves | CI job |
@@ -215,10 +215,15 @@ steps of the `containers` job and live with the pipeline scripts in `cicd/images
 | `tests/smoke/airflow_runtime_smoke.py --jar <jar>` | The Airflow environment plus `pyspark==4.2.0`, Java 25, Bash | Runs the three DAGs for real against the packaged CLI, local Spark and a temporary local SFTP server, including a GBK file converted with `encoding=GBK`; all state lives in a temporary directory | `dags`, and inside the Airflow image in `smoke-images.sh` |
 | `cicd/images/smoke-images.sh` | Docker | Builds the images; checks that the JRE is at least 25.0.4.1, the API image (no start without a token, health, 401 without the token, non-root user, read-only jar, a Spark job answering 500 FAILED), the Airflow image's dependency and security floors (`cicd/airflow/check_security_floor.py`, run inside the image), and the shared data volume's permissions; then runs the Airflow smoke test inside the Airflow image | `containers` |
 | `cicd/images/smoke-compose.sh` | Docker, the images, `CI=true` | Starts the Compose stack with fresh secrets, checks the admin login and that the generated API token opens `datacraft-api`, waits for all three image-baked DAGs to be registered, runs the engine DAG through the scheduler, and restores a metadata backup into a separate database; then removes the stack and its volumes. When it fails it prints the task logs first | `containers` |
+| `cicd/images/smoke-swarm.sh` | Docker outside any swarm, the images, `CI=true` | Rehearses the documented Swarm deployment on a swarm of one node: a loopback registry, both images under an exact tag, `swarm-deploy.sh` and `airflow-init.sh`; requires every service to run (healthy where it has a health check), the engine API to answer its token only and only on the overlay network, the generated admin to sign in through the routing mesh, and the engine DAG to run through Redis and a Celery worker; then deploys a second tag and requires the initializer to run again, the idle worker to stop, the earlier run to survive and the DAG to run again. Leaves the swarm and removes the stack, its volumes and the registry. One node says nothing about placement or failover | `containers` |
 
-Both `cicd/images` scripts are meant for disposable CI runners: the first creates and removes the
-canary files `.env` and `backups/ci-probe.dump` and refuses to run when they exist; the second
-refuses to run unless `CI=true` and when `deploy/compose/.env` exists.
+The `cicd/images` scripts are meant for disposable CI runners: the first creates and removes the
+canary files `.env` and `backups/ci-probe.dump` and refuses to run when they exist; the other two
+refuse to run unless `CI=true` and when `deploy/compose/.env` exists, and `smoke-swarm.sh` also
+when the Docker engine is already part of a swarm. Both stack scripts check credentials with
+`cicd/images/check_access.py`, which runs anywhere: given the stack's `.env` or the same values in
+the environment, `--airflow URL` requires a token for the admin password and none for another
+password, and `--api URL` requires `/jobs` to open for the API token only.
 
 ## Type checking
 
@@ -282,7 +287,8 @@ cicd/
 ├── airflow/    dags job: constrained Airflow install and the security floor
 ├── lint/       scripts job: the pinned ShellCheck, shell syntax and ShellCheck, pinned actions
 ├── stacks/     compose job: the Compose file and the Swarm stack
-├── images/     containers job: image build and smoke test, Compose stack smoke test
+├── images/     containers job: image build and smoke test, Compose stack smoke test, Swarm
+│               rehearsal on one node, the credential check both stacks share
 └── security/   advisories workflow: known advisories for every pinned version
 ```
 
@@ -292,7 +298,7 @@ cicd/
 | `dags` | After `build`: Python 3.13 and JDK 25; `cicd/airflow/install-airflow.sh` (Airflow 3.3.2 and its providers under the official constraints for the running Python, then `pyspark==4.2.0`); `cicd/airflow/check_security_floor.py` (Airflow 3.3.2 and FAB provider 3.9.0); `tests/orchestration`; `tests/smoke/airflow_runtime_smoke.py` with the verified jar |
 | `scripts` | `cicd/lint/check-actions-pinned.sh` (every `uses:` is `owner/repo@<full commit SHA> # vX.Y.Z` or a local action, on one line, and none appears in a comment); `cicd/lint/install-shellcheck.sh` (ShellCheck 0.11.0); `cicd/lint/check-shell-scripts.sh` (`bash -n` and ShellCheck over every shell script git knows; every finding fails, sourced files are followed); the `tests/deploy`, `tests/ci` and `tests/docs` suites on Python 3.13; `node --test tests/docs/cloud-costs.test.cjs` on Node.js 24; `npx --yes pyright@1.1.414 --warnings` |
 | `compose` | `cicd/stacks/check-stack-files.sh`: `docker compose config` and `docker stack config` with test-only secrets, and that each missing secret, the API token included, is rejected |
-| `containers` | After `build`, `scripts` and `compose`: `cicd/images/smoke-images.sh`, then `cicd/images/smoke-compose.sh` |
+| `containers` | After `build`, `scripts` and `compose`: `cicd/images/smoke-images.sh`, then `cicd/images/smoke-compose.sh`, then `cicd/images/smoke-swarm.sh` |
 
 The `cicd/build` scripts run after `./mvnw verify` on Linux, WSL or Git Bash (they use GNU tools
 and Bash 4, so not on a stock macOS); they need `java`, `unzip` and `sha256sum`, and `CLI_JAR`

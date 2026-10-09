@@ -27,7 +27,7 @@ datacraft-lab/
 │   ├── airflow/      constrained Airflow install and security floor
 │   ├── lint/         pinned ShellCheck, shell syntax and ShellCheck, pinned actions
 │   ├── stacks/       Compose and Swarm definitions
-│   └── images/       image build and smoke test, Compose stack smoke test
+│   └── images/       image build and smoke test, Compose stack smoke test, Swarm rehearsal
 ├── modules/                           JVM source modules, grouped by responsibility
 │   ├── core/         datacraft-common, datacraft-config, datacraft-engine
 │   ├── io/           datacraft-io

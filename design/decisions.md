@@ -172,8 +172,10 @@ rejects an empty tag and `latest`), and `airflow-init` runs as a one-shot servic
   data and logs, a highly available database, secret management and authenticated networking;
   adding worker replicas alone does not scale out.
 - CI runs the Compose path for real (`cicd/images/smoke-compose.sh`: the full stack, a DAG run
-  and a restored metadata backup). The Swarm template is only validated (`docker stack config` and
-  static tests) and has not run on a real multi-node swarm.
+  and a restored metadata backup) and rehearses the Swarm path on a swarm of one node
+  (`cicd/images/smoke-swarm.sh`: the documented deployment from a registry, a DAG run through
+  Redis and a Celery worker, and an upgrade to a second tag). The template has not run on more
+  than one node, so placement, failover and traffic between nodes are unverified.
 - Every secret must be set: both stack files fail interpolation without one, and
   `deployment_env.py init` generates them.
 

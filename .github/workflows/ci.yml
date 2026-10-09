@@ -200,7 +200,7 @@ jobs:
     name: Build and smoke-test runtime images
     needs: [build, scripts, compose]
     runs-on: ubuntu-24.04
-    timeout-minutes: 45
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
@@ -209,3 +209,8 @@ jobs:
 
       - name: Verify the complete Compose stack and metadata backup recovery
         run: bash cicd/images/smoke-compose.sh
+
+      # One node shows that the stack file, swarm-deploy.sh, airflow-init.sh and the images work
+      # together, through a deployment and an upgrade; it shows nothing about placement or failover.
+      - name: Rehearse the Swarm deployment and an upgrade on one node
+        run: bash cicd/images/smoke-swarm.sh

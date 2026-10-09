@@ -262,7 +262,8 @@ bash deploy/scripts/compose-down.sh
 仓库保留 Swarm/Celery 模板，但小规模优先使用 Compose。默认本地卷要求把所有服务（数据库、Redis、
 Airflow 各组件、worker 与 JVM API）固定在 `DATACRAFT_DATA_NODE`，并非多机高可用。要跨节点扩展，
 必须先解决共享输入输出、任务日志、数据库高可用、密钥管理和网络认证；不能仅增加 worker 数就宣称完成扩展。
-该模板只经过 `docker stack config` 与静态测试，尚未在真实多机 Swarm 上运行。
+CI 的 `containers` 作业在一个单节点 Swarm 上按本节的步骤演练部署与升级
+（`cicd/images/smoke-swarm.sh`，见第 8 节）；多节点下的放置、故障切换与节点间流量没有验证过。
 
 在可信 `.env` 中填写实际 registry、精确版本标签和数据节点主机名；Swarm 脚本使用 shell 加载此受信配置，
 不要将外部不可信文本当作 `.env`。所有节点必须能拉取相同架构的镜像。发布操作由运维者在 manager 上执行：
@@ -326,13 +327,23 @@ node --test tests/docs/cloud-costs.test.cjs
 ```
 
 Linux CI（ubuntu-24.04）是权威门禁：完整 JVM verify 与各模块测试数下限、jar 冒烟与退出码、真实
-Airflow 3.3.2 流程、ShellCheck、Compose/Swarm 解析与缺失密钥拒绝、镜像构建、实际 Compose 任务与备份恢复。
+Airflow 3.3.2 流程、ShellCheck、Compose/Swarm 解析与缺失密钥拒绝、镜像构建、实际 Compose 任务与备份恢复、
+单节点 Swarm 上的部署与升级演练。
 工作流只负责编排，每项检查都是 `cicd/` 下的脚本或 `tests/` 下的测试入口，也可以在本机运行；其中
 `cicd/stacks/check-stack-files.sh` 需要 Docker，并且在 `deploy/compose/.env` 已存在时拒绝运行，以免覆盖真实密钥。
 镜像检查（`cicd/images/smoke-images.sh`）还包括 JRE ≥ 25.0.4.1、Airflow ≥ 3.3.2、FAB ≥ 3.9.0，以及
 API 镜像没有令牌时拒绝启动、不带令牌的请求得到 401、以非 root 运行、数据挂载只读。
 `cicd/images/smoke-compose.sh` 仅限隔离 CI，会销毁其专用测试项目的数据卷，拒绝覆盖已有 `.env`；它还确认
 生成的令牌能打开 `datacraft-api`、镜像内的三个 DAG 都已注册，失败时先输出任务日志。
+`cicd/images/smoke-swarm.sh` 同样仅限隔离 CI：它把当前 Docker 初始化为单节点 Swarm，启动一个只监听回环地址的
+registry，然后完全按第 6 节的步骤操作：以精确标签推送两个镜像，运行 `swarm-deploy.sh` 与 `airflow-init.sh`。
+它要求每个常驻服务都在运行（有健康检查的服务要先变为健康），JVM API 没有发布端口、只在 overlay
+网络内凭令牌可用，Airflow UI 经路由网格能用生成的管理员口令登录而拒绝其他口令，Airflow 任务能写共享数据卷而
+API 只读，并让 `datacraft_engine_jobs` 经调度器、Redis 与 Celery worker 运行一次。随后它用第二个标签重新部署：
+一次性初始化服务必须再次运行，空闲的 worker 必须在收到第一个信号后停止（否则更新要等满一小时的任务宽限期），
+升级前的运行记录必须还在，升级后 DAG 再运行一次。脚本拒绝在已加入 Swarm 的 Docker 上或已有 `.env`
+时运行，结束时离开 Swarm 并删除栈、数据卷与 registry。单节点演练证明栈文件、两个脚本与镜像能一起工作，
+不能说明多节点下的行为。
 CI 的每个步骤失败时，原因（失败的命令、指出错误的输出行与最后 30 行输出）会写成一条错误注解；注解不需要
 仓库权限即可通过 GitHub 的公开接口读取，读取方法见[开发指南](development.md#ci)。
 没有 Docker 的机器可以运行 `bash cicd/build/check-image-build.sh`：它在一份按 `.dockerignore` 过滤的
