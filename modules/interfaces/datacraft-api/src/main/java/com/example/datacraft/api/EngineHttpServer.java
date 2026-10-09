@@ -63,6 +63,9 @@ public final class EngineHttpServer implements AutoCloseable {
   private final Predicate<HttpExchange> authorized;
   private final Semaphore runPermits;
 
+  /** Set when {@link #close()} begins; from then on no run is started. */
+  private volatile boolean closing;
+
   private EngineHttpServer(
       HttpServer server,
       ExecutorService executorService,
@@ -111,10 +114,13 @@ public final class EngineHttpServer implements AutoCloseable {
   /**
    * Stops accepting connections at once, then waits up to 8 s for in-flight exchanges (returning as
    * soon as they finish) before closing every connection; runs still going after that are cut off.
-   * The JDK server also waits out the full 8 s when a client disconnects while the drain starts.
+   * The JDK server also waits out the full 8 s when a client disconnects while the drain starts. It
+   * keeps reading requests from the connections it already has, so a run requested during the wait
+   * is refused with 503 instead of being started and then cut off.
    */
   @Override
   public void close() {
+    closing = true;
     server.stop(STOP_GRACE_SECONDS);
     executorService.shutdown();
     try {
@@ -256,8 +262,9 @@ public final class EngineHttpServer implements AutoCloseable {
       return;
     }
     // No queue: a request beyond the limit is told to come back instead of holding a thread and
-    // a connection for as long as the runs ahead of it take.
-    if (!runPermits.tryAcquire()) {
+    // a connection for as long as the runs ahead of it take. So is one that arrives while the
+    // server closes, on a connection it accepted earlier.
+    if (closing || !runPermits.tryAcquire()) {
       exchange.getResponseHeaders().set("Retry-After", "1");
       HttpJsonResponse.write(exchange, 503, EngineJson.error("busy"));
       return;

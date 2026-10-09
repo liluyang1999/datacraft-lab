@@ -29,19 +29,19 @@ import xml.etree.ElementTree as ET
 # counts: adding tests needs no change, but deliberately removing tests needs a lower floor in the
 # same commit.
 FLOORS = {
-    "datacraft-api": 27,
+    "datacraft-api": 28,
     "datacraft-common": 7,
     "datacraft-config": 13,
     "datacraft-engine": 32,
     "datacraft-io": 57,
     "datacraft-jobs": 70,
     "datacraft-cli": 31,
-    "datacraft-spark": 56,
+    "datacraft-spark": 59,
 }
 
 # The same on Windows, where the build excludes the posix-only tests (symbolic links, `?` in file
 # names, Hadoop local writes) and runs datacraft-io's windows-only junction tests instead.
-WINDOWS_FLOORS = {**FLOORS, "datacraft-io": 59, "datacraft-jobs": 68, "datacraft-spark": 47}
+WINDOWS_FLOORS = {**FLOORS, "datacraft-io": 59, "datacraft-jobs": 68, "datacraft-spark": 49}
 
 PLATFORM_FLOORS = {"linux": FLOORS, "windows": WINDOWS_FLOORS}
 

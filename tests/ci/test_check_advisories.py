@@ -86,6 +86,9 @@ class PinnedVersionsTests(unittest.TestCase):
             ("Maven", "com.fasterxml.jackson.core:jackson-databind", "2.22.3", "pom.xml"),
             ("Maven", "com.github.scopt:scopt_2.13", "4.2.0", "pom.xml"),
             ("PyPI", "apache-airflow", "3.3.2", "cicd/airflow/install-airflow.sh"),
+            # Advisories are filed against the core distribution too, which the pin installs at
+            # the same version.
+            ("PyPI", "apache-airflow-core", "3.3.2", "cicd/airflow/install-airflow.sh"),
             ("PyPI", "apache-airflow-providers-fab", "3.9.0", "cicd/airflow/check_security_floor.py"),
             ("PyPI", "pyspark", "4.2.0", "cicd/airflow/install-airflow.sh"),
             ("PyPI", "shellcheck-py", "0.11.0.1", "cicd/lint/install-shellcheck.sh"),
@@ -123,21 +126,46 @@ class PinnedVersionsTests(unittest.TestCase):
         self.assertIn(("Maven", "org.apache.spark:spark-sql_2.13"), names)
         workflows = "".join(path.read_text(encoding="utf-8")
                             for path in (REPOSITORY / ".github" / "workflows").glob("*.y*ml"))
-        used = set(re.findall(r"uses:\s+([^@\s./][^@\s]*)@", workflows))
+        used = {"/".join(name.lower().split("/")[:2])
+                for name in re.findall(r"uses:\s+([^@\s./][^@\s]*)@", workflows)}
         self.assertTrue(used)
         self.assertEqual(used, {name for ecosystem, name in names if ecosystem == "GitHub Actions"})
-        for expected in (("PyPI", "apache-airflow"), ("PyPI", "pyspark"), ("PyPI", "shellcheck-py"),
+        for expected in (("PyPI", "apache-airflow"), ("PyPI", "apache-airflow-core"), ("PyPI", "pyspark"),
+                         ("PyPI", "shellcheck-py"),
                          ("PyPI", "apache-airflow-providers-fab"), ("npm", "pyright")):
             self.assertIn(expected, names)
         for _, name, version, _ in found:
             self.assertRegex(version, r"^\d+(\.\d+)*$", name)
+
+    def test_an_action_is_asked_about_by_its_repository_in_lower_case(self):
+        # OSV files advisories under owner/repo in lower case and matches the name exactly, so an
+        # action in a subdirectory or written with capitals would otherwise never match.
+        root = self.tree()
+        (root / ".github/workflows/ci.yml").write_text(
+            f"steps:\n  - uses: Actions/Setup-Java@{SHA} # v6.0.1\n"
+            f"  - uses: github/codeql-action/init@{SHA} # v3.30.1\n"
+            f"  - uses: github/codeql-action/analyze@{SHA} # v3.30.1\n", encoding="utf-8")
+        actions = [(name, version) for ecosystem, name, version, _ in advisories.pinned(root)
+                   if ecosystem == "GitHub Actions"]
+        self.assertEqual([("actions/setup-java", "6.0.1"), ("github/codeql-action", "3.30.1")], actions)
+
+    def test_an_action_without_its_full_release_is_an_error(self):
+        # v7 names a moving tag, not a release: whether an advisory's range holds it is unknown.
+        for comment in ("# v7", "# v7.0", "# release 7.0.1", ""):
+            root = self.tree()
+            (root / ".github/workflows/ci.yml").write_text(
+                f"steps:\n  - uses: actions/checkout@{SHA} {comment}\n", encoding="utf-8")
+            with self.subTest(comment=comment), self.assertRaisesRegex(ValueError, "full release"):
+                advisories.pinned(root)
+            status, output = run_main(str(root))
+            self.assertEqual(2, status, output)
 
     def test_list_prints_the_pins_and_asks_nothing(self):
         with mock.patch.object(advisories, "call", side_effect=AssertionError("asked OSV")):
             status, output = run_main("--list", str(self.tree()))
         self.assertEqual(0, status)
         self.assertIn("Maven: com.github.scopt:scopt_2.13 4.2.0 (pom.xml)", output.splitlines())
-        self.assertEqual(10, len(output.splitlines()))
+        self.assertEqual(11, len(output.splitlines()))
 
 
 class AdvisoryMatchingTests(unittest.TestCase):
@@ -161,7 +189,7 @@ class AdvisoryMatchingTests(unittest.TestCase):
                     self.assertEqual(expected, advisories.in_ranges(version, ranges))
 
     def test_query_maps_batch_answers_by_position_and_matches_actions_itself(self):
-        packages = [("GitHub Actions", "Actions/Download-Artifact", "4.1.2", "ci.yml"),
+        packages = [("GitHub Actions", "actions/download-artifact", "4.1.2", "ci.yml"),
                     ("GitHub Actions", "actions/checkout", "7.0.1", "ci.yml"),
                     ("Maven", "g:clean", "1.0", "pom.xml"),
                     ("Maven", "g:vulnerable", "2.0", "pom.xml"),
@@ -180,7 +208,7 @@ class AdvisoryMatchingTests(unittest.TestCase):
                                     {"vulns": [{"id": "PYSEC-3"}]}]}
             self.assertEqual("/query", path)
             self.assertNotIn("version", payload)
-            if payload["package"]["name"].lower() != "actions/download-artifact":
+            if payload["package"]["name"] != "actions/download-artifact":
                 return {}
             return {"vulns": [
                 {"id": "GHSA-cxww", "affected": [{
@@ -199,10 +227,46 @@ class AdvisoryMatchingTests(unittest.TestCase):
 
         with mock.patch.object(advisories, "call", side_effect=answer):
             found = advisories.query(packages)
-        self.assertEqual({("GitHub Actions", "Actions/Download-Artifact", "4.1.2"): ["GHSA-cxww", "GHSA-listed"],
+        self.assertEqual({("GitHub Actions", "actions/download-artifact", "4.1.2"): ["GHSA-cxww", "GHSA-listed"],
                           ("Maven", "g:vulnerable", "2.0"): ["GHSA-1", "GHSA-2"],
                           ("PyPI", "also-vulnerable", "3.0"): ["PYSEC-3"]}, found)
         self.assertEqual(["/querybatch", "/query", "/query"], [path for path, _ in asked])
+
+    def test_an_answer_in_pages_is_read_to_its_last_page(self):
+        # OSV may answer a query with a token and few or no advisories; the rest follows on request.
+        asked = []
+
+        def answer(path, payload=None):
+            assert payload is not None, path
+            asked.append((path, payload))
+            if path == "/querybatch":
+                return {"results": [{}, {"vulns": [{"id": "GHSA-first"}], "next_page_token": "batch"}]}
+            token = payload.get("page_token")
+            if payload["package"]["ecosystem"] == "GitHub Actions":
+                advisory = {"affected": [{"package": payload["package"],
+                                          "ranges": [{"type": "ECOSYSTEM", "events": [{"introduced": "0"}]}]}]}
+                return ({"vulns": [], "next_page_token": "more"} if token is None
+                        else {"vulns": [{"id": "GHSA-action", **advisory}]})
+            self.assertEqual({"ecosystem": "PyPI", "name": "paged"}, payload["package"])
+            self.assertEqual("2.0", payload["version"])
+            pages = {None: {"vulns": [{"id": "GHSA-first"}], "next_page_token": "p2"},
+                     "p2": {"next_page_token": "p3"},
+                     "p3": {"vulns": [{"id": "GHSA-last"}]}}
+            return pages[token]
+
+        packages = [("GitHub Actions", "actions/checkout", "7.0.1", "ci.yml"),
+                    ("Maven", "g:clean", "1.0", "pom.xml"), ("PyPI", "paged", "2.0", "install.sh")]
+        with mock.patch.object(advisories, "call", side_effect=answer):
+            found = advisories.query(packages)
+        self.assertEqual({("GitHub Actions", "actions/checkout", "7.0.1"): ["GHSA-action"],
+                          ("PyPI", "paged", "2.0"): ["GHSA-first", "GHSA-last"]}, found)
+        self.assertEqual(["/querybatch", "/query", "/query", "/query", "/query", "/query"],
+                         [path for path, _ in asked])
+
+        # An answer that never ends is a failed lookup, not an empty one.
+        with mock.patch.object(advisories, "call", return_value={"next_page_token": "again"}), \
+                self.assertRaisesRegex(advisories.LookupFailed, "pages"):
+            advisories.query([("GitHub Actions", "actions/checkout", "7.0.1", "ci.yml")])
 
     def test_an_answer_that_does_not_cover_every_query_is_not_trusted(self):
         with mock.patch.object(advisories, "call", return_value={"results": [{}]}), \
@@ -217,6 +281,7 @@ class AdvisoryMatchingTests(unittest.TestCase):
             advisories.call("/querybatch", {"queries": []})
         self.assertEqual(4, opened.call_count)
         refused = urllib.error.HTTPError("https://api.osv.dev/v1/query", 400, "Bad Request", Message(), None)
+        self.addCleanup(refused.close)
         with mock.patch.object(advisories.urllib.request, "urlopen", side_effect=refused) as opened, \
                 self.assertRaisesRegex(advisories.LookupFailed, "HTTP 400"):
             advisories.call("/query", {})

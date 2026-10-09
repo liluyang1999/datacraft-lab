@@ -26,7 +26,7 @@ uses_key=$start'["'\'']?uses["'\'']?[[:space:]]*:'
 explicit_key=$start'\?[[:space:]]+["'\'']?uses["'\'']?([[:space:]]|$)'
 escaped_key=$start'"[^"]*\\[^"]*"[[:space:]]*:'
 alias_key=$start'\*[^[:space:]:]+[[:space:]]*:'
-pinned='^[[:space:]]*(-[[:space:]]+)?uses:[[:space:]]+(\./[^[:space:]]+([[:space:]]+#.*)?|[^@[:space:]]+@[0-9a-f]{40}[[:space:]]+#[[:space:]]*v[0-9][0-9A-Za-z.+-]*)[[:space:]]*$'
+pinned='^[[:space:]]*(-[[:space:]]+)?uses:[[:space:]]+(\./[^[:space:]]+([[:space:]]+#.*)?|[^@[:space:]]+@[0-9a-f]{40}[[:space:]]+#[[:space:]]*v[0-9]+\.[0-9]+\.[0-9]+[0-9A-Za-z.+-]*)[[:space:]]*$'
 count=0
 rejected=()
 for file in "${files[@]}"; do

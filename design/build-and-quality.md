@@ -294,7 +294,7 @@ tests bind to `slf4j-nop`.
 
 ### Test inventory and floors
 
-The JVM suites have 300 test cases.
+The JVM suites have 304 test cases.
 [`cicd/build/check_test_counts.py`](../cicd/build/check_test_counts.py) reads each module's
 `target/surefire-reports/TEST-*.xml`, counts executed tests (skipped, aborted and canceled ones do
 not count) and fails when a module is below its floor. Floors are minimums: adding tests needs no
@@ -308,10 +308,10 @@ the script's module map matches the POM's `<modules>`.
 | `datacraft-io` | 57 | 59 | 7 `windows-only`, 5 `posix-only` |
 | `datacraft-engine` | 32 | 32 | none |
 | `datacraft-jobs` | 70 | 68 | 2 `posix-only` |
-| `datacraft-spark` | 56 | 47 | 9 `posix-only` |
-| `datacraft-api` | 27 | 27 | none |
+| `datacraft-spark` | 59 | 49 | 10 `posix-only` |
+| `datacraft-api` | 28 | 28 | none |
 | `datacraft-cli` | 31 | 31 | none |
-| Total | 293 | 284 | |
+| Total | 297 | 287 | |
 
 The script keeps a set of floors per platform, because each platform excludes the other's tagged
 tests: `--platform` names the platform that ran the tests and defaults to the one the script runs
@@ -428,7 +428,10 @@ what a reader needs into annotations:
 - **Failures.** The workflow sets `defaults.run.shell` to `python3 -B cicd/step.py bash -e {0}`, so
   every `run:` step goes through [`cicd/step.py`](../cicd/step.py). It runs the step with
   `bash -e`, the shell the runner would use anyway, passes the output through unchanged and keeps
-  the exit status. When the step fails on a runner it adds one `::error` annotation: the job and
+  the exit status. The step ends when its command does: a process the command left running keeps
+  the output open, and the wrapper reads on for two seconds at most. No step may set a
+  `working-directory`, because the wrapper is named relative to the checkout.
+  When the step fails on a runner it adds one `::error` annotation: the job and
   the step's command in the title, and in the message the first lines that name a failure (Maven
   and Docker errors, failed JUnit, ScalaTest and unittest tests, exception headers) followed by
   the last 30 lines of output, within the 4096 characters the runner keeps. Without it, a failed
@@ -533,10 +536,15 @@ and on a push that changes a file which pins a version:
   Jackson BOM stands for `jackson-core` and `jackson-databind`), `apache-airflow` and `pyspark`
   from `install-airflow.sh`, the FAB provider floor from `check_security_floor.py`, `shellcheck-py`,
   `pyright` from the Makefile, and every action at the release its pinned commit is commented
-  with. A file in which no pin is found is an error, so a reworded pin cannot drop out unnoticed.
-- It asks [OSV](https://osv.dev) about each pin. OSV matches versions itself for Maven, PyPI and
-  npm; for GitHub Actions it only lists advisories, so the script evaluates their version ranges
-  the way the OSV schema describes.
+  with. `apache-airflow` is a meta-package that installs `apache-airflow-core` at its own version,
+  and advisories are filed against either, so the core is asked about as well. A file in which
+  no pin is found is an error, so a reworded pin cannot drop out unnoticed.
+- It asks [OSV](https://osv.dev) about each pin and reads an answer that comes in pages to its
+  last page. OSV matches versions itself for Maven, PyPI and npm; for GitHub Actions it only
+  lists advisories, under the repository's name in lower case, so the script asks by that name
+  and evaluates the version ranges the way the OSV schema describes. That needs the release the
+  commit belongs to, which is why `check-actions-pinned.sh` and this check both reject a comment
+  such as `# v7`: a major tag moves.
 - Exit status 0 means no pin has an advisory, 1 that one has (one `::error::` line per pin, with
   links), and 2 that OSV could not be asked, so a check that did not run never counts as a pass.
 

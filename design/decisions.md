@@ -266,8 +266,8 @@ Platform-specific tests carry a `posix-only` or `windows-only` tag, and the OS-a
 
 - Modules contain only production code. The Docker build context excludes `tests/`, so the
   builder image skips test compilation.
-- No module reports skipped or canceled tests on either OS. Linux CI executes 293 of the 300 JVM
-  tests and a Windows build 284.
+- No module reports skipped or canceled tests on either OS. Linux CI executes 297 of the 304 JVM
+  tests and a Windows build 287.
 - The test-count floors exist per platform, so the floor check works on a Windows workstation as
   well as in CI on Linux.
 

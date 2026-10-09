@@ -14,6 +14,7 @@ import java.net.http.{HttpClient, HttpRequest, HttpResponse}
 import java.nio.ByteBuffer
 import java.nio.charset.StandardCharsets
 import java.nio.file.{Files, Path}
+import java.time.Duration
 import java.util.Comparator
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicInteger
@@ -429,15 +430,15 @@ class RunnerSpec extends AnyFunSuite with TimeLimits {
     val client = HttpClient.newHttpClient()
     val server = Runner.startApi(config, registryOf())
     try {
+      // Bounded: a server that accepts a request and never answers must fail the test.
+      def get(path: String): HttpRequest.Builder =
+        HttpRequest.newBuilder(server.uri(path)).timeout(Duration.ofSeconds(30)).GET()
       def status(path: String, headers: (String, String)*): Int = {
-        val request = HttpRequest.newBuilder(server.uri(path)).GET()
+        val request = get(path)
         headers.foreach { case (name, value) => request.header(name, value) }
         client.send(request.build(), HttpResponse.BodyHandlers.ofString()).statusCode()
       }
-      val health = client.send(
-        HttpRequest.newBuilder(server.uri("/health")).GET().build(),
-        HttpResponse.BodyHandlers.ofString()
-      )
+      val health = client.send(get("/health").build(), HttpResponse.BodyHandlers.ofString())
 
       assert(health.statusCode() == 200)
       assert(health.body().contains("\"status\":\"UP\""))

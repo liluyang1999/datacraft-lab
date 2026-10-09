@@ -542,6 +542,68 @@ class EngineHttpServerTest {
   }
 
   @Test
+  void aRunRequestedWhileTheServerClosesIsToldToComeBack() throws Exception {
+    CountDownLatch started = new CountDownLatch(1);
+    CountDownLatch release = new CountDownLatch(1);
+    AtomicInteger runs = new AtomicInteger();
+    JobRegistry registry = new JobRegistry();
+    registry.register(countingJob(runs));
+    registry.register(
+        new FunctionJob(
+            "slow",
+            request -> {
+              started.countDown();
+              awaitUninterruptibly(release);
+              return JobExecutionResult.success(
+                  request.jobName(), "done", request.startedAt(), Instant.now());
+            }));
+    EngineHttpServer server =
+        EngineHttpServer.start(EngineHttpServerConfig.localEphemeral(), registry);
+    Thread closer = new Thread(server::close, "engine-http-server-closer");
+    HttpClient client = HttpClient.newHttpClient();
+    URI root = server.uri("/");
+    // A connection the server accepted before it began to close: it still reads requests from
+    // it, and a run started now would be cut off when the grace period ends.
+    try (Socket kept = new Socket(root.getHost(), root.getPort())) {
+      kept.setSoTimeout((int) REQUEST_TIMEOUT.toMillis());
+      CompletableFuture<HttpResponse<String>> inFlight =
+          client.sendAsync(
+              post(server, "/jobs/slow/runs").build(), HttpResponse.BodyHandlers.ofString());
+      assertTrue(started.await(5, TimeUnit.SECONDS), "job did not start");
+      closer.start();
+      assertTrue(
+          connectionRefusedWithin(new InetSocketAddress(root.getHost(), root.getPort()), 5_000),
+          "listener still accepts connections during close()");
+
+      OutputStream out = kept.getOutputStream();
+      out.write(
+          ("POST /jobs/count/runs HTTP/1.1\r\nHost: localhost\r\nContent-Length: 0\r\n"
+                  + "Connection: close\r\n\r\n")
+              .getBytes(StandardCharsets.US_ASCII));
+      out.flush();
+      String refused = new String(kept.getInputStream().readAllBytes(), StandardCharsets.UTF_8);
+
+      assertTrue(refused.startsWith("HTTP/1.1 503 "), refused);
+      assertTrue(refused.toLowerCase(Locale.ROOT).contains("\r\nretry-after: 1\r\n"), refused);
+      assertTrue(refused.endsWith("{\"error\":\"busy\"}"), refused);
+      assertEquals(0, runs.get());
+      // The run that was in flight when close() began still finishes and is answered.
+      release.countDown();
+      closer.join(5_000);
+      assertFalse(closer.isAlive(), "close() did not return after the in-flight run finished");
+      assertEquals(200, inFlight.get(5, TimeUnit.SECONDS).statusCode());
+    } finally {
+      // Release first: closing the client waits for its in-flight request.
+      release.countDown();
+      if (closer.getState() == Thread.State.NEW) {
+        server.close();
+      }
+      closer.join(10_000);
+      client.close();
+    }
+  }
+
+  @Test
   void requiresTheBearerTokenForEveryRequestUnderJobs() throws Exception {
     AtomicInteger runs = new AtomicInteger();
     JobRegistry registry = new JobRegistry();

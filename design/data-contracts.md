@@ -107,9 +107,15 @@ once more as raw lines, decompressed the way the CSV reader would, and decode ev
 A failure reads "requirement failed: input is not valid <charset>: <n> line(s) cannot be decoded,
 the first in <file URI>; set encoding to the charset the data was written in", and
 `csv-to-parquet` reports it before anything is written, so an existing output stays as it was.
-Two limits remain: the check costs one more pass over the input, and a wrong encoding whose bytes
-happen to be valid in the named charset is not detected (UTF-8 text is always valid ISO-8859-1,
-and often valid GBK).
+A file that begins with the UTF-8 byte order mark is UTF-8: under any other `encoding` the job
+fails with "requirement failed: input is not valid <charset>: <n> file(s) start with the UTF-8
+byte order mark, the first is <file URI>; set encoding to UTF-8". Without this rule the mark's
+three bytes would be decoded in the named charset and end up in the first column's name, which
+is what a spreadsheet's "CSV UTF-8" export read as Shift_JIS or US-ASCII produced.
+Two limits remain: the check costs one more pass over the input (and, for an encoding other
+than UTF-8, one short read of each file), and a wrong encoding whose bytes happen to be valid in
+the named charset is not detected otherwise (UTF-8 text without a mark is always valid
+ISO-8859-1, and often valid GBK).
 
 Since 4.0 Spark's readers accept only UTF-8, ISO-8859-1, US-ASCII and the UTF-16/32 family by
 themselves. For any other charset the job sets `spark.sql.legacy.javaCharsets=true` on its own
@@ -373,7 +379,7 @@ SFTP:
 | `POST /jobs/{name}/runs`, job succeeded | 200 with the result `{"jobName","status","message","metrics"}` |
 | `POST /jobs/{name}/runs`, job failed | 500 with the same result body, including parameter rejections such as "Missing required parameter: input" and a missing Spark runtime |
 | Any request under `/jobs` without the configured token | 401 `{"error":"unauthorized"}` with `WWW-Authenticate: Bearer realm="datacraft-api"` |
-| Run request while `--max-concurrent-runs` runs are in progress | 503 `{"error":"busy"}` with `Retry-After: 1`; nothing runs |
+| Run request while `--max-concurrent-runs` runs are in progress, or while the server is closing | 503 `{"error":"busy"}` with `Retry-After: 1`; nothing runs |
 | Malformed run request | 400 `{"error":"invalid_request"}`: a missing, blank or nested job path, an unknown `lifecycle`, a percent-escape that does not decode as UTF-8, or raw non-ASCII bytes in the query |
 | Run request with an `Origin` header | 403 `{"error":"cross_origin_forbidden"}`, whatever the value (`null` included) |
 | Unknown job | 404 `{"error":"unknown_job"}` |
@@ -406,7 +412,10 @@ with "Invalid DATACRAFT_API_TOKEN: API token must be 32 to 512 characters from A
 Without a token the API is open, which `serve-api` allows on loopback only.
 
 Concurrency. At most `--max-concurrent-runs` runs (default 4, at least 1) are in progress at one
-time. A further run request is not queued: it gets 503 at once and nothing runs. A run occupies
+time. A further run request is not queued: it gets 503 at once and nothing runs. The same answer
+goes to a run requested while the server is closing: the JDK server still reads requests from
+the connections it already has during its 8 s grace period, and a run started then would be cut
+off. A run occupies
 its place from the capacity check until its job returns, whether it succeeds, fails or throws, so
 runs that wait inside a job (a Spark job for the session, `csv-profile` for its turn) count too
 and the number of waiting requests stays bounded. `GET /jobs`, `/health` and requests rejected

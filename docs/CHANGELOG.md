@@ -32,12 +32,17 @@ each new rule was checked by breaking it on purpose and requiring a test to fail
   placeholder or reused one.
 - The API runs at most `--max-concurrent-runs` jobs at one time (default 4). A further run request
   gets 503 `busy` with `Retry-After: 1` at once instead of starting another job; reads and
-  requests that fail before they run take no place.
+  requests that fail before they run take no place. A run requested while the server is closing
+  gets the same 503: the JDK server still reads requests from the connections it already has
+  during its grace period, and a run started then was cut off when the period ended.
 - `cicd/security/check_advisories.py` asks OSV about every version the repository pins: the
-  dependencies the root POM manages, Airflow, pyspark, the FAB provider floor, shellcheck-py,
-  pyright and the actions of the workflows. `.github/workflows/advisories.yml` runs it every
-  Monday, on demand and when a pinning file changes. An advisory fails the run (exit 1), and so
-  does an OSV that cannot be asked (exit 2). On 2026-10-09 none of the 25 pins had an advisory.
+  dependencies the root POM manages, Airflow (with `apache-airflow-core`, which the meta-package
+  installs at its own version and against which advisories are filed separately), pyspark, the
+  FAB provider floor, shellcheck-py, pyright and the actions of the workflows, each by its
+  repository in lower case and at the full release its commit is commented with.
+  `.github/workflows/advisories.yml` runs it every Monday, on demand and when a pinning file
+  changes. An advisory fails the run (exit 1), and so does an OSV that cannot be asked or an
+  answer whose pages do not end (exit 2). On 2026-10-09 none of the 26 pins had an advisory.
 - **BREAKING for Swarm deployments:** the Redis of the Swarm stack demands a password. The stack
   starts it with `--requirepass` and puts the same `REDIS_PASSWORD` into the Celery broker URL of
   the Airflow services. `deployment_env.py init` generates the value, and `swarm-deploy.sh` stops
@@ -58,7 +63,9 @@ each new rule was checked by breaking it on purpose and requiring a test to fail
   valid <charset>: <n> line(s) cannot be decoded, the first in <file>; set encoding to the charset
   the data was written in"; `csv-to-parquet` fails before it writes. Name the charset with the new
   `encoding` parameter to convert such a file. A conversion that used to succeed with damaged
-  output now fails.
+  output now fails. A file that begins with the UTF-8 byte order mark is UTF-8: under any other
+  encoding the job fails and says so, where the mark's three bytes used to be decoded in that
+  charset and to end up in the first column's name.
 - `fail` in `cicd/lib.sh` printed a message with a line break as an annotation that ended at its
   first line, the rest becoming ordinary log output (the HTTP check of the image smoke test builds
   such a message). The message is now escaped as a workflow command requires.
@@ -79,7 +86,9 @@ each new rule was checked by breaking it on purpose and requiring a test to fail
 - `cicd/step.py`, the shell of every `run:` step (`defaults.run.shell` in both workflows). It runs
   the step with `bash -e`, passes the output through and keeps the exit status; when the step
   fails on a runner it adds an error annotation with the step's command, the first lines that name
-  a failure and the last 30 lines of output, within the 4096 characters the runner keeps.
+  a failure and the last 30 lines of output, within the 4096 characters the runner keeps. The
+  step ends when its command does, also when the command left a process running that keeps the
+  output open.
   Annotations are public, job logs are not, so a failure can be diagnosed without access to the
   repository.
 - `diagnose TITLE COMMAND...` in `cicd/lib.sh` prints a command's output as a named group of the
@@ -107,20 +116,36 @@ each new rule was checked by breaking it on purpose and requiring a test to fail
   `smoke-images.sh` and `smoke-compose.sh` (what was verified), as evidence of a passing run that
   can be read through the same public API.
 - `make checks`: the checks CI's `build` job runs on the test reports and the jar after `verify`.
-- Tests. JVM: 17 new test cases, 300 in all (Linux runs 293, Windows 284): the token and its
-  order among the checks, the run limit and its release on every path, the configuration's
-  validation and redaction, the `serve-api` rules, the encoding parameter, strict decoding for
-  UTF-8, GBK, Latin-1, gzip and directory input, and a GBK conversion. Python: `tests/ci` 93
+- Tests. JVM: 21 new test cases, 304 in all (Linux runs 297, Windows 287): the token and its
+  order among the checks, the run limit and its release on every path, a run requested while the
+  server closes, the configuration's validation and redaction, the `serve-api` rules, the
+  encoding parameter, strict decoding for UTF-8, GBK, Latin-1, gzip and directory input, a
+  partition directory of any name, the byte order mark, a line longer than the decoding buffer,
+  and a GBK conversion. Python: `tests/ci` 99
   (the step wrapper, the helpers of `cicd/lib.sh`, the advisory check, the credential check
   against a stand-in stack, the Swarm rehearsal against a recording Docker stub, two workflow
   rules, the count notice), `tests/deploy` 54 (the token and the Redis password in the stacks, in
   `deployment_env.py` and in `swarm-deploy.sh`, the encrypted network, the Resolver option),
   `tests/orchestration` 17 (the DAG parameter). The Airflow runtime smoke test converts a GBK
   file with `encoding=GBK`.
-- Forty-nine deliberate breakages of the new rules, each of which a test must notice. One of
+- Sixty-six deliberate breakages of the new rules, each of which a test must notice. One of
   them found a weak test: with the token ignored, a test that expects `serve-api` to refuse a
   malformed token blocked in the server it had started instead of failing. Every such call in
   `RunnerSpec` now has a 30 second limit.
+- Two independent reviews of this round's first commit found defects in it, each reproduced by a
+  test that failed before its fix. In the decoding check: a partition directory named `value`
+  took the place of the line column, so its files were not checked, and a numeric one made a
+  valid input fail; the byte order mark above; and a long line was held once more than needed,
+  as decoded text, which the check now discards as it goes. In the HTTP API: the run accepted
+  during shutdown. In `cicd/step.py`: a failure line among the last 30 vanished when those lines
+  were cut for size, and a step did not end while a process it had left running kept its output
+  open. In the advisory check: advisories filed against `apache-airflow-core` alone were never
+  asked for, a paged answer was read as complete, an action in a subdirectory or written with
+  capitals could not match, and a pin commented with a major tag only (`# v7`) was judged against
+  version ranges it cannot be placed in; `check-actions-pinned.sh` now requires `vX.Y.Z` as its
+  message always said. In `smoke-images.sh`: the check that the API image refuses to start
+  without a token had no time limit, so an image that did start would have held the job until
+  its timeout.
 
 #### Changed
 - Maven 3.9.16 -> 3.10.0, through the wrapper and in the builder image
@@ -141,8 +166,8 @@ each new rule was checked by breaking it on purpose and requiring a test to fail
   unauthenticated datacraft-api".
 - The run check order of the HTTP API is token (401), method (405), `Origin` (403), request syntax
   (400), job lookup (404), free capacity (503), then the run.
-- Test-count floors on Linux: api 27 (was 17), cli 31 (was 28), spark 56 (was 52); on Windows
-  spark 47 (was 44).
+- Test-count floors on Linux: api 28 (was 17), cli 31 (was 28), spark 59 (was 52); on Windows
+  spark 49 (was 44).
 - Dependencies, rechecked on 2026-10-09: spotless-maven-plugin 3.10.3 -> 3.10.4,
   actions/upload-artifact v7.0.1 -> v7.0.2, actions/download-artifact v8.0.1 -> v8.0.2,
   actions/setup-node v7.0.0 -> v7.1.0. Still not adopted: google-java-format 1.37.0, whose

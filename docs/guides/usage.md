@@ -168,6 +168,8 @@ spark-submit --master 'local[*]' --class com.example.datacraft.cli.Runner "$JAR"
 - CSV input is read as UTF-8 unless `--param encoding=<charset>` names the charset the file was
   written in, for example `GBK` or `ISO-8859-1`. A file that is not valid text in that encoding
   fails the job, naming the first such file, instead of being converted with damaged characters.
+  A file that begins with the UTF-8 byte order mark, as a spreadsheet's "CSV UTF-8" export does,
+  is UTF-8 and fails under any other encoding.
 - On Windows, Hadoop's local file system needs `winutils.exe` (`HADOOP_HOME` or `hadoop.home.dir`)
   to write files: provide it, or run writing jobs such as `csv-to-parquet` on Linux, macOS or WSL.
 
@@ -219,7 +221,7 @@ non-loopback.
 **Concurrency.** The API executes at most `--max-concurrent-runs` job runs at one time, 4 by
 default. A run request beyond that is not queued: it gets 503 `{"error":"busy"}` with
 `Retry-After: 1`, and nothing runs. `/health`, `/jobs` and requests that are rejected before they
-run do not count.
+run do not count. A run requested while the server is shutting down gets the same 503.
 
 `DATACRAFT_DATA_ROOT` confines job paths for the CLI and the API alike:
 

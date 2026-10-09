@@ -14,7 +14,7 @@ import org.scalatest.funsuite.AnyFunSuite
 
 import java.io.ByteArrayOutputStream
 import java.nio.channels.Selector
-import java.nio.charset.StandardCharsets
+import java.nio.charset.{Charset, StandardCharsets}
 import java.nio.file.{Files, Path}
 import java.util.zip.GZIPOutputStream
 import scala.jdk.CollectionConverters._
@@ -42,6 +42,9 @@ class SparkPipelineSpec extends AnyFunSuite {
 
   /** One record whose second field is two GBK characters; the bytes are not valid UTF-8 either. */
   private val GbkCsv = "id,name\n1,\u4e2d\u6587\n".getBytes("GBK")
+
+  /** The three bytes some programs put in front of UTF-8 text. */
+  private val Utf8Mark = Array(0xef, 0xbb, 0xbf).map(_.toByte)
 
   /** The start of the message for `lines` undecodable lines; the name of the first file follows. */
   private def notValid(charset: String, lines: Int): String =
@@ -445,6 +448,130 @@ class SparkPipelineSpec extends AnyFunSuite {
       assert(count(packed).message().endsWith("/packed.csv.gz" + EncodingHint))
       val counted = count(packedUtf8, "expectedRows" -> "1")
       assert(counted.status() == JobStatus.SUCCEEDED, counted.message())
+    } finally deleteRecursively(workDir)
+  }
+
+  test(
+    "a partition directory is checked on the bytes of its files whatever it is called",
+    PosixOnly
+  ) {
+    requireNioSelectors()
+    val workDir = Files.createTempDirectory("datacraft-spark-encoding-partition")
+    try {
+      val engine                                                           = newEngine()
+      def count(input: Path, extra: (String, String)*): JobExecutionResult =
+        execute(
+          engine,
+          "row-count",
+          Map("input" -> input.toString, "inputFormat" -> "csv") ++ extra
+        )
+
+      // Spark's text source calls its line column "value"; a partition of that name replaced it,
+      // so the partition's value was checked and the file was not. Nor may a partition take the
+      // place of the name the check gives the column instead.
+      for (name <- Seq("value", "line0", "VALUE")) {
+        val damaged = Files.createDirectories(workDir.resolve(s"damaged-$name/$name=abc"))
+        Files.write(damaged.resolve("latin1.csv"), Latin1Csv)
+        val refused = count(damaged.getParent)
+        assert(refused.status() == JobStatus.FAILED, s"$name: ${refused.metrics()}")
+        assert(refused.message().startsWith(notValid("UTF-8", 2)), refused.message())
+        assert(
+          refused.message().endsWith(s"/$name=abc/latin1.csv" + EncodingHint),
+          refused.message()
+        )
+      }
+      // A numeric partition of that name made the check itself fail on a file that is valid.
+      val numbered = Files.createDirectories(workDir.resolve("numbered/value=200"))
+      Files.writeString(numbered.resolve("ok.csv"), "id,name\n1,café\n")
+      val counted = count(numbered.getParent, "expectedRows" -> "1")
+      assert(counted.status() == JobStatus.SUCCEEDED, counted.message())
+    } finally deleteRecursively(workDir)
+  }
+
+  test("a UTF-8 byte order mark fails every other encoding and names the file") {
+    requireNioSelectors()
+    val workDir = Files.createTempDirectory("datacraft-spark-encoding-mark")
+    try {
+      val engine                                                           = newEngine()
+      def count(input: Path, extra: (String, String)*): JobExecutionResult =
+        execute(
+          engine,
+          "row-count",
+          Map("input" -> input.toString, "inputFormat" -> "csv") ++ extra
+        )
+      // What a spreadsheet's "CSV UTF-8" export writes: the mark, then here plain ASCII.
+      val text   = Utf8Mark ++ "id,name\n1,ok\n".getBytes(StandardCharsets.US_ASCII)
+      val marked = Files.write(workDir.resolve("marked.csv"), text)
+      val packed = Files.write(workDir.resolve("marked.csv.gz"), gzip(text))
+
+      // Hadoop's line reader drops the mark, so the line check never saw it, while the CSV reader
+      // decoded its three bytes in the given charset and put them into the first column's name.
+      for (
+        encoding <- Seq("US-ASCII", "ISO-8859-1", "GBK", "Shift_JIS"); file <- Seq(marked, packed)
+      ) {
+        val refused = count(file, "encoding" -> encoding)
+        assert(refused.status() == JobStatus.FAILED, s"$encoding: ${refused.metrics()}")
+        assert(
+          refused
+            .message()
+            .startsWith(
+              s"requirement failed: input is not valid $encoding: 1 file(s) start with the UTF-8 " +
+                "byte order mark, the first is "
+            ),
+          refused.message()
+        )
+        assert(
+          refused.message().endsWith(s"/${file.getFileName}; set encoding to UTF-8"),
+          refused.message()
+        )
+      }
+      // Read as UTF-8 the mark is no part of the data.
+      for (file <- Seq(marked, packed)) {
+        val counted = count(file, "expectedRows" -> "1")
+        assert(counted.status() == JobStatus.SUCCEEDED, counted.message())
+      }
+      SparkSessions.withSession(
+        SparkRuntimeConfig.local("inspect-mark").copy(master = "local[1]")
+      ) { spark =>
+        val options = CsvReadOptions(Map.empty, inferSchema = false)
+        assert(
+          DataFrames.read(spark, "csv", marked.toString, options).columns.toSeq == Seq("id", "name")
+        )
+      }
+    } finally deleteRecursively(workDir)
+  }
+
+  test("a line longer than the decoding buffer is checked to its last byte") {
+    requireNioSelectors()
+    val workDir = Files.createTempDirectory("datacraft-spark-encoding-long")
+    try {
+      val session = SparkSessions.create(
+        SparkRuntimeConfig.local("long-lines").copy(master = "local[1]")
+      )
+      try {
+        // 60,000 two-byte characters: many times the buffer the check decodes into.
+        val field                                         = "中文" * 30000
+        def check(name: String, bytes: Array[Byte]): Unit =
+          DataFrames.requireDecodable(
+            session,
+            Files.write(workDir.resolve(name), bytes).toString,
+            Charset.forName("GBK"),
+            "input"
+          )
+        val valid = s"id,name\n1,$field\n".getBytes("GBK")
+        check("valid.csv", valid)
+
+        // Half a character in the middle of the long line (a space where the second byte of a
+        // character belongs) and at its end (the last character loses its second byte).
+        val start  = "id,name\n1,".length
+        val middle = valid.clone()
+        middle(start + 2 * 15000 + 1) = ' '.toByte
+        val end = valid.dropRight(2) :+ '\n'.toByte
+        for ((name, bytes) <- Seq("middle.csv" -> middle, "end.csv" -> end)) {
+          val refused = intercept[IllegalArgumentException](check(name, bytes))
+          assert(refused.getMessage.startsWith(notValid("GBK", 1)), refused.getMessage)
+        }
+      } finally session.stop()
     } finally deleteRecursively(workDir)
   }
 

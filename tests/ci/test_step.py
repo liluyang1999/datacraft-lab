@@ -6,6 +6,7 @@ from pathlib import Path
 import subprocess
 import sys
 import tempfile
+import time
 import unittest
 
 REPOSITORY = Path(__file__).resolve().parents[2]
@@ -150,6 +151,52 @@ class StepTests(unittest.TestCase):
         self.assertTrue(all(len(line) <= 300 for line in lines))
         self.assertTrue(lines[0].endswith("..."))
         self.assertLessEqual(len(title), 200)
+
+    def test_a_failure_among_the_last_lines_survives_when_those_lines_are_cut_for_size(self):
+        # Thirty long lines do not fit into one message. The failure is one of them, so it used to
+        # count as shown, and then went with the lines that were cut.
+        failure = "[ERROR] Tests run: 3, Failures: 1 -- in ExampleTest"
+        code = ("print('x' * 260)\nprint('y' * 260)\n"
+                f"print({failure!r})\n"
+                "for n in range(27): print('tail %02d ' % n + 'z' * 250)\n"
+                "raise SystemExit(1)\n")
+        result = run_step(python(code))
+        (_, message), = annotations(result.stdout)
+        lines = message.split("\n")
+        self.assertLessEqual(len(message), 4000)
+        self.assertEqual([failure, "[...]"], lines[:2])
+        self.assertTrue(lines[-1].startswith("tail 26 "), lines[-1])
+        self.assertEqual(1, lines.count(failure))
+        # A failure the last lines still show is not repeated in front of them.
+        short = run_step(python(f"print('start'); print({failure!r}); print('end'); raise SystemExit(1)"))
+        self.assertEqual([f"start\n{failure}\nend"], [text for _, text in annotations(short.stdout)])
+
+    @unittest.skipUnless(os.name == "posix", "the wrapper can wait on a pipe only on POSIX; a runner is Linux")
+    def test_a_step_ends_with_its_command_and_not_with_a_process_it_left_running(self):
+        # A process started in the background inherits the step's output and keeps it open. The
+        # runner's own shell ends the step when the command ends, and so must the wrapper.
+        child = "import time; time.sleep(25)"
+        code = ("import subprocess, sys\n"
+                f"subprocess.Popen([sys.executable, '-c', {child!r}])\n"
+                "print('started', flush=True)\n"
+                "raise SystemExit(3)\n")
+        began = time.monotonic()
+        result = run_step(python(code))
+        self.assertLess(time.monotonic() - began, 15)
+        self.assertEqual(3, result.returncode)
+        self.assertEqual(["started"], [text for _, text in annotations(result.stdout)])
+
+    def test_output_arrives_while_the_step_runs_and_a_long_line_is_passed_through_whole(self):
+        # Longer than a pipe holds, so it reaches the wrapper in several pieces.
+        code = ("import sys\n"
+                "sys.stdout.buffer.write(b'p' * 300000 + b'\\n'); sys.stdout.flush()\n"
+                "print('error: after the long line', flush=True)\n"
+                "sys.exit(1)\n")
+        result = run_step(python(code))
+        self.assertTrue(result.stdout.replace(b"\r", b"").startswith(
+            b"p" * 300_000 + b"\nerror: after the long line\n"))
+        (_, message), = annotations(result.stdout)
+        self.assertEqual(["p" * 297 + "...", "error: after the long line"], message.split("\n"))
 
     def test_a_long_step_is_cut_in_the_title_which_still_ends_with_the_exit_status(self):
         with tempfile.TemporaryDirectory() as temp:

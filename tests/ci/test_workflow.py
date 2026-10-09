@@ -88,6 +88,9 @@ class WorkflowTests(unittest.TestCase):
                 index, indent, _ = shells[0]
                 self.assertEqual("    ", indent)
                 self.assertEqual(["defaults:", "  run:"], lines[index - 2:index])
+                # The wrapper is named relative to the checkout, so a step that ran in another
+                # directory could not start.
+                self.assertEqual([], [line for line in lines if re.match(r"\s*(- )?working-directory\s*:", line)])
         self.assertTrue((REPOSITORY / "cicd" / "step.py").is_file())
 
     def test_every_job_checks_out_before_its_first_run_step(self):
@@ -207,6 +210,9 @@ class ActionsPinningCheckTests(unittest.TestCase):
             "a branch": ("steps:\n  - uses: actions/checkout@main\n", 2),
             "a short SHA": (f"steps:\n  - uses: actions/checkout@{self.SHA[:12]} # v7.0.1\n", 2),
             "no release comment": (f"steps:\n  - uses: {pinned}\n", 2),
+            # A major tag moves; the advisory check needs the release the commit belongs to.
+            "a release without its patch number": (f"steps:\n  - uses: {pinned} # v7.0\n", 2),
+            "a release without its minor number": (f"steps:\n  - uses: {pinned} # v7\n", 2),
             "a flow mapping": ("steps:\n  - { uses: actions/checkout@v7 }\n", 2),
             "a flow mapping after a key": ("steps:\n  - { name: x, uses: actions/checkout@v7 }\n", 2),
             "a flow mapping with a SHA": (f"steps:\n  - {{ uses: {pinned} }} # v7.0.1\n", 2),

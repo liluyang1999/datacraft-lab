@@ -368,8 +368,8 @@ Selector 的主机上 Spark 套件取消，而 CI 中 Spark 套件出现取消�
 平台相关测试按标签排除，而不是在运行时跳过：按操作系统自动激活的 `windows-host` profile 排除
 `posix-only` 测试（符号链接、文件名含 `?`、需要 winutils 的 Hadoop 本地写入），`posix-host` 排除
 `windows-only` 测试（NTFS junction），因此在 Windows 上运行测试不再需要开发者模式或 winutils。
-全部 300 个测试中，Linux 执行 293 个（7 个 junction 测试只在 Windows 运行），Windows 执行 284 个
-（16 个 posix-only 测试只在 Linux 等非 Windows 系统运行）。
+全部 304 个测试中，Linux 执行 297 个（7 个 junction 测试只在 Windows 运行），Windows 执行 287 个
+（17 个 posix-only 测试只在 Linux 等非 Windows 系统运行）。
 
 当前尚未执行真实云部署、ARM 主机测试或多机 Swarm 故障切换；这些边界与“部署资料已准备”分开记录，
 不作为已完成上线报告。

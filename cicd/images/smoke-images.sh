@@ -19,7 +19,7 @@ created_backups=false
 cleanup() {
   local status=$?
   trap - EXIT
-  docker rm -f "$container" >/dev/null 2>&1 || true
+  docker rm -f "$container" "$container-unauthenticated" >/dev/null 2>&1 || true
   docker volume rm -f "$probe_volume" >/dev/null 2>&1 || true
   if ((${#created[@]})); then rm -f -- "${created[@]}"; fi
   if [[ "$created_backups" == true ]]; then rmdir -- backups 2>/dev/null || true; fi
@@ -60,13 +60,22 @@ for image in datacraft/jvm:latest datacraft/airflow:latest; do
     fail "$image runs Java '$image_runtime', but the freshly pulled $jre_image has '$base_runtime'."
 done
 
-# The image serves on all interfaces, so without a token it must refuse to start at all.
-refusal=$(docker run --rm datacraft/jvm:latest 2>&1) &&
-  fail "datacraft/jvm started without DATACRAFT_API_TOKEN."
+# The image serves on all interfaces, so without a token it must refuse to start at all. A server
+# that started instead would never return, so the run is bounded: the job would otherwise end at
+# its own time limit, with nothing that names the cause.
+refused=0
+refusal=$(timeout --kill-after=10 60 docker run --rm --name "$container-unauthenticated" \
+  datacraft/jvm:latest 2>&1) || refused=$?
+case "$refused" in
+  2) ;;
+  124 | 137) fail "datacraft/jvm kept running without DATACRAFT_API_TOKEN instead of refusing to start." ;;
+  *) fail "datacraft/jvm without a token: expected exit status 2, got $refused: $refusal" ;;
+esac
 [[ "$refusal" == *"without DATACRAFT_API_TOKEN"* ]] ||
   fail "datacraft/jvm without a token stopped for another reason: $refusal"
 
-# A test-only token, handed over through the environment rather than a command line.
+# A test-only token for this run. The container receives it through its environment; the checks
+# below also put it on the command line of curl inside that container, which ends with the runner.
 DATACRAFT_API_TOKEN=$(python3 -c 'import secrets; print(secrets.token_hex(32))')
 export DATACRAFT_API_TOKEN
 docker run -d --name "$container" -e DATACRAFT_API_TOKEN datacraft/jvm:latest >/dev/null

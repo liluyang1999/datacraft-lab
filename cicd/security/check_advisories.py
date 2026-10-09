@@ -7,16 +7,21 @@ reports when a pinned version turns out to be vulnerable either. This check asks
 - the dependencies the root pom.xml manages (Jackson's BOM stands for jackson-core and
   jackson-databind, the two artifacts the Enforcer already bans by version);
 - apache-airflow and pyspark as cicd/airflow/install-airflow.sh installs them, the FAB provider at
-  the floor of cicd/airflow/check_security_floor.py, and shellcheck-py;
+  the floor of cicd/airflow/check_security_floor.py, and shellcheck-py. apache-airflow is a
+  meta-package that installs apache-airflow-core at its own version, and advisories are filed
+  against either, so the core is asked about as well;
 - pyright, as the Makefile pins it;
-- the GitHub Actions the workflows use, by the release named after each pinned commit.
+- the GitHub Actions the workflows use, by the release named after each pinned commit and by
+  their repository in lower case, which is how OSV files them.
 
 A scheduled workflow runs it, so a new advisory appears as a failed run and no bot has to open pull
 requests. Not covered: transitive dependencies, which Spark and the Airflow constraints file pin,
 and the base images.
 
 OSV matches versions itself for Maven, PyPI and npm. For GitHub Actions it only lists advisories, so
-their version ranges are evaluated here, as the OSV schema describes.
+their version ranges are evaluated here, as the OSV schema describes; that needs the full release
+(v7.0.1, not v7), and a pin without one is an error. An answer in several pages is read to its
+last page.
 
 Standard library only: the XML parsed is this repository's own pom.xml.
 
@@ -41,8 +46,15 @@ BOM_MEMBERS = {
     "com.fasterxml.jackson:jackson-bom": ("com.fasterxml.jackson.core:jackson-core",
                                           "com.fasterxml.jackson.core:jackson-databind"),
 }
+# Distributions a pinned one installs at exactly its own version, and that have advisories of
+# their own.
+COMPANIONS = {"apache-airflow": ("apache-airflow-core",)}
 PROPERTY = re.compile(r"\$\{([^}]+)\}")
-PINNED_ACTION = re.compile(r"^\s*(?:-\s+)?uses:\s+([^@\s]+)@[0-9a-f]{40}\s+#\s*v([0-9][0-9A-Za-z.+-]*)\s*$")
+# An action pinned to a commit, and the same with its full release in the comment.
+COMMIT_ACTION = re.compile(r"^\s*(?:-\s+)?uses:\s+([^@\s]+)@[0-9a-f]{40}\b")
+PINNED_ACTION = re.compile(COMMIT_ACTION.pattern[:-2] + r"\s+#\s*v([0-9]+\.[0-9]+\.[0-9]+[0-9A-Za-z.+-]*)\s*$")
+# The pages of one answer that are followed before the lookup counts as failed.
+PAGES = 20
 
 
 class LookupFailed(Exception):
@@ -95,13 +107,21 @@ def pins(root, path, pattern, ecosystem, name=None):
 
 
 def action_packages(root):
-    """The actions of every workflow, each at the release its pinned commit is commented with."""
+    """The actions of every workflow, each at the release its pinned commit is commented with.
+
+    The name is the repository in lower case: owner/repo for owner/repo/path as well.
+    """
     packages = []
     for workflow in sorted((root / ".github" / "workflows").glob("*.y*ml")):
+        source = f".github/workflows/{workflow.name}"
         for line in workflow.read_text(encoding="utf-8").splitlines():
+            if not COMMIT_ACTION.match(line):
+                continue
             match = PINNED_ACTION.match(line)
-            if match:
-                packages.append((ACTIONS, match.group(1), match.group(2), f".github/workflows/{workflow.name}"))
+            if not match:
+                raise ValueError(f"{source}: name the full release (# vX.Y.Z) of {line.strip()}")
+            name = "/".join(match.group(1).lower().split("/")[:2])
+            packages.append((ACTIONS, name, match.group(2), source))
     if not packages:
         raise ValueError(".github/workflows: no pinned action found")
     return packages
@@ -116,6 +136,8 @@ def pinned(root):
     packages += pins(root, "cicd/lint/install-shellcheck.sh", r"^package_version=([0-9][0-9.]*)$", "PyPI",
                      name="shellcheck-py")
     packages += pins(root, "Makefile", r"\b(pyright)@([0-9][0-9.]*)", "npm")
+    packages += [(ecosystem, companion, version, source) for ecosystem, name, version, source in packages
+                 for companion in COMPANIONS.get(name, ()) if ecosystem == "PyPI"]
     packages += action_packages(root)
     unique = {}
     for ecosystem, name, version, source in packages:
@@ -166,13 +188,25 @@ def in_ranges(version, ranges):
     return False
 
 
+def answered(query):
+    """Every advisory OSV has for one query, across the pages of its answer."""
+    found, token = [], None
+    for _ in range(PAGES):
+        answer = call("/query", query if token is None else {**query, "page_token": token})
+        found += answer.get("vulns", [])
+        token = answer.get("next_page_token")
+        if not token:
+            return found
+    raise LookupFailed(f"OSV answered {query['package']['name']} in more than {PAGES} pages")
+
+
 def action_advisories(name, version):
     """Advisory ids for one action release; OSV lists them, the ranges are matched here."""
     found = []
-    for advisory in call("/query", {"package": {"ecosystem": ACTIONS, "name": name}}).get("vulns", []):
+    for advisory in answered({"package": {"ecosystem": ACTIONS, "name": name}}):
         for affected in advisory.get("affected", []):
             package = affected.get("package", {})
-            if package.get("ecosystem") == ACTIONS and package.get("name", "").lower() == name.lower():
+            if package.get("ecosystem") == ACTIONS and package.get("name", "").lower() == name:
                 listed = {entry.lstrip("v") for entry in affected.get("versions", [])}
                 if version in listed or in_ranges(version, affected.get("ranges", [])):
                     found.append(advisory["id"])
@@ -192,7 +226,11 @@ def query(packages):
         if len(results) != len(chunk):
             raise LookupFailed(f"OSV answered {len(results)} of {len(chunk)} queries")
         for (ecosystem, name, version, _), result in zip(chunk, results):
-            ids = [entry["id"] for entry in result.get("vulns", [])]
+            entries = result.get("vulns", [])
+            if result.get("next_page_token"):
+                # The batch holds only the first page of this answer; ask for all of it.
+                entries = answered({"package": {"ecosystem": ecosystem, "name": name}, "version": version})
+            ids = [entry["id"] for entry in entries]
             if ids:
                 advisories[(ecosystem, name, version)] = ids
     for ecosystem, name, version, _ in packages:

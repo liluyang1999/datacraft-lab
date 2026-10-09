@@ -13,7 +13,9 @@ the command that failed. The workflow makes this script the shell of every run s
 The runner replaces {0} with a file holding the step's command, and `bash -e` is what it would have
 run by default. The command runs unchanged: its output is passed through as it arrives (standard
 error joins standard output), and the exit status is the command's. Outside GitHub Actions nothing
-else is printed.
+else is printed. The step ends when its command does, as it would under the runner's own shell: a
+process the command left running keeps the output open, and the wrapper reads on for no more than
+DRAIN_SECONDS after the command has exited. What such a process writes later goes nowhere.
 
 A step can also name parts of its output with the runner's own folding commands, `::group::TITLE`
 and `::endgroup::` (`diagnose` in cicd/lib.sh prints them around a command). When the step fails,
@@ -28,9 +30,11 @@ Exit status: the command's; 127 when it cannot be started, 2 without a command.
 import collections
 import os
 import re
+import select
 import signal
 import subprocess
 import sys
+import time
 
 # The runner cuts an annotation message at 4096 characters (actions/runner, ExecutionContext.cs).
 MESSAGE_LIMIT = 4000
@@ -48,6 +52,13 @@ GROUPS = 8
 GROUP_LINES = 400
 GROUP = "::group::"
 END_GROUP = "::endgroup::"
+# How long output is still read once the command has exited while something keeps it open, and how
+# often the command is looked at while it prints nothing.
+DRAIN_SECONDS = 2.0
+POLL_SECONDS = 0.2
+CHUNK = 65536
+# A line is recorded at this size at the latest, so output without line breaks is not kept whole.
+LINE_BYTES = 1 << 20
 
 # Lines that name what went wrong: Maven and Docker errors, failed JUnit, ScalaTest and unittest
 # tests, exception and traceback headers, git and shell fatal errors.
@@ -63,18 +74,72 @@ def text(raw):
     return line if len(line) <= LINE_LIMIT else line[:LINE_LIMIT - 3] + "..."
 
 
-def run(command):
-    """Runs command and copies its output through.
-
-    Returns (exit status, failure lines, last lines, whether the output ended inside a line,
-    the last GROUPS groups as (title, lines)).
+class Record:
+    """What a failed step is annotated with, gathered line by line.
 
     A failure line is one FAILURE matches, or an indented line right after it, which carries the
     detail (ScalaTest prints the assertion message there). Only the first FAILURE_LINES are kept.
     Failure lines and last lines are those outside a group.
     """
+
+    def __init__(self):
+        self.failures = []
+        self.tail = collections.deque(maxlen=TAIL_LINES)
+        self.groups = collections.deque(maxlen=GROUPS)
+        self.group = None
+        self.follows_failure = False
+
+    def line(self, raw):
+        line = text(raw)
+        if line == END_GROUP:
+            self.group, self.follows_failure = None, False
+        elif line.startswith(GROUP):
+            # The runner does not nest groups: a new one ends the one before it.
+            self.group, self.follows_failure = collections.deque(maxlen=GROUP_LINES), False
+            self.groups.append((plain(line[len(GROUP):]).strip(), self.group))
+        elif self.group is not None:
+            self.group.append(line)
+        else:
+            self.tail.append(line)
+            matched = FAILURE.search(line) is not None
+            detail = self.follows_failure and line[:1].isspace()
+            if line and (matched or detail) and len(self.failures) < FAILURE_LINES:
+                self.failures.append(line)
+            self.follows_failure = matched
+
+
+def chunks(process):
+    """The output of process as it arrives.
+
+    It ends with the pipe. A process the command left running keeps the pipe open, and the step
+    must not wait for that one: where the platform can wait on a pipe, reading stops DRAIN_SECONDS
+    after the command has exited. Everything the command itself wrote is in the pipe by then.
+    """
+    stream = process.stdout
+    if os.name != "posix":
+        yield from iter(lambda: stream.read(CHUNK), b"")
+        return
+    descriptor, exited = stream.fileno(), None
+    while exited is None or time.monotonic() - exited < DRAIN_SECONDS:
+        readable, _, _ = select.select([descriptor], [], [], POLL_SECONDS)
+        if readable:
+            chunk = os.read(descriptor, CHUNK)
+            if not chunk:
+                return
+            yield chunk
+        if exited is None and process.poll() is not None:
+            exited = time.monotonic()
+
+
+def run(command):
+    """Runs command and copies its output through.
+
+    Returns (exit status, failure lines, last lines, whether the output ended inside a line,
+    the last GROUPS groups as (title, lines)).
+    """
     try:
-        process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+        # Unbuffered: a chunk is passed on when it arrives, not when a buffer has filled.
+        process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, bufsize=0)
     except OSError as error:
         message = f"cannot start {command[0]}: {error}"
         print(message, file=sys.stderr, flush=True)
@@ -91,36 +156,22 @@ def run(command):
         if hasattr(signal, name):
             signal.signal(getattr(signal, name), forward)
 
-    failures, tail, follows_failure = [], collections.deque(maxlen=TAIL_LINES), False
-    groups, group = collections.deque(maxlen=GROUPS), None
-    unfinished = False
-    assert process.stdout is not None
-    for raw in process.stdout:
-        sys.stdout.buffer.write(raw)
+    record, pending = Record(), b""
+    for chunk in chunks(process):
+        sys.stdout.buffer.write(chunk)
         sys.stdout.buffer.flush()
-        unfinished = not raw.endswith(b"\n")
-        line = text(raw)
-        if line == END_GROUP:
-            group, follows_failure = None, False
-            continue
-        if line.startswith(GROUP):
-            # The runner does not nest groups: a new one ends the one before it.
-            group, follows_failure = collections.deque(maxlen=GROUP_LINES), False
-            groups.append((plain(line[len(GROUP):]).strip(), group))
-            continue
-        if group is not None:
-            group.append(line)
-            continue
-        tail.append(line)
-        matched = FAILURE.search(line) is not None
-        detail = follows_failure and line[:1].isspace()
-        if line and (matched or detail) and len(failures) < FAILURE_LINES:
-            failures.append(line)
-        follows_failure = matched
+        *complete, pending = (pending + chunk).split(b"\n")
+        for raw in complete:
+            record.line(raw)
+        if len(pending) > LINE_BYTES:
+            record.line(pending)
+            pending = b""
+    if pending:
+        record.line(pending)
     status = process.wait()
     # A command killed by signal N reports as a shell would: 128 + N.
-    groups = [(name, list(lines)) for name, lines in groups]
-    return (128 - status if status < 0 else status), failures, list(tail), unfinished, groups
+    groups = [(name, list(lines)) for name, lines in record.groups]
+    return (128 - status if status < 0 else status), record.failures, list(record.tail), bool(pending), groups
 
 
 def step_command(command):
@@ -153,11 +204,13 @@ def fit(lines, budget, from_end=False):
 def message(failures, tail):
     """The failure lines the last lines do not already show, a marker, then the last lines."""
     last = [line for line in tail if line]
-    shown = set(last)
-    earlier = [line for line in failures if line not in shown]
-    reserve = min(FAILURE_RESERVE, sum(len(line) + 1 for line in earlier) + len(OMISSION) + 1)
+    # "Already show" is judged on the last lines that fit, not on all thirty: a failure among the
+    # ones the size limit cuts would otherwise be in neither part.
+    certain, _ = fit(last, MESSAGE_LIMIT - FAILURE_RESERVE, from_end=True)
+    earlier = [line for line in failures if line not in set(certain)]
+    reserve = min(FAILURE_RESERVE, sum(len(line) + 1 for line in earlier) + len(OMISSION) + 1) if earlier else 0
     last, used = fit(last, MESSAGE_LIMIT - reserve, from_end=True)
-    earlier, _ = fit(earlier, MESSAGE_LIMIT - used - len(OMISSION) - 1)
+    earlier, _ = fit([line for line in earlier if line not in set(last)], MESSAGE_LIMIT - used - len(OMISSION) - 1)
     lines = earlier + [OMISSION] + last if earlier else last
     return "\n".join(lines) or "(the step printed nothing)"
 
