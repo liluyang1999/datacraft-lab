@@ -82,6 +82,17 @@ def _data_path_pattern(root: str) -> str:
             r"(?<![\x00-\x20])$")
 
 
+def encoding_param() -> Param:
+    """Trigger-conf charset of a CSV source, in the syntax of a Java charset name."""
+    # \Z, not $: "$" also matches before a trailing newline.
+    return Param(
+        "UTF-8",
+        description="Charset of the CSV file, e.g. UTF-8, GBK or ISO-8859-1",
+        type="string",
+        pattern=r"^[A-Za-z0-9][A-Za-z0-9._:+-]*\Z",
+    )
+
+
 def data_path_param(default_name: str, description: str) -> Param:
     """Trigger-conf path that must stay under DATA_ROOT; defaults to ``DATA_ROOT/default_name``."""
     return Param(

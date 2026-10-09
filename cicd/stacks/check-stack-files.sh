@@ -16,6 +16,7 @@ export AIRFLOW_API_SECRET_KEY=test-only-not-for-deployment
 export AIRFLOW_JWT_SECRET=test-only-not-for-deployment
 # base64url of the 32 ASCII bytes "datacraft-ci-test-only-fernetkey": a well-formed Fernet key.
 export AIRFLOW_FERNET_KEY=ZGF0YWNyYWZ0LWNpLXRlc3Qtb25seS1mZXJuZXRrZXk=
+export DATACRAFT_API_TOKEN=test-only-not-for-deployment
 export DATACRAFT_DATA_NODE=ci-test-node
 
 command -v docker > /dev/null 2>&1 || fail "docker is not installed"
@@ -53,9 +54,10 @@ expect_rejected() {
   fi
   echo "without $variable: $(head -n 1 "$work/rejected.txt")"
 }
-for variable in AIRFLOW_API_SECRET_KEY AIRFLOW_FERNET_KEY AIRFLOW_JWT_SECRET; do
+for variable in AIRFLOW_API_SECRET_KEY AIRFLOW_FERNET_KEY AIRFLOW_JWT_SECRET DATACRAFT_API_TOKEN; do
   expect_rejected "$variable" "${compose[@]}"
 done
-for variable in POSTGRES_PASSWORD AIRFLOW_API_SECRET_KEY AIRFLOW_FERNET_KEY AIRFLOW_JWT_SECRET; do
+for variable in POSTGRES_PASSWORD AIRFLOW_API_SECRET_KEY AIRFLOW_FERNET_KEY AIRFLOW_JWT_SECRET \
+  DATACRAFT_API_TOKEN; do
   expect_rejected "$variable" "${stack[@]}"
 done

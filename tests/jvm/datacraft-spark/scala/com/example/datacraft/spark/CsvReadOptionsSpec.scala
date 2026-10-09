@@ -2,6 +2,8 @@ package com.example.datacraft.spark
 
 import org.scalatest.funsuite.AnyFunSuite
 
+import java.nio.charset.{Charset, StandardCharsets}
+
 class CsvReadOptionsSpec extends AnyFunSuite {
   test("CSV reading defaults to strict RFC quoting and multiline records") {
     val options = CsvReadOptions(Map.empty, inferSchema = true)
@@ -39,6 +41,26 @@ class CsvReadOptionsSpec extends AnyFunSuite {
     assert(options("delimiter") == "\t")
     assert(options("escape") == "\\")
     assert(CsvReadOptions.schema(Map("schema" -> "id STRING")).contains("id STRING"))
+  }
+
+  test("the encoding defaults to UTF-8 and reaches Spark under its canonical name") {
+    assert(CsvReadOptions(Map.empty, inferSchema = true)("encoding") == "UTF-8")
+    assert(CsvReadOptions.charset(Map.empty) == StandardCharsets.UTF_8)
+    for (
+      (name, canonical) <- Seq(
+        "utf8"         -> "UTF-8",
+        " GBK "        -> "GBK",
+        "gb18030"      -> "GB18030",
+        "latin1"       -> "ISO-8859-1",
+        "windows-1252" -> "windows-1252",
+        "Big5"         -> "Big5",
+        "Shift_JIS"    -> "Shift_JIS",
+        "EUC-KR"       -> "EUC-KR"
+      )
+    ) {
+      assert(CsvReadOptions(Map("encoding" -> name), inferSchema = true)("encoding") == canonical)
+      assert(CsvReadOptions.charset(Map("encoding" -> name)) == Charset.forName(canonical))
+    }
   }
 
   test("multi-character delimiters are accepted unchanged") {

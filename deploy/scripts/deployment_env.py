@@ -13,8 +13,13 @@ import sys
 
 TEMPLATE = Path(__file__).resolve().parents[1] / "compose" / ".env.example"
 SECRET_KEYS = ("POSTGRES_PASSWORD", "AIRFLOW_ADMIN_PASSWORD", "AIRFLOW_API_SECRET_KEY",
-               "AIRFLOW_JWT_SECRET", "AIRFLOW_FERNET_KEY")
+               "AIRFLOW_JWT_SECRET", "AIRFLOW_FERNET_KEY", "DATACRAFT_API_TOKEN")
 LOOPBACK = ("127.0.0.1", "::1")
+# The token rule of the API itself (EngineHttpServerConfig): the bearer-token syntax of RFC 6750,
+# 32 to 512 characters. A token the check accepts must be one the server starts with.
+API_TOKEN_PATTERN = r"[A-Za-z0-9._~+/-]+=*"
+API_TOKEN_MIN_LENGTH = 32
+API_TOKEN_MAX_LENGTH = 512
 
 
 def initialize(path: Path) -> None:
@@ -38,8 +43,9 @@ def initialize(path: Path) -> None:
 def validate(config: dict) -> None:
     """Validate effective values (including shell overrides), without logging any secrets.
 
-    The unauthenticated datacraft-api, when present, may only be published on loopback and may only
-    mount persistent storage read-only. The Airflow UI binding stays configurable (AIRFLOW_WEB_BIND).
+    The datacraft-api, when present, needs a generated bearer token of its own, may only be
+    published on loopback (it has no TLS) and may only mount persistent storage read-only. The
+    Airflow UI binding stays configurable (AIRFLOW_WEB_BIND).
     """
     services = config.get("services", {})
     if not isinstance(services, dict):
@@ -89,12 +95,20 @@ def validate(config: dict) -> None:
     ports = api.get("ports", [])
     if not isinstance(ports, list) or any(
             not isinstance(port, dict) or port.get("host_ip") not in LOOPBACK for port in ports):
-        raise ValueError("The unauthenticated datacraft-api may only be published on loopback")
+        raise ValueError("datacraft-api has no TLS and may only be published on loopback")
     mounts = api.get("volumes", [])
     if not isinstance(mounts, list) or any(
             not isinstance(mount, dict) or (mount.get("type") != "tmpfs" and mount.get("read_only") is not True)
             for mount in mounts):
-        raise ValueError("The unauthenticated datacraft-api may only mount volumes read-only")
+        raise ValueError("datacraft-api may only mount volumes read-only")
+    if "datacraft-api" in services:
+        token = environment("datacraft-api").get("DATACRAFT_API_TOKEN", "")
+        if (not isinstance(token, str) or not re.fullmatch(API_TOKEN_PATTERN, token)
+                or not API_TOKEN_MIN_LENGTH <= len(token) <= API_TOKEN_MAX_LENGTH
+                or token.lower().startswith(("change-me", "please-change"))):
+            raise ValueError("Set a generated DATACRAFT_API_TOKEN for datacraft-api")
+        if token in {password, reference.get("AIRFLOW_ADMIN_PASSWORD"), *(reference.get(key) for key in keys)}:
+            raise ValueError("DATACRAFT_API_TOKEN must be independent of the database and Airflow secrets")
 
 
 def main() -> int:

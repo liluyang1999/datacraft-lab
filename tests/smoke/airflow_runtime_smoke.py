@@ -141,6 +141,12 @@ def run_dags(data):
     for _ in range(2):
         run("datacraft_spark_etl", {"input": str(source), "output": str(data / "converted.parquet")})
     verify_output(data / "converted.parquet")
+    # The same records in another charset convert to the same rows once the encoding is named.
+    legacy = data / "source-gbk.csv"
+    legacy.write_bytes(source.read_text(encoding="utf-8").encode("gbk"))
+    run("datacraft_spark_etl", {"input": str(legacy), "output": str(data / "converted-gbk.parquet"),
+                                "encoding": "GBK"})
+    verify_output(data / "converted-gbk.parquet")
     with sftp_source(source) as connection:
         os.environ["AIRFLOW_CONN_DATACRAFT_SFTP"] = json.dumps(connection)
         try:

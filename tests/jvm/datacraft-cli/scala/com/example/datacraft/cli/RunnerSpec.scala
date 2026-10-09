@@ -29,6 +29,8 @@ class RunnerSpec extends AnyFunSuite with TimeLimits {
   // Interrupts a test body that outlives its failAfter limit.
   private implicit val signaler: Signaler = ThreadSignaler
 
+  private val token = "0123456789abcdef0123456789abcdef"
+
   test("explicit CLI master overrides config while explicit job parameters take precedence") {
     val file = java.nio.file.Files.createTempFile("datacraft-config-", ".properties")
     try {
@@ -323,35 +325,92 @@ class RunnerSpec extends AnyFunSuite with TimeLimits {
     assert(Runner.requireDispatchable(ordinary) eq ordinary)
   }
 
-  test("serve-api off loopback requires a data root because the API is unauthenticated") {
-    val refusal = Runner.unconfinedNetworkApi("0.0.0.0", Map.empty)
-    assert(refusal.exists(_.contains("DATACRAFT_DATA_ROOT")))
-    assert(Runner.unconfinedNetworkApi("0.0.0.0", Map("DATACRAFT_DATA_ROOT" -> " ")).isDefined)
-    assert(Runner.unconfinedNetworkApi("0.0.0.0", Map("DATACRAFT_DATA_ROOT" -> "/data")).isEmpty)
-    for (host <- Seq("127.0.0.1", "::1", "localhost"))
-      assert(Runner.unconfinedNetworkApi(host, Map.empty).isEmpty, host)
+  test("serve-api off loopback requires a token and a data root and names what is missing") {
+    val everywhere = CommandLineArgs(command = "serve-api", host = "0.0.0.0", port = 0)
+    def refusal(environment: Map[String, String]): Option[String] =
+      Runner.serverConfig(everywhere, environment).left.toOption
+    val reason = "off loopback, callers must present a token and file jobs must be confined to " +
+      "a data root. Bind 127.0.0.1 or set"
 
-    val err  = new ByteArrayOutputStream()
-    val code = Console.withErr(err) {
-      Runner.execute(
-        CommandLineArgs(command = "serve-api", host = "0.0.0.0", port = 0),
-        environment = Map.empty
+    assert(
+      refusal(Map.empty).contains(
+        "serve-api refuses --host 0.0.0.0 without DATACRAFT_API_TOKEN and DATACRAFT_DATA_ROOT: " +
+          s"$reason them."
+      )
+    )
+    assert(
+      refusal(Map("DATACRAFT_DATA_ROOT" -> "/data")).contains(
+        s"serve-api refuses --host 0.0.0.0 without DATACRAFT_API_TOKEN: $reason it."
+      )
+    )
+    assert(
+      refusal(Map("DATACRAFT_API_TOKEN" -> token)).contains(
+        s"serve-api refuses --host 0.0.0.0 without DATACRAFT_DATA_ROOT: $reason it."
+      )
+    )
+    // A blank value is an unset one.
+    assert(
+      refusal(Map("DATACRAFT_API_TOKEN" -> " ", "DATACRAFT_DATA_ROOT" -> "\t")) ==
+        refusal(Map.empty)
+    )
+
+    val (code, output, errors) = serveApi(everywhere, Map.empty)
+    assert(code == 2)
+    assert(errors.startsWith("serve-api refuses --host 0.0.0.0 without DATACRAFT_API_TOKEN"))
+    assert(errors.trim.linesIterator.size == 1 && output.isEmpty)
+  }
+
+  test("serve-api takes its token and run limit from the environment and the command line") {
+    // The values are trimmed, so a CRLF .env file does not put a carriage return into the token.
+    val configured = Runner.serverConfig(
+      CommandLineArgs(command = "serve-api", host = "0.0.0.0", port = 8080, maxConcurrentRuns = 2),
+      Map("DATACRAFT_API_TOKEN" -> s" $token\r\n", "DATACRAFT_DATA_ROOT" -> "/data")
+    )
+    assert(
+      configured.map(config =>
+        (config.host, config.port, config.maxConcurrentRuns, config.apiToken)
+      ) == Right(("0.0.0.0", 8080, 2, java.util.Optional.of(token)))
+    )
+
+    // On loopback the API may stay open, but a token that is set is required there too.
+    for (host <- Seq("127.0.0.1", "::1", "localhost")) {
+      val loopback = CommandLineArgs(command = "serve-api", host = host)
+      assert(Runner.serverConfig(loopback, Map.empty).exists(_.apiToken.isEmpty), host)
+      assert(
+        Runner
+          .serverConfig(loopback, Map("DATACRAFT_API_TOKEN" -> token))
+          .exists(_.apiToken == java.util.Optional.of(token)),
+        host
       )
     }
+    assert(
+      Runner
+        .serverConfig(CommandLineArgs(command = "serve-api"), Map.empty)
+        .exists(_.maxConcurrentRuns == 4)
+    )
+  }
+
+  test("a malformed DATACRAFT_API_TOKEN stops serve-api without printing the value") {
+    val secret                 = "too short and with spaces"
+    val (code, output, errors) =
+      serveApi(
+        CommandLineArgs(command = "serve-api", port = 0),
+        Map("DATACRAFT_API_TOKEN" -> secret)
+      )
     assert(code == 2)
-    assert(err.toString(StandardCharsets.UTF_8).contains("serve-api refuses --host 0.0.0.0"))
+    assert(
+      errors.trim == "Invalid DATACRAFT_API_TOKEN: API token must be 32 to 512 characters from " +
+        "A-Z a-z 0-9 - . _ ~ + / with optional trailing =."
+    )
+    assert(!errors.contains(secret) && output.isEmpty)
   }
 
   test("serve-api reports a port it cannot bind in one line and returns 1") {
     val occupied = new ServerSocket(0, 1, InetAddress.getByName("127.0.0.1"))
     try {
-      val port = occupied.getLocalPort
-      // A successful bind would block in serve-api forever, so the call is bounded.
-      val (code, output, errors) = failAfter(Span(30, Seconds)) {
-        captured(
-          Runner.execute(CommandLineArgs(command = "serve-api", port = port), registryOf())
-        )
-      }
+      val port                   = occupied.getLocalPort
+      val (code, output, errors) =
+        serveApi(CommandLineArgs(command = "serve-api", port = port), Map.empty)
       assert(code == 1)
       assert(errors.startsWith(s"serve-api cannot listen on 127.0.0.1:$port: "), errors)
       assert(errors.contains("BindException"), errors)
@@ -360,25 +419,50 @@ class RunnerSpec extends AnyFunSuite with TimeLimits {
     } finally occupied.close()
   }
 
-  test("runner starts embedded API for online engine access") {
-    val server = Runner.startApi(CommandLineArgs(command = "serve-api", port = 0))
+  test("runner starts the embedded API, which requires the token from the environment") {
+    val config = Runner
+      .serverConfig(
+        CommandLineArgs(command = "serve-api", port = 0),
+        Map("DATACRAFT_API_TOKEN" -> token)
+      )
+      .getOrElse(fail("serve-api refused a loopback configuration"))
+    val client = HttpClient.newHttpClient()
+    val server = Runner.startApi(config, registryOf())
     try {
-      val response = HttpClient
-        .newHttpClient()
-        .send(
-          HttpRequest.newBuilder(server.uri("/health")).GET().build(),
-          HttpResponse.BodyHandlers.ofString()
-        )
+      def status(path: String, headers: (String, String)*): Int = {
+        val request = HttpRequest.newBuilder(server.uri(path)).GET()
+        headers.foreach { case (name, value) => request.header(name, value) }
+        client.send(request.build(), HttpResponse.BodyHandlers.ofString()).statusCode()
+      }
+      val health = client.send(
+        HttpRequest.newBuilder(server.uri("/health")).GET().build(),
+        HttpResponse.BodyHandlers.ofString()
+      )
 
-      assert(response.statusCode() == 200)
-      assert(response.body().contains("\"status\":\"UP\""))
-    } finally
+      assert(health.statusCode() == 200)
+      assert(health.body().contains("\"status\":\"UP\""))
+      assert(status("/jobs") == 401)
+      assert(status("/jobs", "Authorization" -> s"Bearer $token") == 200)
+    } finally {
+      // The server first: closing it while the client is idle avoids the JDK's full grace wait.
       server.close()
+      client.close()
+    }
   }
 
   /**
    * Runs `body` with stdout and stderr captured; returns its exit code, stdout bytes and stderr.
    */
+  /**
+   * Runs `serve-api` where it is expected to stop. A server that starts instead blocks forever, so
+   * the call is bounded: such a regression fails its test and does not hang the build.
+   */
+  private def serveApi(
+      args: CommandLineArgs,
+      environment: Map[String, String]
+  ): (Int, Array[Byte], String) =
+    failAfter(Span(30, Seconds))(captured(Runner.execute(args, registryOf(), environment)))
+
   private def captured(body: => Int): (Int, Array[Byte], String) = {
     val output = new ByteArrayOutputStream()
     val errors = new ByteArrayOutputStream()

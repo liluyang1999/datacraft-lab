@@ -107,9 +107,11 @@ task-owned temporary file; the wrapper reads it after Spark exits and removes it
 failure. This avoids treating Spark shutdown logs as results. `row_count` receives the conversion's
 `metrics.rows` as `expectedRows` and fails when the persisted dataset count differs.
 
-Both data DAGs accept `schema` (Spark DDL, empty means infer), `inferSchema`, `multiLine`, `header`
-and `delimiter` in trigger configuration. Use explicit STRING/DECIMAL types for identifiers and
-financial precision; see the [data processing contracts](../../design/data-contracts.md).
+Both data DAGs accept `schema` (Spark DDL, empty means infer), `inferSchema`, `multiLine`, `header`,
+`delimiter` and `encoding` (default `UTF-8`; name the file's charset, for example `GBK`) in trigger
+configuration. A file that is not valid text in its encoding fails the conversion instead of being
+converted with damaged characters. Use explicit STRING/DECIMAL types for identifiers and financial
+precision; see the [data processing contracts](../../design/data-contracts.md).
 
 The local CSV/Parquet handoff requires shared storage across task instances. The supplied Swarm
 configuration pins workers to `DATACRAFT_DATA_NODE` while using local volumes. Configure and verify

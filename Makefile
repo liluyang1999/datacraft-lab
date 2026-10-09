@@ -4,7 +4,7 @@ MVN ?= ./mvnw
 PYTHON ?= python3
 PYRIGHT ?= npx --yes pyright@1.1.414 --warnings
 
-.PHONY: help build test verify format package images up down swarm dags test-scripts typecheck lint clean
+.PHONY: help build test verify checks format package images up down swarm dags test-scripts typecheck lint clean
 
 help: ## Show available targets
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN{FS=":.*?## "}{printf "  \033[36m%-14s\033[0m %s\n", $$1, $$2}'
@@ -17,6 +17,14 @@ test: ## Run unit tests
 
 verify: ## Full gate: format check + checkstyle + tests + package
 	$(MVN) -B -ntp verify
+
+checks: ## After `make verify`: the build job's checks of the reports and the jar (cicd/build)
+	$(PYTHON) -B cicd/build/check_test_counts.py .
+	bash cicd/build/check-spark-suite.sh
+	bash cicd/build/smoke-cli-jar.sh
+	bash cicd/build/check-jar-contents.sh
+	bash cicd/build/check-cli-exit-codes.sh
+	bash cicd/build/check-image-build.sh
 
 format: ## Apply Spotless formatting to all sources
 	$(MVN) -B -ntp spotless:apply

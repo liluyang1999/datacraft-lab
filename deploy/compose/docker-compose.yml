@@ -146,8 +146,9 @@ services:
       postgres:
         condition: service_healthy
 
-  # The JVM online engine API (independent of Airflow; handy for synchronous job runs). It has no
-  # authentication, so it is published on loopback only (deployment_env.py check enforces this).
+  # The JVM online engine API (independent of Airflow; handy for synchronous job runs). Every /jobs
+  # request must carry the bearer token from .env. The API has no TLS, so it is published on
+  # loopback only (deployment_env.py check enforces both).
   datacraft-api:
     image: datacraft/jvm:latest
     pull_policy: never
@@ -158,6 +159,7 @@ services:
     environment:
       # Small-file jobs may only read paths under this root.
       DATACRAFT_DATA_ROOT: /opt/datacraft/data
+      DATACRAFT_API_TOKEN: ${DATACRAFT_API_TOKEN:?Set DATACRAFT_API_TOKEN in .env}
     volumes:
       # Read-only: Airflow tasks write the shared data, the API only reads it.
       - datacraft-data:/opt/datacraft/data:ro

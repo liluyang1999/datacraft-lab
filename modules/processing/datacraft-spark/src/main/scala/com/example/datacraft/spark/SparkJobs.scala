@@ -23,10 +23,11 @@ final class SparkVersionJob extends AbstractSparkDataJob {
 
 /**
  * Converts a CSV dataset to Parquet. Parameters: input, output, mode, header, delimiter, schema,
- * inferSchema, multiLine, escape (contract: design/data-contracts.md). The input must be a literal
- * file or directory path, because glob matches cannot be overlap-checked. When `dataRoot` is set,
- * by default from the `DATACRAFT_DATA_ROOT` environment variable, input and output must lie
- * strictly beneath it.
+ * inferSchema, multiLine, escape, encoding (contract: design/data-contracts.md). The input must be
+ * a literal file or directory path, because glob matches cannot be overlap-checked. When `dataRoot`
+ * is set, by default from the `DATACRAFT_DATA_ROOT` environment variable, input and output must lie
+ * strictly beneath it. Input that is not valid text in its encoding fails before anything is
+ * written.
  */
 final class CsvToParquetJob(dataRoot: Option[String] = DataRoot.fromEnvironment())
     extends AbstractSparkDataJob {
@@ -59,13 +60,18 @@ final class CsvToParquetJob(dataRoot: Option[String] = DataRoot.fromEnvironment(
       !(outputExists && Set("error", "errorifexists").contains(mode)),
       s"Output already exists: $output"
     )
+    val source = DataFrames.requireDataFiles(
+      DataFrames.read(spark, "csv", input, readOptions, CsvReadOptions.schema(parameters)),
+      ParameterKeys.INPUT
+    )
+    DataFrames.requireDecodable(
+      spark,
+      input,
+      CsvReadOptions.charset(parameters),
+      ParameterKeys.INPUT
+    )
     // Materialize and validate every column before overwrite; count and write share this snapshot.
-    val dataFrame = DataFrames
-      .requireDataFiles(
-        DataFrames.read(spark, "csv", input, readOptions, CsvReadOptions.schema(parameters)),
-        ParameterKeys.INPUT
-      )
-      .persist(StorageLevel.MEMORY_AND_DISK)
+    val dataFrame = source.persist(StorageLevel.MEMORY_AND_DISK)
     try {
       val rows = dataFrame.count()
       DataFrames.write(dataFrame, "parquet", output, mode)
@@ -109,10 +115,10 @@ final class CsvToParquetJob(dataRoot: Option[String] = DataRoot.fromEnvironment(
 
 /**
  * Counts rows in a dataset. Parameters: input, inputFormat (default parquet), optional expectedRows
- * (fails on mismatch), schema, and for inputFormat=csv the shared CSV options (contract:
- * design/data-contracts.md). CSV and JSON are read in FAILFAST mode and counted over complete
- * records; other formats use Spark's reader defaults. An input without any data file fails rather
- * than counting zero rows.
+ * (fails on mismatch), schema, and for inputFormat=csv the shared CSV options, encoding included
+ * (contract: design/data-contracts.md). CSV and JSON are read in FAILFAST mode and counted over
+ * complete records; other formats use Spark's reader defaults. An input without any data file fails
+ * rather than counting zero rows, and so does CSV that is not valid text in its encoding.
  */
 final class RowCountJob extends AbstractSparkDataJob {
 
@@ -133,6 +139,13 @@ final class RowCountJob extends AbstractSparkDataJob {
       DataFrames.read(spark, format, input, options, CsvReadOptions.schema(parameters)),
       ParameterKeys.INPUT
     )
+    if (format.equalsIgnoreCase("csv"))
+      DataFrames.requireDecodable(
+        spark,
+        input,
+        CsvReadOptions.charset(parameters),
+        ParameterKeys.INPUT
+      )
     // count() can prune every column and bypass FAILFAST validation. Read complete rows here.
     val rows =
       if (RowCountJob.CompleteRecordFormats.contains(format.toLowerCase(java.util.Locale.ROOT)))

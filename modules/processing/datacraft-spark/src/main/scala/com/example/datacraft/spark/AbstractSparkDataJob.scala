@@ -99,6 +99,7 @@ private object AbstractSparkDataJob {
     ParameterKeys.INFER_SCHEMA,
     ParameterKeys.MULTI_LINE,
     ParameterKeys.CSV_ESCAPE,
+    ParameterKeys.ENCODING,
     ParameterKeys.EXPECTED_ROWS,
     ParameterKeys.SPARK_MASTER,
     ParameterKeys.SPARK_APP_NAME,

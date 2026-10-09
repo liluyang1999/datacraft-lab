@@ -1,0 +1,40 @@
+name: Advisories
+
+# Every dependency and action is pinned, so a pin that becomes vulnerable stays in place until
+# someone notices. This workflow asks OSV about each pinned version once a week, and whenever a
+# file that pins something changes; a new advisory shows up as a failed run. Nothing here opens
+# pull requests or commits.
+on:
+  schedule:
+    # Mondays, off the hour: scheduled runs queue longest at the top of an hour.
+    - cron: "17 3 * * 1"
+  push:
+    branches: [main]
+    paths:
+      - pom.xml
+      - Makefile
+      - .github/workflows/**
+      - cicd/airflow/**
+      - cicd/lint/install-shellcheck.sh
+      - cicd/security/**
+      - cicd/step.py
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# As in ci.yml: a failed step leaves an annotation that names its cause.
+defaults:
+  run:
+    shell: python3 -B cicd/step.py bash -e {0}
+
+jobs:
+  advisories:
+    name: Known advisories for pinned versions
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Ask OSV about every pinned dependency and action
+        run: python3 -B cicd/security/check_advisories.py

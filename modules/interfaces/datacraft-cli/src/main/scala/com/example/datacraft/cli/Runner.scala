@@ -31,8 +31,9 @@ import scala.util.Try
  *
  * Exit codes: `0` success; `1` the job failed, its `--result-file` could not be written (the result
  * is still printed), or `serve-api` could not open its socket; `2` invalid usage, i.e. a parse
- * error (including job options given to a control command), an unknown command or job, or an
- * unreadable or malformed `--config` file.
+ * error (including job options given to a control command), an unknown command or job, an
+ * unreadable or malformed `--config` file, or a `serve-api` that would listen off loopback without
+ * a token and a data root.
  */
 object Runner {
 
@@ -41,6 +42,12 @@ object Runner {
 
   /** Command names handled by the CLI itself; no job may use them. */
   private[cli] val ControlCommands: Set[String] = Set(ListJobs, ServeApi)
+
+  /** Environment variable holding the bearer token `serve-api` requires of its callers. */
+  private[cli] val ApiTokenVariable = "DATACRAFT_API_TOKEN"
+
+  /** Environment variable that confines the file jobs to one directory. */
+  private[cli] val DataRootVariable = "DATACRAFT_DATA_ROOT"
 
   def main(args: Array[String]): Unit = {
     val code = CliParser.parse(args.toIndexedSeq).fold(2)(run)
@@ -61,12 +68,12 @@ object Runner {
         catalog.jobs().forEach((name, job) => println(s"$name\t${job.description()}"))
         0
       case `ServeApi` =>
-        unconfinedNetworkApi(args.host, environment) match {
-          case Some(message) =>
+        serverConfig(args, environment) match {
+          case Left(message) =>
             Console.err.println(message)
             2
-          case None =>
-            listen(args, catalog) match {
+          case Right(config) =>
+            listen(config, catalog) match {
               case Left(message) =>
                 Console.err.println(message)
                 1
@@ -90,30 +97,57 @@ object Runner {
     }
 
   /**
-   * The API has no authentication and serves file jobs, so off loopback it must be confined to
-   * `DATACRAFT_DATA_ROOT`; returns the refusal message when it would not be.
+   * The server configuration of `serve-api`, or the reason it must not start (exit 2).
+   *
+   * `DATACRAFT_API_TOKEN`, trimmed, becomes the bearer token every `/jobs` request must present; an
+   * unset or blank variable leaves the API open, which is allowed on loopback only. Off loopback
+   * the API needs the token, because anyone who reaches the port could otherwise run jobs, and
+   * `DATACRAFT_DATA_ROOT`, because its file jobs read the paths a caller names.
    */
-  private[cli] def unconfinedNetworkApi(
-      host: String,
+  private[cli] def serverConfig(
+      args: CommandLineArgs,
       environment: collection.Map[String, String]
-  ): Option[String] = {
-    val confined = environment.get("DATACRAFT_DATA_ROOT").exists(_.trim.nonEmpty)
-    val loopback = Try(InetAddress.getByName(host).isLoopbackAddress).getOrElse(false)
-    Option.when(!loopback && !confined)(
-      s"serve-api refuses --host $host without DATACRAFT_DATA_ROOT: the API is unauthenticated " +
-        "and its file jobs could read any path. Bind 127.0.0.1 or set DATACRAFT_DATA_ROOT."
-    )
+  ): Either[String, EngineHttpServerConfig] = {
+    def configured(name: String): Option[String] =
+      environment.get(name).map(_.trim).filter(_.nonEmpty)
+    val token    = configured(ApiTokenVariable)
+    val loopback = Try(InetAddress.getByName(args.host).isLoopbackAddress).getOrElse(false)
+    val missing  = Seq(ApiTokenVariable -> token, DataRootVariable -> configured(DataRootVariable))
+      .collect { case (name, None) => name }
+    val open = EngineHttpServerConfig
+      .of(args.host, args.port)
+      .withMaxConcurrentRuns(args.maxConcurrentRuns)
+    if (!loopback && missing.nonEmpty)
+      Left(
+        s"serve-api refuses --host ${args.host} without ${missing.mkString(" and ")}: off " +
+          "loopback, callers must present a token and file jobs must be confined to a data " +
+          s"root. Bind 127.0.0.1 or set ${if (missing.sizeIs == 1) "it" else "them"}."
+      )
+    else
+      token.fold[Either[String, EngineHttpServerConfig]](Right(open)) { value =>
+        // The rule comes from the configuration; the message never repeats the value.
+        try Right(open.withApiToken(value))
+        catch {
+          case e: IllegalArgumentException => Left(s"Invalid $ApiTokenVariable: ${e.getMessage}")
+        }
+      }
   }
 
-  def startApi(args: CommandLineArgs, catalog: JobCatalog = registry()): EngineHttpServer =
-    EngineHttpServer.start(EngineHttpServerConfig.of(args.host, args.port), catalog)
+  def startApi(
+      config: EngineHttpServerConfig,
+      catalog: JobCatalog = registry()
+  ): EngineHttpServer =
+    EngineHttpServer.start(config, catalog)
 
   /** Starts the API; a port in use or a host that cannot be bound becomes a one-line error. */
-  private def listen(args: CommandLineArgs, catalog: JobCatalog): Either[String, EngineHttpServer] =
-    try Right(startApi(args, catalog))
+  private def listen(
+      config: EngineHttpServerConfig,
+      catalog: JobCatalog
+  ): Either[String, EngineHttpServer] =
+    try Right(startApi(config, catalog))
     catch {
       case e: IOException =>
-        Left(s"serve-api cannot listen on ${args.host}:${args.port}: $e")
+        Left(s"serve-api cannot listen on ${config.host}:${config.port}: $e")
     }
 
   /** Builds the full catalog: built-in core jobs, the plain-JVM data jobs and all Spark jobs. */

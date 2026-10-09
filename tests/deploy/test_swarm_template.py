@@ -7,6 +7,7 @@ import unittest
 DEPLOY = Path(__file__).resolve().parents[2] / "deploy"
 DATA_NODE = 'constraints: ["node.hostname == ${DATACRAFT_DATA_NODE:?Set the persistent data hostname}"]'
 HEALTHCHECKED = ("airflow-apiserver", "airflow-scheduler", "airflow-dag-processor", "airflow-triggerer")
+API_TOKEN = "DATACRAFT_API_TOKEN: ${DATACRAFT_API_TOKEN:?Set DATACRAFT_API_TOKEN in .env}"
 
 
 def children(text, indent):
@@ -83,7 +84,8 @@ class SwarmTemplateTests(unittest.TestCase):
         self.assertIn("- datacraft-data:/opt/datacraft/data:ro", api)
         self.assertIn("DATACRAFT_DATA_ROOT: /opt/datacraft/data", api)
         self.assertIn(DATA_NODE, api)
-        self.assertNotIn("ports:", api)  # overlay-only: the API has no authentication
+        self.assertNotIn("ports:", api)  # overlay-only: the API has no TLS
+        self.assertIn(API_TOKEN, api)
         self.assertIn("DATACRAFT_DATA_ROOT: /opt/datacraft/data", self.common)
 
 
@@ -108,6 +110,9 @@ class ComposeTemplateTests(unittest.TestCase):
         self.assertEqual(['      - "127.0.0.1:${DATACRAFT_API_PORT:-8088}:8080"'], api["ports"].splitlines()[1:])
         self.assertIn("- datacraft-data:/opt/datacraft/data:ro", api["volumes"])
         self.assertIn("DATACRAFT_DATA_ROOT: /opt/datacraft/data", api["environment"])
+        self.assertIn(API_TOKEN, api["environment"])
+        # The API is given its token alone, not .env with the Airflow and database secrets.
+        self.assertNotIn("env_file", self.services["datacraft-api"])
 
 
 if __name__ == "__main__":

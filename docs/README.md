@@ -9,9 +9,10 @@ whether it is started from the command line, through the JSON HTTP API, or by an
 
 - **Processing**: Apache Spark 4.2.0 jobs (`spark-version`, `csv-to-parquet`, `row-count`) for heavy
   work, launched with `spark-submit`, and plain-JVM jobs (`csv-profile`, `file-checksum`) for small
-  files, which need no Spark.
+  files, which need no Spark. CSV input is read in the encoding it names and fails when its bytes
+  are not valid in it.
 - **One artifact**: the shaded `datacraft-cli.jar` runs jobs and also serves the HTTP API
-  (`serve-api`).
+  (`serve-api`), which requires a bearer token wherever it listens off loopback.
 - **Deployment**: Docker Compose for a single host (Airflow LocalExecutor) and a Docker Swarm stack
   template (CeleryExecutor) that pins every service to one node, `DATACRAFT_DATA_NODE`, because its
   volumes are node-local.
@@ -30,8 +31,9 @@ datacraft-lab/
 ├── .editorconfig, .gitattributes, .gitignore, .dockerignore, .scalafmt.conf   tool settings
 ├── pyrightconfig.json               Python type checking
 ├── config/checkstyle/checkstyle.xml Checkstyle rules
-├── .github/workflows/ci.yml         CI workflow: triggers, runners and job order only
-├── cicd/                            the scripts the CI jobs run: build, airflow, lint, stacks, images
+├── .github/workflows/               ci.yml (triggers, runners and job order only), advisories.yml
+├── cicd/                            the scripts the CI jobs run: build, airflow, lint, stacks, images,
+│                                    security, and step.py, the shell of every step
 ├── modules/                         JVM source modules, grouped by responsibility
 │   ├── core/          datacraft-common, datacraft-config, datacraft-engine
 │   ├── io/            datacraft-io
@@ -45,7 +47,7 @@ datacraft-lab/
     ├── jvm/<artifactId>/{java,scala}   JVM tests, compiled and run by that module's build
     ├── jvm/resources/                  shared JVM test resources (logging configuration)
     ├── orchestration/                  Airflow DAG contract tests (need Airflow)
-    ├── smoke/                          Airflow runtime, container and Compose smoke tests
+    ├── smoke/                          the Airflow runtime smoke test
     ├── deploy/                         deployment script and template tests
     ├── ci/                             tests of the cicd/ scripts and the workflow structure
     └── docs/                           documentation consistency and cost calculator tests
@@ -73,7 +75,7 @@ the build when the module depends on a project module outside this list. Every m
 
 ## Quick start
 
-You need JDK 25.0.4.1 or newer, which the build enforces; the Maven Wrapper downloads Maven 3.9.16
+You need JDK 25.0.4.1 or newer, which the build enforces; the Maven Wrapper downloads Maven 3.10.0
 on first use. The [development guide](guides/development.md) lists every prerequisite.
 
 Run the full gate, then run jobs from the shaded jar:
@@ -100,7 +102,8 @@ bash deploy/scripts/compose-up.sh               # Postgres, Airflow and the engi
 ```
 
 Compose publishes the engine API on `127.0.0.1` and the Airflow UI on `AIRFLOW_WEB_BIND` (default
-`127.0.0.1`); reach them through SSH port forwarding. The deployment tutorial, which also covers
+`127.0.0.1`); reach them through SSH port forwarding. Requests to the engine API's `/jobs` carry
+`Authorization: Bearer <DATACRAFT_API_TOKEN from .env>`. The deployment tutorial, which also covers
 Swarm, is in Chinese: [guides/deployment.md](guides/deployment.md).
 
 ## Documentation map

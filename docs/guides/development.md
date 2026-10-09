@@ -13,12 +13,14 @@ is covered in [the usage guide](usage.md); the reasoning behind the build rules 
   does not find it.
 - **Maven, through the wrapper.** `./mvnw` (Linux, macOS, WSL) and `mvnw.cmd` (Windows; it runs its
   logic in PowerShell) are Maven Wrapper 3.3.4 scripts; no wrapper jar is committed. On first use
-  they download Maven 3.9.16 into `~/.m2/wrapper/dists` and verify it against the SHA-256 pinned in
+  they download Maven 3.10.0 into `~/.m2/wrapper/dists` and verify it against the SHA-256 pinned in
   `.mvn/wrapper/maven-wrapper.properties`; an existing download there is reused without a new check.
   The Unix script needs `unzip` and `sha256sum` or `shasum`, and downloads with `wget` or `curl`,
   falling back to a small Java program. A Maven 3.9 or newer on `PATH` also works
   (`make MVN=mvn ...`). `.mvn/jvm.config` passes `--enable-native-access=ALL-UNNAMED` and
-  `--sun-misc-unsafe-memory-access=allow` to the JVM that runs Maven.
+  `--sun-misc-unsafe-memory-access=allow` to the JVM that runs Maven, and `.mvn/maven.config` tells
+  Maven 3.10 not to ask other repositories for prefix files, which would warn whenever one of them
+  is unreachable.
 - **Docker Engine with Compose v2**, only for building images, deploying, and the container smoke
   tests.
 - **Python 3.12 or newer.** CI runs the Python suites and Airflow on 3.13, the Python of the
@@ -68,6 +70,7 @@ The Makefile wraps the common commands:
 | `make build` | `$(MVN) -B -ntp compile` |
 | `make test` | `$(MVN) -B -ntp test` |
 | `make verify` | `$(MVN) -B -ntp verify` |
+| `make checks` | After `make verify`: the checks CI's `build` job runs on the reports and the jar, namely the test-count floors, the Spark suite, the CLI jar, its contents and exit codes, and the builder image's Maven command (`cicd/build`; needs Bash and `unzip`, no Docker) |
 | `make format` | `$(MVN) -B -ntp spotless:apply` |
 | `make package` | `$(MVN) -B -ntp -pl :datacraft-cli -am package -DskipTests` |
 | `make clean` | `$(MVN) -B -ntp clean` |
@@ -209,9 +212,9 @@ steps of the `containers` job and live with the pipeline scripts in `cicd/images
 
 | Script | Needs | What it proves | CI job |
 | --- | --- | --- | --- |
-| `tests/smoke/airflow_runtime_smoke.py --jar <jar>` | The Airflow environment plus `pyspark==4.2.0`, Java 25, Bash | Runs the three DAGs for real against the packaged CLI, local Spark and a temporary local SFTP server; all state lives in a temporary directory | `dags`, and inside the Airflow image in `smoke-images.sh` |
-| `cicd/images/smoke-images.sh` | Docker | Builds the images; checks that the JRE is at least 25.0.4.1, the API image (health, non-root user, read-only jar, a Spark job answering 500 FAILED), the Airflow image's dependency and security floors (`cicd/airflow/check_security_floor.py`, run inside the image), and the shared data volume's permissions; then runs the Airflow smoke test inside the Airflow image | `containers` |
-| `cicd/images/smoke-compose.sh` | Docker, the images, `CI=true` | Starts the Compose stack with fresh secrets, waits for all three image-baked DAGs to be registered, runs the engine DAG through the scheduler, and restores a metadata backup into a separate database; then removes the stack and its volumes. When it fails it prints the task logs first | `containers` |
+| `tests/smoke/airflow_runtime_smoke.py --jar <jar>` | The Airflow environment plus `pyspark==4.2.0`, Java 25, Bash | Runs the three DAGs for real against the packaged CLI, local Spark and a temporary local SFTP server, including a GBK file converted with `encoding=GBK`; all state lives in a temporary directory | `dags`, and inside the Airflow image in `smoke-images.sh` |
+| `cicd/images/smoke-images.sh` | Docker | Builds the images; checks that the JRE is at least 25.0.4.1, the API image (no start without a token, health, 401 without the token, non-root user, read-only jar, a Spark job answering 500 FAILED), the Airflow image's dependency and security floors (`cicd/airflow/check_security_floor.py`, run inside the image), and the shared data volume's permissions; then runs the Airflow smoke test inside the Airflow image | `containers` |
+| `cicd/images/smoke-compose.sh` | Docker, the images, `CI=true` | Starts the Compose stack with fresh secrets, checks the admin login and that the generated API token opens `datacraft-api`, waits for all three image-baked DAGs to be registered, runs the engine DAG through the scheduler, and restores a metadata backup into a separate database; then removes the stack and its volumes. When it fails it prints the task logs first | `containers` |
 
 Both `cicd/images` scripts are meant for disposable CI runners: the first creates and removes the
 canary files `.env` and `backups/ci-probe.dump` and refuses to run when they exist; the second
@@ -248,15 +251,39 @@ What goes where: `cicd/` holds what a pipeline job runs, `tests/` holds the suit
 or a developer runs (including the tests of the `cicd/` scripts, in `tests/ci`), and
 `deploy/scripts/` holds what an operator runs on the host.
 
+Every `run:` step goes through `cicd/step.py`, which the workflow sets as its default shell
+(`python3 -B cicd/step.py bash -e {0}`). The step runs unchanged; when it fails on a runner, the
+script adds an error annotation with the step's command, the first lines that name a failure and
+the last 30 lines of output. A script that tears a failed stack down reports its state first with
+`diagnose TITLE COMMAND...` from `cicd/lib.sh`; each of the last eight such groups becomes an
+annotation of its own (for example "Compose: log of airflow-scheduler"). A job log needs access to
+the repository, but annotations are public, so the reason for a failure and the evidence of a
+passing run can be read with plain `curl`:
+
+```bash
+api=https://api.github.com/repos/liluyang1999/datacraft-lab
+curl -s "$api/actions/runs?per_page=5"                # the latest runs and their conclusions
+curl -s "$api/actions/runs/<run id>/jobs"             # the jobs of one run, with their ids
+curl -s "$api/check-runs/<job id>/annotations"        # what failed, or what a passing job recorded
+```
+
+A passing run records notices there too: the number of tests each module executed, the Java
+runtime of the images and what the stack check verified. Because the script comes from the
+checkout, the checkout must be the first step of every job, and no job or step may set its own
+`shell`; `tests/ci/test_workflow.py` checks both.
+
 ```text
 cicd/
-├── lib.sh      shared helpers: REPO_ROOT, CLI_JAR, fail, scratch_dir, python_command
+├── step.py     the shell of every run step: on failure, the decisive output as an annotation
+├── lib.sh      shared helpers: REPO_ROOT, CLI_JAR, fail, notice, diagnose, scratch_dir,
+│               python_command
 ├── build/      build job: wrapper checksum, test-count floors, Spark suite, CLI jar checks,
 │               the builder image's Maven command in the Docker build context
 ├── airflow/    dags job: constrained Airflow install and the security floor
 ├── lint/       scripts job: the pinned ShellCheck, shell syntax and ShellCheck, pinned actions
 ├── stacks/     compose job: the Compose file and the Swarm stack
-└── images/     containers job: image build and smoke test, Compose stack smoke test
+├── images/     containers job: image build and smoke test, Compose stack smoke test
+└── security/   advisories workflow: known advisories for every pinned version
 ```
 
 | Job | What it runs |
@@ -264,7 +291,7 @@ cicd/
 | `build` | `cicd/build/check-maven-wrapper.sh` (the wrapper refuses a Maven download with the wrong checksum); `./mvnw -B -ntp verify` on JDK 25; `cicd/build/check_test_counts.py` (test-count floors); `cicd/build/check-spark-suite.sh` (`SparkPipelineSpec` ran with no canceled tests); `cicd/build/smoke-cli-jar.sh` (`list-jobs`, `echo`, `noop`, `csv-profile`, `file-checksum`, and a failing row gate that must exit `1`); `cicd/build/check-jar-contents.sh` (Multi-Release manifest, no `module-info.class`, JSch's modern algorithms through `cicd/build/JschAlgorithmsProbe.java`, the Jackson version in `jackson.version`); `cicd/build/check-cli-exit-codes.sh` (exit codes `1` and `2`); `cicd/build/check-image-build.sh` (the Maven command of `Dockerfile.build`, run in a copy of the Docker build context that `cicd/build/docker_context.py` computes from `.dockerignore`). It then shares the verified jar with `dags` |
 | `dags` | After `build`: Python 3.13 and JDK 25; `cicd/airflow/install-airflow.sh` (Airflow 3.3.2 and its providers under the official constraints for the running Python, then `pyspark==4.2.0`); `cicd/airflow/check_security_floor.py` (Airflow 3.3.2 and FAB provider 3.9.0); `tests/orchestration`; `tests/smoke/airflow_runtime_smoke.py` with the verified jar |
 | `scripts` | `cicd/lint/check-actions-pinned.sh` (every `uses:` is `owner/repo@<full commit SHA> # vX.Y.Z` or a local action, on one line, and none appears in a comment); `cicd/lint/install-shellcheck.sh` (ShellCheck 0.11.0); `cicd/lint/check-shell-scripts.sh` (`bash -n` and ShellCheck over every shell script git knows; every finding fails, sourced files are followed); the `tests/deploy`, `tests/ci` and `tests/docs` suites on Python 3.13; `node --test tests/docs/cloud-costs.test.cjs` on Node.js 24; `npx --yes pyright@1.1.414 --warnings` |
-| `compose` | `cicd/stacks/check-stack-files.sh`: `docker compose config` and `docker stack config` with test-only secrets, and that each missing secret is rejected |
+| `compose` | `cicd/stacks/check-stack-files.sh`: `docker compose config` and `docker stack config` with test-only secrets, and that each missing secret, the API token included, is rejected |
 | `containers` | After `build`, `scripts` and `compose`: `cicd/images/smoke-images.sh`, then `cicd/images/smoke-compose.sh` |
 
 The `cicd/build` scripts run after `./mvnw verify` on Linux, WSL or Git Bash (they use GNU tools
@@ -278,6 +305,18 @@ rejects the checksum. `cicd/airflow/install-airflow.sh` installs into the curren
 environment, so run it inside a virtual environment. `cicd/stacks/check-stack-files.sh` needs
 Docker, and refuses to run while `deploy/compose/.env` exists because that file may hold real
 secrets.
+
+### Advisory check
+
+A second workflow, `.github/workflows/advisories.yml`, runs
+`python3 -B cicd/security/check_advisories.py` every Monday, on demand, and on a push that changes a
+file which pins a version. The script collects every pin (the dependencies the root `pom.xml`
+manages, Airflow, pyspark, the FAB provider floor, shellcheck-py, pyright and the actions of the
+workflows) and asks [OSV](https://osv.dev) about each. It exits `1` and prints one `::error::` line
+per affected pin when a pinned version has an advisory, and `2` when OSV could not be asked, so a
+dead check never looks like a pass. `--list` prints the pins without asking anything. Transitive
+dependencies and the base images are outside its reach. Nothing opens pull requests: a failed run
+is the signal, and raising the pin is a normal commit.
 
 ### Test-count floors
 
@@ -298,9 +337,9 @@ pom's `<modules>`.
 | `datacraft-io` | 57 | 59 |
 | `datacraft-engine` | 32 | 32 |
 | `datacraft-jobs` | 70 | 68 |
-| `datacraft-spark` | 52 | 44 |
-| `datacraft-api` | 17 | 17 |
-| `datacraft-cli` | 28 | 28 |
+| `datacraft-spark` | 56 | 47 |
+| `datacraft-api` | 27 | 27 |
+| `datacraft-cli` | 31 | 31 |
 
 ## Zero-warning policy
 
@@ -332,6 +371,8 @@ The reasons and the rest of the build rules are in
   `-Dsurefire.failIfNoSpecifiedTests=false -Dsurefire.failIfNoTests=false`.
 - **The Spotless check fails**: run `./mvnw -B -ntp spotless:apply` (or `make format`) and review
   the changes.
+- **A CI job failed and its log is not accessible**: read the job's annotations (see [CI](#ci));
+  the error annotation of the failed step carries the lines that name the failure.
 - **`check_test_counts.py` reports a module BELOW FLOOR**: tests that used to run did not. The
   first output line names the platform whose floors were used; pass `--platform` when the reports
   come from another machine.

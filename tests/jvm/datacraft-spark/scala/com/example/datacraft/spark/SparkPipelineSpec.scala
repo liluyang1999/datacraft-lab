@@ -12,9 +12,11 @@ import com.example.datacraft.engine.{
 import com.example.datacraft.spark.FileFixtures.deleteRecursively
 import org.scalatest.funsuite.AnyFunSuite
 
+import java.io.ByteArrayOutputStream
 import java.nio.channels.Selector
 import java.nio.charset.StandardCharsets
 import java.nio.file.{Files, Path}
+import java.util.zip.GZIPOutputStream
 import scala.jdk.CollectionConverters._
 
 /**
@@ -33,6 +35,28 @@ class SparkPipelineSpec extends AnyFunSuite {
 
   private val NoDataFiles =
     "requirement failed: input contains no data files (Spark skips names starting with _ or .)"
+
+  /** Two records whose second field holds a byte (0xE9, 0xEF) that is no UTF-8 sequence. */
+  private val Latin1Csv =
+    "id,name\n1,caf\u00e9\n2,na\u00efve\n".getBytes(StandardCharsets.ISO_8859_1)
+
+  /** One record whose second field is two GBK characters; the bytes are not valid UTF-8 either. */
+  private val GbkCsv = "id,name\n1,\u4e2d\u6587\n".getBytes("GBK")
+
+  /** The start of the message for `lines` undecodable lines; the name of the first file follows. */
+  private def notValid(charset: String, lines: Int): String =
+    s"requirement failed: input is not valid $charset: $lines line(s) cannot be decoded, " +
+      "the first in "
+
+  private val EncodingHint = "; set encoding to the charset the data was written in"
+
+  private def gzip(bytes: Array[Byte]): Array[Byte] = {
+    val buffer = new ByteArrayOutputStream()
+    val stream = new GZIPOutputStream(buffer)
+    try stream.write(bytes)
+    finally stream.close()
+    buffer.toByteArray
+  }
 
   /**
    * Spark's Netty transport cannot start without working NIO selectors. On Windows the selector
@@ -380,22 +404,136 @@ class SparkPipelineSpec extends AnyFunSuite {
     } finally deleteRecursively(workDir)
   }
 
-  test("the CSV reader replaces bytes that are not UTF-8 and stores a quoted CRLF as LF") {
+  test("row-count fails on CSV bytes that are not valid in the encoding and names the file") {
+    requireNioSelectors()
+    val workDir = Files.createTempDirectory("datacraft-spark-encoding")
+    try {
+      val engine                                                           = newEngine()
+      def count(input: Path, extra: (String, String)*): JobExecutionResult =
+        execute(
+          engine,
+          "row-count",
+          Map("input" -> input.toString, "inputFormat" -> "csv") ++ extra
+        )
+
+      val latin1 = Files.write(workDir.resolve("latin1.csv"), Latin1Csv)
+      for (asUtf8 <- Seq(count(latin1), count(latin1, "encoding" -> "UTF-8"))) {
+        assert(asUtf8.status() == JobStatus.FAILED, asUtf8.metrics())
+        assert(asUtf8.message().startsWith(notValid("UTF-8", 2)), asUtf8.message())
+        assert(asUtf8.message().endsWith("/latin1.csv" + EncodingHint), asUtf8.message())
+      }
+      val asLatin1 = count(latin1, "encoding" -> " iso-8859-1 ", "expectedRows" -> "2")
+      assert(asLatin1.status() == JobStatus.SUCCEEDED, asLatin1.message())
+
+      val gbk = Files.write(workDir.resolve("gbk.csv"), GbkCsv)
+      assert(count(gbk).message().startsWith(notValid("UTF-8", 1)), count(gbk).message())
+      // Both line readers decode: the multi-line parser and the per-line one.
+      for (multiLine <- Seq("true", "false")) {
+        val asGbk = count(gbk, "encoding" -> "GBK", "multiLine" -> multiLine, "expectedRows" -> "1")
+        assert(asGbk.status() == JobStatus.SUCCEEDED, asGbk.message())
+      }
+      // The first record is not GBK either: its line ends in half a character (0xE9).
+      assert(count(latin1, "encoding" -> "GBK").message().startsWith(notValid("GBK", 1)))
+
+      // A compressed file is checked on its text, as the CSV reader reads it.
+      val packed     = Files.write(workDir.resolve("packed.csv.gz"), gzip(Latin1Csv))
+      val packedUtf8 = Files.write(
+        workDir.resolve("utf8.csv.gz"),
+        gzip("id,name\n1,caf\u00e9\n".getBytes(StandardCharsets.UTF_8))
+      )
+      assert(count(packed).message().startsWith(notValid("UTF-8", 2)), count(packed).message())
+      assert(count(packed).message().endsWith("/packed.csv.gz" + EncodingHint))
+      val counted = count(packedUtf8, "expectedRows" -> "1")
+      assert(counted.status() == JobStatus.SUCCEEDED, counted.message())
+    } finally deleteRecursively(workDir)
+  }
+
+  test(
+    "csv-to-parquet converts a GBK file given its encoding and otherwise keeps the output",
+    PosixOnly
+  ) {
+    requireNioSelectors()
+    requireLocalHadoopWrites()
+    val workDir = Files.createTempDirectory("datacraft-spark-encoding-convert")
+    try {
+      val engine    = newEngine()
+      val input     = Files.write(workDir.resolve("gbk.csv"), GbkCsv)
+      val output    = workDir.resolve("names.parquet")
+      val converted = execute(
+        engine,
+        "csv-to-parquet",
+        Map("input" -> input.toString, "output" -> output.toString, "encoding" -> "GBK")
+      )
+      assert(converted.status() == JobStatus.SUCCEEDED, converted.message())
+      assert(converted.metrics().get("rows") == "1")
+
+      // Read as UTF-8, the same file must not replace the good output with damaged text.
+      val refused = execute(
+        engine,
+        "csv-to-parquet",
+        Map("input" -> input.toString, "output" -> output.toString)
+      )
+      assert(refused.status() == JobStatus.FAILED, refused.metrics())
+      assert(refused.message().startsWith(notValid("UTF-8", 1)), refused.message())
+      assert(refused.message().endsWith("/gbk.csv" + EncodingHint), refused.message())
+      SparkSessions.withSession(
+        SparkRuntimeConfig.local("inspect-encoding").copy(master = "local[1]")
+      ) { spark =>
+        val names = spark.read.parquet(output.toString).collect().map(_.getString(1)).toSeq
+        assert(names == Seq("\u4e2d\u6587"))
+      }
+
+      // In a directory every file is checked; the message counts all lines and names one file.
+      val batch = Files.createDirectory(workDir.resolve("batch"))
+      Files.writeString(batch.resolve("a-valid.csv"), "id,name\n1,ok\n")
+      Files.write(batch.resolve("b-latin1.csv"), Latin1Csv)
+      Files.write(batch.resolve("c-latin1.csv"), Latin1Csv)
+      val directory = execute(
+        engine,
+        "csv-to-parquet",
+        Map("input" -> batch.toString, "output" -> workDir.resolve("batch.parquet").toString)
+      )
+      assert(directory.status() == JobStatus.FAILED, directory.metrics())
+      assert(directory.message().startsWith(notValid("UTF-8", 4)), directory.message())
+      assert(directory.message().endsWith("/b-latin1.csv" + EncodingHint), directory.message())
+      assert(!Files.exists(workDir.resolve("batch.parquet")))
+    } finally deleteRecursively(workDir)
+  }
+
+  test("the CSV reader decodes with the given encoding and stores a quoted CRLF as LF") {
     requireNioSelectors()
     val workDir = Files.createTempDirectory("datacraft-spark-decoding")
     try {
-      // The documented limits of the conversion: neither input fails, and both lose bytes.
-      val latin1 = workDir.resolve("latin1.csv")
-      Files.write(latin1, "id,name\n1,caf\u00e9\n".getBytes(StandardCharsets.ISO_8859_1))
+      val latin1  = Files.write(workDir.resolve("latin1.csv"), Latin1Csv)
+      val gbk     = Files.write(workDir.resolve("gbk.csv"), GbkCsv)
       val crlf    = Files.writeString(workDir.resolve("crlf.csv"), "id,note\r\n1,\"a\r\nb\"\r\n")
-      val options = CsvReadOptions(Map.empty, inferSchema = false)
       val session = SparkSessions.create(
         SparkRuntimeConfig.local("csv-decoding").copy(master = "local[1]")
       )
       try {
-        def secondColumn(path: Path): String =
+        def secondColumn(path: Path, parameters: (String, String)*): String = {
+          val options = CsvReadOptions(parameters.toMap, inferSchema = false)
           DataFrames.read(session, "csv", path.toString, options).collect().head.getString(1)
+        }
+        assert(secondColumn(latin1, "encoding" -> "ISO-8859-1") == "caf\u00e9")
+        for (multiLine <- Seq("true", "false"))
+          assert(
+            secondColumn(gbk, "encoding" -> "GBK", "multiLine" -> multiLine) == "\u4e2d\u6587",
+            multiLine
+          )
+        // Spark's own reader never fails on such a byte, which is why the jobs check first.
         assert(secondColumn(latin1) == "caf\uFFFD")
+        val undecodable = intercept[IllegalArgumentException](
+          DataFrames.requireDecodable(session, latin1.toString, StandardCharsets.UTF_8, "input")
+        )
+        assert(undecodable.getMessage.startsWith(notValid("UTF-8", 2)), undecodable.getMessage)
+        DataFrames.requireDecodable(
+          session,
+          latin1.toString,
+          StandardCharsets.ISO_8859_1,
+          "input"
+        )
+        // A known limit of the conversion: with multiLine=true a quoted CRLF is stored as LF.
         assert(secondColumn(crlf) == "a\nb")
       } finally session.stop()
     } finally deleteRecursively(workDir)

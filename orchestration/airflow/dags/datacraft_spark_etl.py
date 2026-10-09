@@ -14,7 +14,7 @@ from datetime import datetime, timezone
 
 from airflow.sdk import DAG, Param, chain
 
-from datacraft_common import DEFAULT_ARGS, data_path_param, spark_task
+from datacraft_common import DEFAULT_ARGS, data_path_param, encoding_param, spark_task
 
 with DAG(
     dag_id="datacraft_spark_etl",
@@ -32,6 +32,7 @@ with DAG(
         "schema": Param("", type="string"),
         "inferSchema": Param("true", enum=["true", "false"]),
         "multiLine": Param("true", enum=["true", "false"]),
+        "encoding": encoding_param(),
     },
     tags=["datacraft", "spark", "etl"],
 ) as dag:
@@ -46,6 +47,7 @@ with DAG(
             "schema": "{{ params.schema }}",
             "inferSchema": "{{ params.inferSchema }}",
             "multiLine": "{{ params.multiLine }}",
+            "encoding": "{{ params.encoding }}",
         },
     )
     count = spark_task(

@@ -27,7 +27,7 @@ the single failure boundary.
 - Parameter validation belongs to the jobs, so every caller gets the same messages.
 - Job names are URL path segments and CLI commands: no `/`, and never `list-jobs` or `serve-api`.
 - HTTP runs are synchronous: a long Spark job holds its request, and a run still going 8 s after
-  shutdown starts is cut off.
+  shutdown starts is cut off. The number of runs in progress is bounded (decision 11).
 - `Lifecycle` travels with every request, but no job reads it yet.
 
 See [The unified job model](architecture.md#the-unified-job-model) and
@@ -106,7 +106,7 @@ deprecates Java 25 releases older than 25.0.3), and every image runs a Java 25 r
 
 **Consequences.**
 
-- Builders and runtimes need JDK 25: the builder image is `maven:3.9.16-eclipse-temurin-25`, the
+- Builders and runtimes need JDK 25: the builder image is `maven:3.10.0-eclipse-temurin-25`, the
   optional Spark image is the `java25` variant, and `cicd/images/smoke-images.sh` requires the
   images' JRE to be at least 25.0.4.1.
 - A JDK older than 25.0.4.1 fails the build instead of warning. The floor was a warning while the
@@ -121,7 +121,8 @@ deprecates Java 25 releases older than 25.0.3), and every image runs a Java 25 r
 
 ## 5. The unauthenticated API stays safe through binding, Origin check and data confinement
 
-**Status:** Accepted; revisit before any exposure beyond the host.
+**Status:** Superseded in part by decision 11 (2026-10-09): the API now requires a bearer token
+wherever it listens off loopback. The binding, `Origin` and confinement rules below still apply.
 
 **Context.** The HTTP API has no authentication, and its file jobs read paths given as
 parameters. Binding to loopback keeps other hosts out, but not a browser on the same machine: a
@@ -263,8 +264,8 @@ Platform-specific tests carry a `posix-only` or `windows-only` tag, and the OS-a
 
 - Modules contain only production code. The Docker build context excludes `tests/`, so the
   builder image skips test compilation.
-- No module reports skipped or canceled tests on either OS. Linux CI executes 276 of the 283 JVM
-  tests and a Windows build 268.
+- No module reports skipped or canceled tests on either OS. Linux CI executes 293 of the 300 JVM
+  tests and a Windows build 284.
 - The test-count floors exist per platform, so the floor check works on a Windows workstation as
   well as in CI on Linux.
 
@@ -349,3 +350,108 @@ but nothing under `deploy/` depends on `cicd/`, which the Docker build context e
 
 Details: [CI gates](build-and-quality.md#ci-gates) and the
 [development guide](../docs/guides/development.md#ci).
+
+## 11. The API requires a bearer token off loopback and bounds its concurrent runs
+
+**Status:** Accepted (2026-10-09). Supersedes the "no authentication" part of decision 5.
+
+**Context.** Decision 5 kept the API unauthenticated and relied on where it listens. That left one
+mistake away from open access: a port published on another address, a container attached to the
+Swarm overlay network, or a tunnel left open would let anyone run jobs and read files under the
+data root. The API also ran every request it was sent at once, each on its own virtual thread, so
+nothing bounded the work a caller could start.
+
+**Decision.**
+
+- `serve-api` reads a bearer token from `DATACRAFT_API_TOKEN`. With one, every request under
+  `/jobs` must carry `Authorization: Bearer <token>` and gets 401 otherwise, before anything else
+  about it is examined; `/health` stays open for health checks. The token is 32 to 512 characters
+  of the RFC 6750 token syntax; the server keeps and compares a SHA-256 digest, not the token.
+- Off loopback, `serve-api` refuses to start (exit 2) without both the token and
+  `DATACRAFT_DATA_ROOT`. The `datacraft/jvm` image listens on all interfaces, so it starts only
+  with a token; both stacks require `DATACRAFT_API_TOKEN` like every other secret,
+  `deployment_env.py init` generates it and `check` rejects a weak, placeholder or reused one.
+- On loopback without the variable the API stays open: local use of the jar needs no setup.
+- At most `--max-concurrent-runs` runs (default 4) are in progress. A further run request gets 503
+  with `Retry-After` at once instead of waiting; reads and rejected requests take no place.
+
+**Consequences.**
+
+- Reaching the port is no longer enough to run a job or list the catalog. **Breaking** for a
+  deployment created before this change: its `.env` needs a `DATACRAFT_API_TOKEN` (the stacks fail
+  interpolation without it, naming the variable), and callers must send the header.
+- The token is a shared secret over plain HTTP. It protects against a caller who can reach the
+  port, not against one who can read the traffic, so the API still stays on loopback or the
+  overlay network, and exposure beyond the host still needs a gateway that terminates TLS.
+- The Airflow containers read the same `.env` and can see the token. They already hold the
+  database and Airflow secrets and are trusted code.
+- Waiting runs are bounded: a Spark job waiting for the session or a `csv-profile` waiting for its
+  turn holds one of the places, so at most the limit minus one can queue behind a running job.
+- The token rule exists twice, in `EngineHttpServerConfig` and in `deployment_env.py`; a test in
+  `tests/deploy` fails when the two differ.
+
+See [HTTP status contract](data-contracts.md#http-status-contract).
+
+## 12. A pipeline failure must be diagnosable from public annotations
+
+**Status:** Accepted (2026-10-09). Extends decision 10.
+
+**Context.** The image and Compose steps run only in CI, because the workstation has no Docker, and
+a job log can be read only with access to the repository. The two failed runs of 2026-09-26 showed
+one annotation, "Process completed with exit code 1.", so the cause had to be reconstructed
+outside CI eleven days later. Annotations, unlike logs, are public
+(`GET /repos/{owner}/{repo}/check-runs/{job id}/annotations`).
+
+**Decision.** Every `run:` step goes through `cicd/step.py`, set once as the workflow's default
+shell (`python3 -B cicd/step.py bash -e {0}`). It runs the step unchanged and, when the step fails
+on a runner, adds an error annotation holding the step's command, the first lines that name a
+failure and the last 30 lines of output. A script that is about to remove a failed stack prints
+its state first through `diagnose` (the log of each service, the container states), and the
+wrapper repeats the last eight such groups as annotations of their own. `fail` escapes line breaks
+so a message stays one annotation, and `notice` records what a passing check established (the
+tests each module executed, the Java runtime of the images, the stack checks).
+
+**Consequences.**
+
+- The cause of a failed step, and the evidence of a passing run, can be read without credentials
+  through the API, and both are also listed on the run's summary page.
+- The wrapper is a file of the repository, so the checkout must be the first step of every job, and
+  a job or step that set its own `shell` would lose the annotations; `tests/ci/test_workflow.py`
+  fails on either.
+- The runner keeps 4096 characters of an annotation message and ten error annotations per step, so
+  the wrapper selects lines rather than copying the log; the full log is still the place for
+  everything else.
+- Annotations repeat log lines, so anything a step prints can be read by anyone. The only secrets
+  a step handles are the throw-away values the smoke tests generate for one run on a disposable
+  runner.
+
+Details: [CI gates](build-and-quality.md#ci-gates).
+
+## 13. Pinned versions are checked for advisories on a schedule, without a bot
+
+**Status:** Accepted (2026-10-09).
+
+**Context.** Every dependency, plugin, action and tool is pinned, which makes builds reproducible
+and means that nothing changes, or warns, when a pinned version becomes vulnerable. The usual
+remedy, an update bot, opens pull requests under its own name, and this repository keeps a single
+contributor. The gap has been listed among the residual risks of the evaluation report.
+
+**Decision.** `cicd/security/check_advisories.py` reads the pins from the files that hold them and
+asks OSV about each; `.github/workflows/advisories.yml` runs it every Monday, on demand and when a
+pinning file changes. An advisory fails the run (exit 1), and so does an OSV that cannot be asked
+(exit 2).
+
+**Consequences.**
+
+- A new advisory for a pinned version surfaces within a week as a failed run; GitHub notifies the
+  user who last changed the workflow's schedule, when their notification settings allow it. The
+  fix stays a deliberate commit.
+- The check covers what this repository pins directly. Spark's and Airflow's own dependency trees
+  and the base images are not covered: Spark 4.2.0 still bundles Jackson 2.21.2, for which
+  advisories exist, and only a Spark release can change that.
+- The check depends on a public service. When OSV is unreachable the run fails rather than passes,
+  so an outage costs a failed run, not a blind spot.
+- GitHub disables scheduled workflows in a repository without activity for 60 days; the push
+  trigger and a manual dispatch still work.
+
+Details: [Advisory check](build-and-quality.md#advisory-check).

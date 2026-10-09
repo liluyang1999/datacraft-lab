@@ -20,7 +20,8 @@ from datetime import datetime, timezone
 from airflow.providers.sftp.operators.sftp import SFTPOperator
 from airflow.sdk import DAG, Param, chain
 
-from datacraft_common import DEFAULT_ARGS, data_path_param, require_verified_sftp_host, spark_task
+from datacraft_common import (
+    DEFAULT_ARGS, data_path_param, encoding_param, require_verified_sftp_host, spark_task)
 
 with DAG(
     dag_id="datacraft_sftp_ingest",
@@ -39,6 +40,7 @@ with DAG(
         "schema": Param("", type="string"),
         "inferSchema": Param("true", enum=["true", "false"]),
         "multiLine": Param("true", enum=["true", "false"]),
+        "encoding": encoding_param(),
     },
     tags=["datacraft", "sftp", "ingest"],
 ) as dag:
@@ -59,7 +61,7 @@ with DAG(
             "input": "{{ params.local_path }}", "output": "{{ params.output }}",
             "header": "{{ params.header }}", "delimiter": "{{ params.delimiter }}",
             "schema": "{{ params.schema }}", "inferSchema": "{{ params.inferSchema }}",
-            "multiLine": "{{ params.multiLine }}",
+            "multiLine": "{{ params.multiLine }}", "encoding": "{{ params.encoding }}",
         },
     )
     count = spark_task(

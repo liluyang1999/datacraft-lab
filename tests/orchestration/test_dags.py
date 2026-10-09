@@ -273,6 +273,25 @@ class DagTests(unittest.TestCase):
             self.assertEqual(3, result.returncode)
             self.assertEqual([launcher], list(Path(work).iterdir()))
 
+    def test_csv_encoding_is_a_checked_param_that_reaches_the_conversion(self):
+        bag = DagBag(dag_folder=str(DAGS))
+        for name in ("datacraft_spark_etl", "datacraft_sftp_ingest"):
+            dag = bag.dags[name]
+            param = dag.params.get_param("encoding")
+            self.assertEqual("UTF-8", param.resolve())
+            for value in ("GBK", "ISO-8859-1", "Shift_JIS", "windows-1252", "x-MS950-HKSCS"):
+                with self.subTest(dag=name, value=value):
+                    self.assertEqual(value, param.resolve(value))
+            for value in ("", "bad name", "-GBK", "UTF-8\n", "GBK;x", "GBK x", "\u7f16\u7801"):
+                with self.subTest(dag=name, value=value), self.assertRaises(ParamValidationError):
+                    param.resolve(value)
+            task = dag.get_task("csv_to_parquet")
+            task.render_template_fields({"params": {**dict(dag.params), "encoding": "GBK"}})
+            self.assertIn("encoding=GBK", task.env.values())
+            # The count reads the Parquet output, which has no encoding.
+            count = dag.get_task("row_count")
+            self.assertFalse([value for value in count.env.values() if value.startswith("encoding=")])
+
     def test_validation_step_compares_conversion_metrics(self):
         bag = DagBag(dag_folder=str(DAGS))
         class TaskInstance:

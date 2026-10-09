@@ -46,9 +46,10 @@ bash deploy/scripts/build-images.sh
 bash deploy/scripts/compose-up.sh
 ```
 
-初始化会创建 `deploy/compose/.env`，为数据库、管理员、API、JWT 和 Fernet 分别生成独立随机值，
-使用仅所有者可读写的权限，不在终端打印密钥，不覆盖已有文件或符号链接。将文件安全备份，
-从中读取初始管理员密码。不要重新生成 Fernet 密钥，否则已有加密连接可能无法解密。
+初始化会创建 `deploy/compose/.env`，为数据库、管理员、Airflow API、JWT、Fernet 和 JVM API 令牌
+（`DATACRAFT_API_TOKEN`）分别生成独立随机值，使用仅所有者可读写的权限，不在终端打印密钥，不覆盖已有
+文件或符号链接。将文件安全备份，从中读取初始管理员密码与 JVM API 令牌。不要重新生成 Fernet 密钥，
+否则已有加密连接可能无法解密。
 留在仓库目录里的副本请放到 `backups/`，或命名为 `.env.<后缀>`（如 `.env.bak`）：这两类路径都被
 `.gitignore` 与 `.dockerignore` 排除，不会被提交，也不会进入镜像构建上下文。
 `AIRFLOW_UID` 保持 50000 即可（Linux 也是）：没有绑定挂载主机目录，不需要与主机用户一致。
@@ -56,10 +57,12 @@ bash deploy/scripts/compose-up.sh
 部署前会验证 Compose 最终生效配置（包括外部环境变量覆盖），拒绝占位符、空密钥、不一致的
 Airflow 密钥和不适合直接放入数据库 URI 的凭据。当前模板的 Postgres 用户名/库名使用简单标识符，
 数据库密码须为至少 32 位 URL 安全字符；自定义复杂密码必须先实现 URI 编码，不能直接拼入现有 URI。
-这些强度检查只在 `compose-up.sh` 与 `swarm-deploy.sh` 中运行。两个栈文件对 `POSTGRES_PASSWORD`、
-`AIRFLOW_FERNET_KEY`、`AIRFLOW_API_SECRET_KEY`、`AIRFLOW_JWT_SECRET` 使用 `${VAR:?...}`：任一值缺失
-或为空时，直接执行的 `docker compose` 或 `docker stack deploy` 在变量插值阶段即报错，不再回退到公开
-默认值；但直接执行不检查长度与格式。修改 `.env` 不会自动轮换已有数据库或管理员密码。
+JVM API 令牌须为 32 至 512 个字符（字母、数字与 `- . _ ~ + /`，可以 `=` 结尾），不能是占位符，也不能
+与其他密钥相同。这些强度检查只在 `compose-up.sh` 与 `swarm-deploy.sh` 中运行。两个栈文件对
+`POSTGRES_PASSWORD`、`AIRFLOW_FERNET_KEY`、`AIRFLOW_API_SECRET_KEY`、`AIRFLOW_JWT_SECRET`、
+`DATACRAFT_API_TOKEN` 使用 `${VAR:?...}`：任一值缺失或为空时，直接执行的 `docker compose` 或
+`docker stack deploy` 在变量插值阶段即报错，不再回退到公开默认值；但直接执行不检查长度与格式。
+修改 `.env` 不会自动轮换已有数据库或管理员密码；JVM API 令牌在重建 `datacraft-api` 容器后生效。
 
 启动脚本先检查 `.env`，再确认本机存在 `datacraft/airflow:latest` 与 `datacraft/jvm:latest`，缺少时
 提示先运行 `build-images.sh` 并退出。随后等待容器运行及已配置的健康检查通过，默认最长 300 秒；
@@ -89,15 +92,19 @@ PostgreSQL 18 数据卷挂在 `/var/lib/postgresql`，数据写入 `/var/lib/pos
 
 2026-09-25 一轮引入了不兼容变化（见 [CHANGELOG](../CHANGELOG.md) 的 Breaking）：必需密钥缺失即拒绝
 启动，DAG 改由镜像提供，`datacraft_sftp` 连接必须校验主机公钥，DAG 数据路径必须位于
-`DATACRAFT_DATA_ROOT` 内。从更早版本升级的已有部署不要直接套用新初始化文件，按顺序执行：
+`DATACRAFT_DATA_ROOT` 内。2026-10-09 一轮又增加了一项：JVM API 需要令牌，`.env` 里必须有
+`DATACRAFT_API_TOKEN`（可用 `openssl rand -hex 32` 生成），否则两个栈文件在插值阶段报错；调用 API 的
+脚本要加上 `Authorization: Bearer <令牌>` 请求头。从更早版本升级的已有部署不要直接套用新初始化文件，
+按顺序执行：
 
 1. 暂停 DAG 并等待运行中的任务结束。在 `git pull` 之前按第 5 节做 `pg_dump` 备份并另存 `.env`：
    缺少必需密钥时，新的 Compose 文件连 `exec`、`ps`、`down` 都无法解析。
 2. 需要回退能力时先保留当前镜像，例如 `docker tag datacraft/airflow:latest datacraft/airflow:pre-upgrade`，
    `datacraft/jvm` 同理；重建会覆盖 `latest`。回退需要旧版代码、旧镜像与升级前的数据库备份三者一致。
 3. `git pull` 后运行 `bash deploy/scripts/build-images.sh`。
-4. 检查 `.env`：四个必需密钥都要有值；`compose-up.sh` 还要求它们与 `AIRFLOW_ADMIN_PASSWORD` 通过上文的
-   强度检查：每个值至少 32 个字符、五个值互不相同，Fernet 密钥须是 32 字节的 URL 安全 base64 编码。
+4. 检查 `.env`：五个必需密钥（含 `DATACRAFT_API_TOKEN`）都要有值；`compose-up.sh` 还要求它们与
+   `AIRFLOW_ADMIN_PASSWORD` 通过上文的强度检查：每个值至少 32 个字符、六个值互不相同，Fernet 密钥须是
+   32 字节的 URL 安全 base64 编码。
    旧 Compose 曾回退到 `airflow`、空 Fernet 密钥或 `please-change-me`。新值可用
    `python3 deploy/scripts/deployment_env.py init backups/new.env` 生成到一个新文件（`backups/` 已在
    第 1 步创建），只复制需要替换的项，用完删除该文件。
@@ -137,34 +144,45 @@ Swarm 部署另需检查旧 `.env`：`swarm-deploy.sh` 拒绝空的或为 `lates
 
 ## 3. 访问与任务验收
 
-默认 Airflow 8080 与无认证的 JVM API 8088 都只绑定 `127.0.0.1`。`compose-up.sh` 与 `swarm-deploy.sh`
-对 Compose 生效配置执行的检查拒绝把 `datacraft-api` 发布到 `127.0.0.1`、`::1` 以外的地址，也拒绝它的
-非只读挂载（tmpfs 除外）。从自己的电脑建立 SSH 转发：
+默认 Airflow 8080 与 JVM API 8088 都只绑定 `127.0.0.1`。JVM API 要求令牌，但它是明文 HTTP，令牌在
+经过的网络上可被读到，所以仍然只发布在回环地址。`compose-up.sh` 与 `swarm-deploy.sh` 对 Compose
+生效配置执行的检查拒绝把 `datacraft-api` 发布到 `127.0.0.1`、`::1` 以外的地址，拒绝它的非只读挂载
+（tmpfs 除外），也拒绝缺失、过弱或与其他密钥相同的 `DATACRAFT_API_TOKEN`。从自己的电脑建立 SSH 转发：
 
 ```bash
 ssh -L 8080:127.0.0.1:8080 -L 8088:127.0.0.1:8088 your-user@your-vm
 ```
 
 随后打开 `http://localhost:8080`，用 `.env` 的管理员账号登录；`http://localhost:8088/health`
-检查 JVM API。云防火墙仅允许自己的管理来源访问 SSH，不需要公开应用端口。需要团队访问时可配置
+检查 JVM API（`/health` 不需要令牌，`/jobs` 以下的请求都需要）。云防火墙仅允许自己的管理来源访问 SSH，
+不需要公开应用端口。需要团队访问时可配置
 Cloudflare Tunnel 与 Access 或其他认证网关；Tunnel 要有可用出站路由，私网 NAT、域名或额外服务可能收费。
 `AIRFLOW_WEB_BIND` 可显式修改，但应先完成相应访问控制。Swarm 的发布端口行为与此不同，见后文。
 
 JVM API 容器以非 root 用户（uid 10001）运行，jar 对它只读。它把 `datacraft-data` 卷只读挂载在
 `/opt/datacraft/data`，并把 `DATACRAFT_DATA_ROOT` 设为该目录，`csv-profile` 与 `file-checksum` 只能读取
-该目录以下的文件，例如
-`curl -X POST 'http://localhost:8088/jobs/file-checksum/runs?input=/opt/datacraft/data/<文件>'`
-（非 ASCII 文件名须先做百分号编码，API 以 400 拒绝未编码的非 ASCII 字节）。
-JVM 镜像本身就设置了这个变量：不挂载数据卷直接 `docker run` 时，这两个作业因目录不存在而失败。
-在镜像外运行 `serve-api` 时，若 `--host` 不是回环地址且没有非空的 `DATACRAFT_DATA_ROOT`，进程以退出码 2
-拒绝启动。JVM 镜像不含 Spark 运行时（Spark 是 provided 依赖），在其中运行的 Spark 作业返回 FAILED
-结果，经 HTTP API 调用时状态码为 500。
+该目录以下的文件。每个 `/jobs` 请求都要带上 `.env` 中的 `DATACRAFT_API_TOKEN`，否则得到 401，例如：
+
+```bash
+token=<.env 中 DATACRAFT_API_TOKEN 的值>
+curl -H "Authorization: Bearer $token" -X POST \
+  'http://localhost:8088/jobs/file-checksum/runs?input=/opt/datacraft/data/<文件>'
+```
+
+非 ASCII 文件名须先做百分号编码，API 以 400 拒绝未编码的非 ASCII 字节。API 同时最多执行 4 个作业
+（`serve-api --max-concurrent-runs`），再来的运行请求立即得到 503 与 `Retry-After`，稍后重试即可。
+JVM 镜像本身就设置了 `DATACRAFT_DATA_ROOT`：不挂载数据卷直接 `docker run` 时，这两个作业因目录不存在而
+失败；镜像监听所有网卡，没有 `DATACRAFT_API_TOKEN`（`docker run -e DATACRAFT_API_TOKEN ...`）时拒绝启动。
+在镜像外运行 `serve-api` 时，若 `--host` 不是回环地址，而 `DATACRAFT_API_TOKEN` 或 `DATACRAFT_DATA_ROOT`
+没有设置，进程以退出码 2 拒绝启动，并指出缺少哪一个。JVM 镜像不含 Spark 运行时（Spark 是 provided
+依赖），在其中运行的 Spark 作业返回 FAILED 结果，经 HTTP API 调用时状态码为 500。
 
 先解除暂停并触发 `datacraft_engine_jobs`，确认 noop、echo 两个任务成功；再运行：
 
 - `datacraft_spark_etl`：输入与独立输出都必须是 `/opt/datacraft/data` 下的绝对路径，不含 `.`、`..`
   段或 `{}[]*?\` 等字符（完整规则见 [Airflow 指南](airflow.md)），否则触发时即被拒绝；确认转换与
-  行数校验均成功。
+  行数校验均成功。CSV 不是 UTF-8 时在触发参数里写明 `encoding`（例如 `GBK`）；编码不符的文件会让转换
+  失败并指出文件，而不是转出乱码。
 - `datacraft_sftp_ingest`：在 Airflow 的 `datacraft_sftp` 连接 extra 中设置 `host_key`（或设
   `"no_host_key_check": false` 并为 Airflow 用户提供 known_hosts），否则下载任务不重试、直接失败；
   再验证下载内容、转换、行数。
@@ -178,7 +196,8 @@ JVM 镜像本身就设置了这个变量：不挂载数据卷直接 `docker run`
 完整参数规则见[数据处理契约](../../design/data-contracts.md)。
 
 信任边界：每个 Airflow 容器都通过 `env_file` 收到完整 `.env`（数据库密码、管理员密码、Fernet、API 与
-JWT 密钥），DAG 任务进程也继承这些环境变量。LocalExecutor 下 DAG 代码、CLI jar 和 Spark 依赖以同一用户
+JWT 密钥，以及 JVM API 令牌），DAG 任务进程也继承这些环境变量；`datacraft-api` 容器只拿到自己的令牌，
+不读取 `.env`。LocalExecutor 下 DAG 代码、CLI jar 和 Spark 依赖以同一用户
 在 Airflow 容器内运行，等同管理员权限，只能部署可信代码。有权触发 DAG 的用户可以替换或删除数据根目录
 中的数据。
 
@@ -192,7 +211,8 @@ Compose 默认 `AIRFLOW_PARALLELISM=1`、`AIRFLOW_PARSING_PROCESSES=1`、API wor
 前三项只在 Compose 生效，Swarm 的并发见第 6 节。
 DAG 自身还有 `max_active_runs=1`；它只是每个 DAG 的限制，不能代替全局并发限制。
 如果直接调用 JVM API 或手动启动 Spark，它们不受 Airflow 并发控制，应避免和大任务同时运行。
-JVM API 对同时到达的 `csv-profile` 请求逐个处理（内存预算按单次运行计算）；`datacraft/jvm` 镜像以
+JVM API 自身同时最多执行 4 个作业，超出的运行请求得到 503；对同时到达的 `csv-profile` 请求逐个处理
+（内存预算按单次运行计算）；`datacraft/jvm` 镜像以
 `-XX:+ExitOnOutOfMemoryError` 启动，内存耗尽时进程退出，由 Compose 的 `restart: unless-stopped` 或
 Swarm 的重启策略拉起新实例，而不是留下一个不再响应请求的进程。
 
@@ -279,9 +299,10 @@ worker 默认 `AIRFLOW_WORKER_REPLICAS=1`、`AIRFLOW_WORKER_CONCURRENCY=1`。所
 没有健康检查。
 
 Swarm 模板的 Airflow UI 端口经路由网格在各节点发布，不是 Compose 的回环绑定，必须在云防火墙/认证网关处
-限制访问。JVM API 不发布端口，只在 overlay 网络内，同样只读挂载数据卷并设置 `DATACRAFT_DATA_ROOT`。
-Redis 与数据库不对公网发布。节点间的 2377/tcp、7946/tcp+udp 与 4789/udp 只允许 swarm 节点互访：
-overlay 网络 `datacraft-net` 可被附加且未加密，而 Redis 与 JVM API 都没有认证。
+限制访问。JVM API 不发布端口，只在 overlay 网络内，同样只读挂载数据卷、设置 `DATACRAFT_DATA_ROOT`，
+并要求 `.env` 中的 `DATACRAFT_API_TOKEN`。Redis 与数据库不对公网发布。节点间的 2377/tcp、
+7946/tcp+udp 与 4789/udp 只允许 swarm 节点互访：overlay 网络 `datacraft-net` 可被附加且未加密，
+Redis 没有认证，JVM API 的令牌在其中以明文传输。
 
 worker 同样通过 `env_file` 收到完整 `.env`，持有 JWT 签名密钥、带密码的数据库与 Celery 结果后端地址、
 Fernet 密钥和管理员密码。让 worker 运行不可信代码或部署到不完全可信的主机之前，必须先把这些密钥与 worker
@@ -309,8 +330,11 @@ Airflow 3.3.2 流程、ShellCheck、Compose/Swarm 解析与缺失密钥拒绝、
 工作流只负责编排，每项检查都是 `cicd/` 下的脚本或 `tests/` 下的测试入口，也可以在本机运行；其中
 `cicd/stacks/check-stack-files.sh` 需要 Docker，并且在 `deploy/compose/.env` 已存在时拒绝运行，以免覆盖真实密钥。
 镜像检查（`cicd/images/smoke-images.sh`）还包括 JRE ≥ 25.0.4.1、Airflow ≥ 3.3.2、FAB ≥ 3.9.0，以及
-API 以非 root 运行、数据挂载只读。`cicd/images/smoke-compose.sh` 仅限隔离 CI，会销毁其专用测试项目的
-数据卷，拒绝覆盖已有 `.env`；它还确认镜像内的三个 DAG 都已注册，失败时先输出任务日志。
+API 镜像没有令牌时拒绝启动、不带令牌的请求得到 401、以非 root 运行、数据挂载只读。
+`cicd/images/smoke-compose.sh` 仅限隔离 CI，会销毁其专用测试项目的数据卷，拒绝覆盖已有 `.env`；它还确认
+生成的令牌能打开 `datacraft-api`、镜像内的三个 DAG 都已注册，失败时先输出任务日志。
+CI 的每个步骤失败时，原因（失败的命令、指出错误的输出行与最后 30 行输出）会写成一条错误注解；注解不需要
+仓库权限即可通过 GitHub 的公开接口读取，读取方法见[开发指南](development.md#ci)。
 没有 Docker 的机器可以运行 `bash cicd/build/check-image-build.sh`：它在一份按 `.dockerignore` 过滤的
 仓库副本里执行构建镜像的 Maven 命令，提前发现“只有完整检出才能构建”的问题。
 
@@ -324,8 +348,8 @@ Selector 的主机上 Spark 套件取消，而 CI 中 Spark 套件出现取消�
 平台相关测试按标签排除，而不是在运行时跳过：按操作系统自动激活的 `windows-host` profile 排除
 `posix-only` 测试（符号链接、文件名含 `?`、需要 winutils 的 Hadoop 本地写入），`posix-host` 排除
 `windows-only` 测试（NTFS junction），因此在 Windows 上运行测试不再需要开发者模式或 winutils。
-全部 283 个测试中，Linux 执行 276 个（7 个 junction 测试只在 Windows 运行），Windows 执行 268 个
-（15 个 posix-only 测试只在 Linux 等非 Windows 系统运行）。
+全部 300 个测试中，Linux 执行 293 个（7 个 junction 测试只在 Windows 运行），Windows 执行 284 个
+（16 个 posix-only 测试只在 Linux 等非 Windows 系统运行）。
 
 当前尚未执行真实云部署、ARM 主机测试或多机 Swarm 故障切换；这些边界与“部署资料已准备”分开记录，
 不作为已完成上线报告。

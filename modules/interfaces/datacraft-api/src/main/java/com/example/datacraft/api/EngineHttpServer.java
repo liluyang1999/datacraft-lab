@@ -16,11 +16,16 @@ import java.nio.ByteBuffer;
 import java.nio.charset.CharacterCodingException;
 import java.nio.charset.CodingErrorAction;
 import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
+import java.util.List;
 import java.util.Map;
 import java.util.TreeMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.Semaphore;
 import java.util.concurrent.TimeUnit;
+import java.util.function.Predicate;
 
 /**
  * JSON HTTP API over a {@link JobCatalog}: {@code GET|HEAD /health}, {@code GET|HEAD /jobs} and
@@ -34,6 +39,12 @@ import java.util.concurrent.TimeUnit;
  * plain HTML 400. Runs sent with an {@code Origin} header (from a browser) get 403; unknown routes
  * and jobs get 404; other methods get 405 with {@code Allow}; an unexpected handler failure gets
  * 500 {@code internal_error}.
+ *
+ * <p>When the configuration carries a token, every request under {@code /jobs} must present it as
+ * {@code Authorization: Bearer <token>} and gets 401 {@code unauthorized} otherwise, before
+ * anything else about the request is checked; {@code /health} stays open for health checks. At most
+ * {@link EngineHttpServerConfig#maxConcurrentRuns()} runs are in progress at one time: a further
+ * run request gets 503 {@code busy} with {@code Retry-After} and runs nothing.
  */
 public final class EngineHttpServer implements AutoCloseable {
 
@@ -44,12 +55,23 @@ public final class EngineHttpServer implements AutoCloseable {
 
   private static final System.Logger LOGGER = System.getLogger(EngineHttpServer.class.getName());
 
+  /** What a client is asked for when it presents no token or a wrong one. */
+  private static final String CHALLENGE = "Bearer realm=\"datacraft-api\"";
+
   private final HttpServer server;
   private final ExecutorService executorService;
+  private final Predicate<HttpExchange> authorized;
+  private final Semaphore runPermits;
 
-  private EngineHttpServer(HttpServer server, ExecutorService executorService) {
+  private EngineHttpServer(
+      HttpServer server,
+      ExecutorService executorService,
+      Predicate<HttpExchange> authorized,
+      Semaphore runPermits) {
     this.server = server;
     this.executorService = executorService;
+    this.authorized = authorized;
+    this.runPermits = runPermits;
   }
 
   public static EngineHttpServer start(EngineHttpServerConfig config, JobCatalog catalog)
@@ -58,7 +80,12 @@ public final class EngineHttpServer implements AutoCloseable {
     HttpServer server =
         HttpServer.create(new InetSocketAddress(config.host(), config.port()), config.backlog());
     ExecutorService executorService = Executors.newVirtualThreadPerTaskExecutor();
-    EngineHttpServer engineHttpServer = new EngineHttpServer(server, executorService);
+    EngineHttpServer engineHttpServer =
+        new EngineHttpServer(
+            server,
+            executorService,
+            config.apiToken().map(EngineHttpServer::bearer).orElse(exchange -> true),
+            new Semaphore(config.maxConcurrentRuns()));
 
     server.createContext("/health", guarded(exchange -> engineHttpServer.handleHealth(exchange)));
     server.createContext(
@@ -156,6 +183,12 @@ public final class EngineHttpServer implements AutoCloseable {
 
   private void handleJobs(HttpExchange exchange, JobCatalog catalog, JobExecutionEngine engine)
       throws IOException {
+    // First, so a caller without the token learns nothing about jobs, methods or parameters.
+    if (!authorized.test(exchange)) {
+      exchange.getResponseHeaders().set("WWW-Authenticate", CHALLENGE);
+      HttpJsonResponse.write(exchange, 401, EngineJson.error("unauthorized"));
+      return;
+    }
     String path = exchange.getRequestURI().getPath();
     if ("/jobs".equals(path)) {
       if (isGetOrHead(exchange.getRequestMethod())) {
@@ -222,11 +255,56 @@ public final class EngineHttpServer implements AutoCloseable {
       HttpJsonResponse.write(exchange, 404, EngineJson.error("unknown_job"));
       return;
     }
-    JobExecutionResult result = engine.execute(request);
+    // No queue: a request beyond the limit is told to come back instead of holding a thread and
+    // a connection for as long as the runs ahead of it take.
+    if (!runPermits.tryAcquire()) {
+      exchange.getResponseHeaders().set("Retry-After", "1");
+      HttpJsonResponse.write(exchange, 503, EngineJson.error("busy"));
+      return;
+    }
+    JobExecutionResult result;
+    try {
+      result = engine.execute(request);
+    } finally {
+      runPermits.release();
+    }
     HttpJsonResponse.write(
         exchange,
         result.status().name().equals("SUCCEEDED") ? 200 : 500,
         EngineJson.result(result));
+  }
+
+  /**
+   * Accepts a request that carries exactly one {@code Authorization} header whose value is {@code
+   * Bearer <token>}. Both sides are compared as SHA-256 digests: they have one length, so the time
+   * the comparison takes says nothing about the token, and the server keeps no copy of the token
+   * itself.
+   */
+  private static Predicate<HttpExchange> bearer(String token) {
+    byte[] expected = sha256(token);
+    return exchange -> {
+      List<String> values = exchange.getRequestHeaders().get("Authorization");
+      if (values == null || values.size() != 1) {
+        return false;
+      }
+      String value = values.get(0);
+      // The scheme name is case-insensitive (RFC 9110) and one or more spaces follow it.
+      String scheme = "Bearer ";
+      if (!value.regionMatches(true, 0, scheme, 0, scheme.length())) {
+        return false;
+      }
+      return MessageDigest.isEqual(expected, sha256(value.substring(scheme.length()).strip()));
+    };
+  }
+
+  private static byte[] sha256(String value) {
+    try {
+      // The JDK server maps each header byte to one char, so ISO-8859-1 restores the bytes sent.
+      return MessageDigest.getInstance("SHA-256")
+          .digest(value.getBytes(StandardCharsets.ISO_8859_1));
+    } catch (NoSuchAlgorithmException exception) {
+      throw new IllegalStateException("Every Java platform provides SHA-256.", exception);
+    }
   }
 
   private static String decode(String value) {

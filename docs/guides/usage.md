@@ -35,11 +35,11 @@ description, sorted by name.
 | Job | Runs on | `list-jobs` description | Parameters |
 | --- | --- | --- | --- |
 | `csv-profile` | plain JVM | Profiles a small UTF-8 CSV file in the JVM: rows, columns, bytes and SHA-256. | `input`, `header`, `delimiter`, `expectedRows`, `maxBytes` |
-| `csv-to-parquet` | Spark | Converts a CSV dataset to Parquet. | `input`, `output`, `mode`, `header`, `delimiter`, `schema`, `inferSchema`, `multiLine`, `escape` |
+| `csv-to-parquet` | Spark | Converts a CSV dataset to Parquet. | `input`, `output`, `mode`, `header`, `delimiter`, `schema`, `inferSchema`, `multiLine`, `escape`, `encoding` |
 | `echo` | built-in | Returns the message parameter. | `message` |
 | `file-checksum` | plain JVM | Computes the SHA-256 checksum and size of a file in the JVM. | `input`, `expectedSha256` |
 | `noop` | built-in | Confirms the engine is reachable without processing data. | none |
-| `row-count` | Spark | Counts rows in a dataset. | `input`, `inputFormat`, `expectedRows`, `schema`; for `inputFormat=csv` also `header`, `delimiter`, `inferSchema`, `multiLine`, `escape` |
+| `row-count` | Spark | Counts rows in a dataset. | `input`, `inputFormat`, `expectedRows`, `schema`; for `inputFormat=csv` also `header`, `delimiter`, `inferSchema`, `multiLine`, `escape`, `encoding` |
 | `spark-version` | Spark | Reports the running Spark runtime version. | none |
 
 The Spark jobs also read the runtime settings `spark.master`, `spark.appName`,
@@ -61,6 +61,7 @@ metrics and messages are specified in
 | `--result-file <file>` | jobs | none | Also write that JSON line to a file |
 | `--host <host>` | `serve-api` | `127.0.0.1` | Interface the HTTP API binds to |
 | `--port <port>` | `serve-api` | `8080` | HTTP API port, 0 to 65535 |
+| `--max-concurrent-runs <n>` | `serve-api` | `4` | Job runs the API executes at one time, at least 1; a further run request gets 503 |
 
 ### Exit codes
 
@@ -70,8 +71,9 @@ metrics and messages are specified in
 | `1` | The job failed, its `--result-file` could not be written (the result is still printed), or `serve-api` could not open its socket. |
 | `2` | Invalid usage: a parse error (including job options given to a control command), an unknown command or job, or an unreadable or malformed `--config` file. |
 
-`serve-api` also exits `2` when it refuses a non-loopback `--host` (see
-[Serving the API](#serving-the-api)). A job that rejects its parameters is a failed job, not a
+`serve-api` also exits `2` when it refuses a non-loopback `--host` or a malformed
+`DATACRAFT_API_TOKEN` (see [Serving the API](#serving-the-api)). A job that rejects its parameters
+is a failed job, not a
 usage error: it exits `1` and still prints its FAILED result. Usage errors are reported on stderr,
 for example `Unknown command or job: <name>`. Every option except `--param` may be given once; a
 repeated one is a usage error, which the parser reports as an unknown option.
@@ -137,7 +139,7 @@ value answers 400.
 - Control commands reject job options: `--config`, `--master`, `--lifecycle`, `--param`, `--json`
   or `--result-file` on `list-jobs` or `serve-api` is a parse error ("<command> does not accept job
   options: ...") and exits `2`.
-- `--host` and `--port` are used only by `serve-api`; jobs ignore them.
+- `--host`, `--port` and `--max-concurrent-runs` are used only by `serve-api`; jobs ignore them.
 - A job name cannot contain `/`, because it is one path segment of `POST /jobs/{name}/runs`, or
   equal a control command. The catalog refuses such a job when it is built.
 
@@ -163,6 +165,9 @@ spark-submit --master 'local[*]' --class com.example.datacraft.cli.Runner "$JAR"
   `{ } [ ] * ?` or a backslash is rejected (on Windows, Hadoop first turns backslash separators
   into `/`). Input and output must not overlap, and the default write mode, `overwrite`, replaces
   the output.
+- CSV input is read as UTF-8 unless `--param encoding=<charset>` names the charset the file was
+  written in, for example `GBK` or `ISO-8859-1`. A file that is not valid text in that encoding
+  fails the job, naming the first such file, instead of being converted with damaged characters.
 - On Windows, Hadoop's local file system needs `winutils.exe` (`HADOOP_HOME` or `hadoop.home.dir`)
   to write files: provide it, or run writing jobs such as `csv-to-parquet` on Linux, macOS or WSL.
 
@@ -181,9 +186,10 @@ A JVM that embeds Spark needs the module options that `spark-submit` normally ad
 ## Serving the API
 
 ```bash
-java -jar "$JAR" --command serve-api                  # binds 127.0.0.1:8080
+java -jar "$JAR" --command serve-api                  # binds 127.0.0.1:8080, open to local callers
 java -jar "$JAR" --command serve-api --port 9090
-DATACRAFT_DATA_ROOT=/srv/datacraft/data \
+token=$(openssl rand -hex 32)                         # keep it: every /jobs request must present it
+DATACRAFT_API_TOKEN=$token DATACRAFT_DATA_ROOT=/srv/datacraft/data \
   java -jar "$JAR" --command serve-api --host 0.0.0.0 --port 8080
 ```
 
@@ -193,11 +199,27 @@ runs still going after that are cut off. When the socket cannot be opened, becau
 use or the host cannot be bound, it prints one stderr line,
 `serve-api cannot listen on <host>:<port>: <cause>`, and exits `1`.
 
-The API has no authentication and its file jobs read local paths, so `serve-api` binds a
-non-loopback `--host`, such as `0.0.0.0`, only when `DATACRAFT_DATA_ROOT` is set and not blank.
-Otherwise it exits `2` with one stderr line that begins
-`serve-api refuses --host <host> without DATACRAFT_DATA_ROOT`. `127.0.0.1`, `::1` and `localhost`
-are loopback; a host name that does not resolve counts as non-loopback.
+**Token.** When `DATACRAFT_API_TOKEN` is set, every request under `/jobs` must carry
+`Authorization: Bearer <token>` and gets 401 otherwise; `/health` stays open for health checks. The
+value is trimmed, and a blank one counts as unset. A token is 32 to 512 characters from
+`A-Z a-z 0-9 - . _ ~ + /`, optionally ending in `=`; `openssl rand -hex 32` produces one. Any other
+value stops `serve-api` with exit `2` and one stderr line, `Invalid DATACRAFT_API_TOKEN: ...`, which
+does not repeat the value. The server keeps a digest of the token rather than the token and never
+logs it. The API speaks plain HTTP, so the token can be read on any network it crosses: use it on
+loopback, through an SSH tunnel or behind a gateway that terminates TLS.
+
+**Off loopback.** `serve-api` binds a non-loopback `--host`, such as `0.0.0.0`, only when both
+`DATACRAFT_API_TOKEN` and `DATACRAFT_DATA_ROOT` are set: without the token anyone who reaches the
+port could run jobs, and without the data root the file jobs could read any path. Otherwise it
+exits `2` with one stderr line that names what is missing, for example
+`serve-api refuses --host 0.0.0.0 without DATACRAFT_API_TOKEN and DATACRAFT_DATA_ROOT: ...`.
+`127.0.0.1`, `::1` and `localhost` are loopback; a host name that does not resolve counts as
+non-loopback.
+
+**Concurrency.** The API executes at most `--max-concurrent-runs` job runs at one time, 4 by
+default. A run request beyond that is not queued: it gets 503 `{"error":"busy"}` with
+`Retry-After: 1`, and nothing runs. `/health`, `/jobs` and requests that are rejected before they
+run do not count.
 
 `DATACRAFT_DATA_ROOT` confines job paths for the CLI and the API alike:
 
@@ -209,8 +231,9 @@ are loopback; a host name that does not resolve counts as non-loopback.
 - The root must be an absolute path; the plain-JVM jobs also require an existing directory and
   fail their runs otherwise.
 - The `datacraft/jvm` image sets `DATACRAFT_DATA_ROOT=/opt/datacraft/data` and starts `serve-api`
-  on `0.0.0.0:8080`. In the Compose stack that port is published on `127.0.0.1` only, as
-  `DATACRAFT_API_PORT` (default `8088`).
+  on `0.0.0.0:8080`, so it starts only with a token: `docker run -e DATACRAFT_API_TOKEN ...`. Both
+  stacks pass `DATACRAFT_API_TOKEN` from `.env`. In the Compose stack the port is published on
+  `127.0.0.1` only, as `DATACRAFT_API_PORT` (default `8088`).
 
 The complete rules are in
 [Data root](../../design/data-contracts.md#data-root-datacraft_data_root).
@@ -228,18 +251,22 @@ The complete rules are in
   read.
 - A run answers with the same result JSON as the CLI's `--json`. A parameter rejection is a FAILED
   run, so it answers 500 with the result body.
-- Errors are `{"error":"<code>"}`: 400 `invalid_request` for a malformed job path, an unknown
-  `lifecycle` or a query that is not percent-encoded UTF-8; 403 `cross_origin_forbidden` for a run
-  request that carries an `Origin` header, which browsers send; 404 `unknown_job` or `not_found`;
-  405 `method_not_allowed` with an `Allow` header; 500 `internal_error` when a handler fails
-  unexpectedly.
-- There is no authentication: keep the API on loopback or behind an authenticated gateway.
+- Errors are `{"error":"<code>"}`: 401 `unauthorized` for a `/jobs` request without the configured
+  token; 400 `invalid_request` for a malformed job path, an unknown `lifecycle` or a query that is
+  not percent-encoded UTF-8; 403 `cross_origin_forbidden` for a run request that carries an
+  `Origin` header, which browsers send; 404 `unknown_job` or `not_found`; 405 `method_not_allowed`
+  with an `Allow` header; 503 `busy` with `Retry-After` when the run limit is reached; 500
+  `internal_error` when a handler fails unexpectedly.
+- Without `DATACRAFT_API_TOKEN` the API is open to every caller that reaches it, which is why it
+  then binds loopback only. With a token, send it on every `/jobs` request.
 
 ```bash
 curl -s http://127.0.0.1:8080/jobs
 curl -s -X POST 'http://127.0.0.1:8080/jobs/echo/runs?message=hello'
 curl -s -X POST -G --data-urlencode 'input=sample.csv' --data-urlencode 'expectedRows=2' \
   http://127.0.0.1:8080/jobs/csv-profile/runs
+# When the server was started with a token:
+curl -s -H "Authorization: Bearer $token" http://127.0.0.1:8080/jobs
 ```
 
 The full contract, including the order of the checks and the JDK server's own 400 responses, is

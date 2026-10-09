@@ -55,6 +55,12 @@ public final class ParameterKeys {
   public static final String MULTI_LINE = "multiLine";
   public static final String CSV_ESCAPE = "escape";
 
+  /**
+   * Character encoding of a CSV source read by the Spark jobs: the name of a charset the JVM
+   * supports that encodes ASCII text as ASCII, such as UTF-8 (the default), GBK or ISO-8859-1.
+   */
+  public static final String ENCODING = "encoding";
+
   /** Optional nonnegative expected row count, used as a data quality gate. */
   public static final String EXPECTED_ROWS = "expectedRows";
 

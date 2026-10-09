@@ -5,12 +5,14 @@
 # project's target bytecode) for a containerized build independent of the host JDK, using the same
 # Maven version as the wrapper in .mvn/wrapper/maven-wrapper.properties (bump both together).
 
-ARG MAVEN_IMAGE=maven:3.9.16-eclipse-temurin-25
+ARG MAVEN_IMAGE=maven:3.10.0-eclipse-temurin-25
 FROM ${MAVEN_IMAGE}
 
 WORKDIR /workspace
 
 # 1) Copy only the POMs first so dependency resolution is cached independently of source changes.
+#    .mvn/ comes with them: it holds the Maven options every run of this build uses.
+COPY .mvn/ .mvn/
 COPY pom.xml ./
 COPY modules/core/datacraft-common/pom.xml modules/core/datacraft-common/
 COPY modules/core/datacraft-config/pom.xml modules/core/datacraft-config/

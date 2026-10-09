@@ -164,11 +164,13 @@ services:
 
   datacraft-api:
     image: ${DATACRAFT_REGISTRY:-localhost:5000}/datacraft-jvm:${DATACRAFT_TAG:-latest}
-    # The unauthenticated engine API is overlay-only; expose it through an authenticated gateway.
+    # The engine API stays on the overlay network and requires the bearer token on every /jobs
+    # request. It has no TLS: expose it only through a gateway that terminates TLS.
     logging: *bounded-logging
     environment:
       # Small-file jobs may only read paths under this root.
       DATACRAFT_DATA_ROOT: /opt/datacraft/data
+      DATACRAFT_API_TOKEN: ${DATACRAFT_API_TOKEN:?Set DATACRAFT_API_TOKEN in .env}
     volumes:
       # Read-only: Airflow tasks write the shared data, the API only reads it.
       - datacraft-data:/opt/datacraft/data:ro

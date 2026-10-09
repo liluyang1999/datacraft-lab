@@ -32,6 +32,19 @@ class BuildEntrypointTests(unittest.TestCase):
         self.assertTrue(image.group(1).startswith(f"maven:{match.group(1)}-eclipse-temurin-25"),
                         f"{image.group(1)} does not match wrapper Maven {match.group(1)}")
 
+    def test_no_build_asks_other_repositories_for_prefix_files(self):
+        # Maven 3.10 would fetch a prefix file from every repository a dependency's POM names, on
+        # each build: requests to third-party hosts, and a warning whenever one of them is down or
+        # serves an expired certificate. The option is in .mvn/maven.config, which the wrapper, a
+        # plain mvn and the builder image all read, so the image copies .mvn/ before it runs Maven.
+        option = "-Daether.remoteRepositoryFilter.prefixes.resolvePrefixFiles=false"
+        config = (ROOT / ".mvn" / "maven.config").read_text(encoding="utf-8")
+        self.assertIn(option, config.splitlines())
+        self.assertNotIn("\r", config)
+        dockerfile = (ROOT / "deploy" / "docker" / "Dockerfile.build").read_text(encoding="utf-8")
+        self.assertIn("\nCOPY .mvn/ .mvn/\n", dockerfile)
+        self.assertLess(dockerfile.index("COPY .mvn/ .mvn/"), dockerfile.index("RUN mvn "))
+
     def test_builder_image_dependency_layer_copies_every_module_pom(self):
         # The POM-only layer resolves dependencies before the sources are copied; a module missing
         # from it fails that step (silently, by design) and the cache layer stops helping.

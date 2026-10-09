@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
-# Builds the real images and verifies both runtime surfaces: the API image (health, non-root user,
-# read-only jar, no data directory, a Spark job answering 500 FAILED) and the Airflow image
+# Builds the real images and verifies both runtime surfaces: the API image (no start without a
+# token, health, 401 without the token, non-root user, read-only jar, no data directory, a Spark job
+# answering 500 FAILED) and the Airflow image
 # (dependency and security floors, the shared data volume's permissions, the three pipelines run
 # inside the image). Needs Docker. Disposable CI runners only: it creates and removes the build
 # context canaries .env and backups/ci-probe.dump, and refuses to run when either exists.
@@ -59,7 +60,16 @@ for image in datacraft/jvm:latest datacraft/airflow:latest; do
     fail "$image runs Java '$image_runtime', but the freshly pulled $jre_image has '$base_runtime'."
 done
 
-docker run -d --name "$container" datacraft/jvm:latest >/dev/null
+# The image serves on all interfaces, so without a token it must refuse to start at all.
+refusal=$(docker run --rm datacraft/jvm:latest 2>&1) &&
+  fail "datacraft/jvm started without DATACRAFT_API_TOKEN."
+[[ "$refusal" == *"without DATACRAFT_API_TOKEN"* ]] ||
+  fail "datacraft/jvm without a token stopped for another reason: $refusal"
+
+# A test-only token, handed over through the environment rather than a command line.
+DATACRAFT_API_TOKEN=$(python3 -c 'import secrets; print(secrets.token_hex(32))')
+export DATACRAFT_API_TOKEN
+docker run -d --name "$container" -e DATACRAFT_API_TOKEN datacraft/jvm:latest >/dev/null
 healthy=false
 for ((attempt=0; attempt<30; attempt++)); do
   if docker exec "$container" curl --fail --silent http://127.0.0.1:8080/health; then
@@ -82,9 +92,21 @@ if docker exec "$container" test -e /opt/datacraft/data; then
   fail "datacraft/jvm must not contain /opt/datacraft/data."
 fi
 docker exec "$container" java -jar /opt/datacraft/datacraft-cli.jar --command noop --json
+api() { # <curl arguments>: the response body, then the status code on a line of its own
+  docker exec "$container" curl -sS -m 10 -w '\n%{http_code}' "$@"
+}
+bearer="Authorization: Bearer $DATACRAFT_API_TOKEN"
+# /health is open for the health check; everything under /jobs needs exactly this token.
+anonymous=$(api http://127.0.0.1:8080/jobs) || true
+[[ "${anonymous##*$'\n'}" == 401 ]] || fail "GET /jobs without a token: expected HTTP 401, got: $anonymous"
+mistaken=$(api -H "${bearer}0" -X POST http://127.0.0.1:8080/jobs/noop/runs) || true
+[[ "${mistaken##*$'\n'}" == 401 ]] ||
+  fail "POST /jobs/noop/runs with a wrong token: expected HTTP 401, got: $mistaken"
+listed=$(api -H "$bearer" http://127.0.0.1:8080/jobs) || true
+[[ "${listed##*$'\n'}" == 200 && "$listed" == *'"name":"csv-profile"'* ]] ||
+  fail "GET /jobs with the token: expected HTTP 200 and the job list, got: $listed"
 # A Spark job on the Spark-less image answers with a FAILED result instead of hanging the request.
-spark_response=$(docker exec "$container" curl -sS -m 10 -w '\n%{http_code}' -X POST \
-  http://127.0.0.1:8080/jobs/spark-version/runs) || true
+spark_response=$(api -H "$bearer" -X POST http://127.0.0.1:8080/jobs/spark-version/runs) || true
 [[ "${spark_response##*$'\n'}" == 500 && "$spark_response" == *'"status":"FAILED"'* ]] ||
   fail "POST /jobs/spark-version/runs on datacraft/jvm: expected HTTP 500 FAILED, got: $spark_response"
 
@@ -113,4 +135,6 @@ docker run --rm --entrypoint sh -v "$probe_volume:/opt/datacraft/data:ro" datacr
 docker run --rm --entrypoint python \
   -v "$PWD:/workspace:ro" datacraft/airflow:latest \
   -B /workspace/tests/smoke/airflow_runtime_smoke.py --jar /opt/datacraft/datacraft-cli.jar
-echo "Verified the jar builder, the API image and the Airflow image."
+notice "Runtime images verified" "The jar builder, datacraft/jvm and datacraft/airflow were built" \
+  "from this commit; both runtime images run Java $base_runtime; the API starts only with a token" \
+  "and answers 401 without it; the three pipelines ran inside the Airflow image."

@@ -130,6 +130,31 @@ class SparkJobsSpec extends AnyFunSuite {
     )
   }
 
+  test("an unusable encoding is rejected before starting Spark without being echoed") {
+    val rule = "encoding must name a charset this JVM supports that encodes ASCII as ASCII, " +
+      "such as UTF-8, GBK or ISO-8859-1"
+    val jobs = Seq(
+      "csv-to-parquet" -> Map("input" -> "in.csv", "output" -> "out.parquet"),
+      "row-count"      -> Map("input" -> "in.csv", "inputFormat" -> "csv")
+    )
+    // Not ASCII-compatible, unknown to the JVM, not a charset name, and blank.
+    for (
+      encoding <- Seq("UTF-16", "UTF-16LE", "UTF-32", "IBM037", "no-such-charset", "a b", "", " ");
+      (job, others) <- jobs
+    ) {
+      val result = executeWithoutSpark(job, others + ("encoding" -> encoding))
+      assert(result.status() == JobStatus.FAILED, s"$job with '$encoding'")
+      assert(result.message() == rule, s"$job with '$encoding'")
+    }
+    // The parameter belongs to CSV input: another format never reads it.
+    val parquet = executeWithoutSpark(
+      "row-count",
+      Map("input" -> "in.parquet", "inputFormat" -> "parquet", "encoding" -> "UTF-16")
+    )
+    assert(parquet.status() == JobStatus.FAILED)
+    assert(!parquet.message().contains("encoding"), parquet.message())
+  }
+
   /** Sees only the platform classes, like the plain `java -jar` launch that lacks Spark. */
   private val loaderWithoutSpark =
     new URLClassLoader(Array.empty[URL], ClassLoader.getPlatformClassLoader)
@@ -207,6 +232,7 @@ class SparkJobsSpec extends AnyFunSuite {
       (variant, known) <- Seq(
         "inferschema"  -> "inferSchema",
         "Schema"       -> "schema",
+        "Encoding"     -> "encoding",
         "expectedrows" -> "expectedRows",
         "SPARK.MASTER" -> "spark.master"
       )

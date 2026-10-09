@@ -57,7 +57,8 @@ Spark jobs check their parameters before a SparkSession starts, in this order:
 3. The job's own parameters: "Missing required parameter: <key>", "requirement failed: Invalid
    write mode", "<key> must be true or false", "requirement failed: delimiter must be nonempty and
    must not contain quotes, newlines or NUL", "requirement failed: escape must contain exactly one
-   character", the glob rule below, and the `row-count` rules in
+   character", the `encoding` rule in [CSV and numeric precision](#csv-and-numeric-precision), the
+   glob rule below, and the `row-count` rules in
    [Write and verification behavior](#write-and-verification-behavior).
 
 Data-root confinement, the input/output overlap guard and the existing-output check need Spark's
@@ -82,18 +83,40 @@ defaults to `datacraft-lab-<job name>`; set it with `--param spark.appName`.
 ## CSV and numeric precision
 
 `csv-to-parquet` accepts `input`, `output`, `mode`, `header`, `delimiter`, `schema`, `inferSchema`,
-`multiLine`, and `escape`. CSV defaults are header=true, delimiter=comma, inferSchema=true,
-multiLine=true, and RFC double-quote escaping. The delimiter may have several characters (for
+`multiLine`, `escape` and `encoding`. CSV defaults are header=true, delimiter=comma,
+inferSchema=true, multiLine=true, RFC double-quote escaping and encoding=UTF-8. The delimiter may
+have several characters (for
 example `||`) but must not contain a double quote, CR, LF or NUL. Invalid booleans and malformed
 records fail visibly; headers must agree with an explicit schema. Use `multiLine=false` for known
 single-line CSV files when splitting large files across tasks matters. Backslash-escaped sources
 can set `escape=\`.
 
-The Spark CSV reader decodes UTF-8 and has no encoding parameter. Bytes that are not valid UTF-8 do
-not fail the job: they become U+FFFD, so a GBK or Latin-1 export converts with SUCCEEDED and
-damaged text. Check such a file first (`csv-profile` rejects it and names the byte offset) or
-convert it to UTF-8. With the default `multiLine=true`, a CRLF inside a quoted field is stored as
-LF, whereas [`CsvFiles`](#csvfiles) keeps it.
+`encoding` names the charset of the CSV input, UTF-8 by default. The value is trimmed and may be
+any name or alias the JVM knows for a charset that encodes ASCII as ASCII: UTF-8, the ISO-8859 and
+Windows code pages, GBK, GB18030, Big5, Shift_JIS, the EUC family. Spark splits a file into lines
+at the bytes LF and CR before it decodes them, which is wrong for UTF-16, UTF-32 and EBCDIC, so
+those, an unknown name and a blank value fail before Spark starts with "encoding must name a
+charset this JVM supports that encodes ASCII as ASCII, such as UTF-8, GBK or ISO-8859-1" (the value
+is not repeated). Only CSV input has an encoding: `row-count` on another format ignores the
+parameter.
+
+Input that is not valid text in its encoding fails the job. Spark's own CSV reader would not: it
+replaces such bytes with U+FFFD and succeeds, so a GBK or Latin-1 export read as UTF-8 would be
+converted into damaged text. `csv-to-parquet` and `row-count` on CSV therefore first read the input
+once more as raw lines, decompressed the way the CSV reader would, and decode every line strictly.
+A failure reads "requirement failed: input is not valid <charset>: <n> line(s) cannot be decoded,
+the first in <file URI>; set encoding to the charset the data was written in", and
+`csv-to-parquet` reports it before anything is written, so an existing output stays as it was.
+Two limits remain: the check costs one more pass over the input, and a wrong encoding whose bytes
+happen to be valid in the named charset is not detected (UTF-8 text is always valid ISO-8859-1,
+and often valid GBK).
+
+Since 4.0 Spark's readers accept only UTF-8, ISO-8859-1, US-ASCII and the UTF-16/32 family by
+themselves. For any other charset the job sets `spark.sql.legacy.javaCharsets=true` on its own
+session, which makes Spark use the JDK's charsets; no other session sees the setting.
+
+With the default `multiLine=true`, a CRLF inside a quoted field is stored as LF, whereas
+[`CsvFiles`](#csvfiles) keeps it.
 
 Schema inference is convenient, but it cannot know whether `001` is an identifier or whether a
 number requires decimal precision. For identifiers, money, and contractual schemas, pass explicit
@@ -147,9 +170,10 @@ must not be blank", and the `inputFormat` metric reports the trimmed value in it
 Spark starts with "expectedRows must be a 64-bit integer >= 0", and a count mismatch fails the job
 with "requirement failed: Expected <n> rows but found <m>". `csv` and `json`, in any case, are read
 in FAILFAST mode and counted over complete records, so column pruning cannot bypass parser or type
-validation; CSV counts share the CSV options above and do not infer types by default. Other formats
-(parquet, orc, ...) use Spark's reader defaults. Airflow passes the conversion count into
-`expectedRows` automatically. `row-count` is not confined by `DATACRAFT_DATA_ROOT`.
+validation; CSV counts share the CSV options above, `encoding` and its strict decoding check
+included, and do not infer types by default. Other formats (parquet, orc, ...) use Spark's reader
+defaults. Airflow passes the conversion count into `expectedRows` automatically. `row-count` is not
+confined by `DATACRAFT_DATA_ROOT`.
 
 ## Data root (`DATACRAFT_DATA_ROOT`)
 
@@ -177,11 +201,14 @@ root.
   Airflow container and for `datacraft-api`. That overrides `env_file`, so a value in `.env` is
   ignored; change the stack files and the volume mount together. `datacraft-api` mounts the
   `datacraft-data` volume there read-only.
-- `serve-api` refuses to start (exit 2, one stderr line) on a non-loopback `--host` while the
-  variable is unset or blank, for `--host 0.0.0.0` with "serve-api refuses --host 0.0.0.0 without
-  DATACRAFT_DATA_ROOT: the API is unauthenticated and its file jobs could read any path. Bind
-  127.0.0.1 or set DATACRAFT_DATA_ROOT." When it cannot open its socket (the port is in use, or
-  the host cannot be bound) it exits 1 with "serve-api cannot listen on <host>:<port>: <cause>".
+- `serve-api` refuses to start (exit 2, one stderr line) on a non-loopback `--host` unless both
+  this variable and `DATACRAFT_API_TOKEN` are set and not blank. The line names what is missing;
+  for `--host 0.0.0.0` with neither it is "serve-api refuses --host 0.0.0.0 without
+  DATACRAFT_API_TOKEN and DATACRAFT_DATA_ROOT: off loopback, callers must present a token and file
+  jobs must be confined to a data root. Bind 127.0.0.1 or set them." (with one variable missing:
+  "... without DATACRAFT_DATA_ROOT: ... or set it."). When it cannot open its socket (the port is
+  in use, or the host cannot be bound) it exits 1 with "serve-api cannot listen on <host>:<port>:
+  <cause>".
 - Airflow checks the trigger-conf paths `input`/`output` of `datacraft_spark_etl` and
   `local_path`/`output` of `datacraft_sftp_ingest` against the same root (default
   `$DATACRAFT_HOME/data`) when a run is created. A path must be absolute with at least one segment
@@ -345,6 +372,8 @@ SFTP:
 | `GET` or `HEAD /jobs` | 200 `{"jobs":[{"name":...,"description":...}]}` |
 | `POST /jobs/{name}/runs`, job succeeded | 200 with the result `{"jobName","status","message","metrics"}` |
 | `POST /jobs/{name}/runs`, job failed | 500 with the same result body, including parameter rejections such as "Missing required parameter: input" and a missing Spark runtime |
+| Any request under `/jobs` without the configured token | 401 `{"error":"unauthorized"}` with `WWW-Authenticate: Bearer realm="datacraft-api"` |
+| Run request while `--max-concurrent-runs` runs are in progress | 503 `{"error":"busy"}` with `Retry-After: 1`; nothing runs |
 | Malformed run request | 400 `{"error":"invalid_request"}`: a missing, blank or nested job path, an unknown `lifecycle`, a percent-escape that does not decode as UTF-8, or raw non-ASCII bytes in the query |
 | Run request with an `Origin` header | 403 `{"error":"cross_origin_forbidden"}`, whatever the value (`null` included) |
 | Unknown job | 404 `{"error":"unknown_job"}` |
@@ -352,11 +381,36 @@ SFTP:
 | Other method | 405 `{"error":"method_not_allowed"}` with `Allow: GET, HEAD` (`/health`, `/jobs`) or `Allow: POST` (runs) |
 | Unexpected handler failure | 500 `{"error":"internal_error"}`; a `RuntimeException` is logged at `ERROR` as "Request <METHOD> <raw path> failed" |
 
-A run request is checked in this order: method (405), `Origin` (403), job path, query and
-`lifecycle` (400), job lookup (404), then the run (200 or 500). A 400 body does not say which check
-failed. `HEAD` returns the status and headers of the matching `GET`, including its
-`Content-Length`, without a body. Every exchange is closed; when a handler fails, the request
-still gets the JSON 500 unless the response had already started or the client is gone.
+A run request is checked in this order: token (401), method (405), `Origin` (403), job path, query
+and `lifecycle` (400), job lookup (404), free capacity (503), then the run (200 or 500). A 400 body
+does not say which check failed. `HEAD` returns the status and headers of the matching `GET`,
+including its `Content-Length`, without a body. Every exchange is closed; when a handler fails, the
+request still gets the JSON 500 unless the response had already started or the client is gone.
+
+Authentication. `serve-api` reads the bearer token from `DATACRAFT_API_TOKEN` (trimmed; unset or
+blank means none). A token is 32 to 512 characters from `A-Z a-z 0-9 - . _ ~ + /`, optionally
+followed by `=` padding, the token syntax of RFC 6750; any other value stops `serve-api` (exit 2)
+with "Invalid DATACRAFT_API_TOKEN: API token must be 32 to 512 characters from A-Z a-z 0-9 - . _ ~
++ / with optional trailing =.", which does not repeat the value. With a token configured:
+
+- Every request under `/jobs`, whatever its method or path, must carry exactly one `Authorization`
+  header of the form `Bearer <token>`. The scheme is matched without regard to case and may be
+  followed by several spaces. A missing header, another scheme, a wrong token and a repeated header
+  all get the same 401, before anything else about the request is examined, so a caller without
+  the token learns nothing about jobs, methods or parameters.
+- `/health` and unknown routes outside `/jobs` need no token: health checks carry none.
+- The server compares SHA-256 digests of the presented and the configured token, so the comparison
+  takes the same time whatever was presented, and it keeps the digest rather than the token.
+  Neither is logged; `EngineHttpServerConfig.toString()` prints `<redacted>`.
+
+Without a token the API is open, which `serve-api` allows on loopback only.
+
+Concurrency. At most `--max-concurrent-runs` runs (default 4, at least 1) are in progress at one
+time. A further run request is not queued: it gets 503 at once and nothing runs. A run occupies
+its place from the capacity check until its job returns, whether it succeeds, fails or throws, so
+runs that wait inside a job (a Spark job for the session, `csv-profile` for its turn) count too
+and the number of waiting requests stays bounded. `GET /jobs`, `/health` and requests rejected
+before the capacity check take no place.
 
 Query keys and values must be percent-encoded UTF-8; `+` in the query decodes to a space. For
 example, against the port that Compose publishes on loopback:
@@ -373,15 +427,19 @@ before any handler runs; other raw non-ASCII bytes reach the handler and get the
 target that does not start with `/`, such as `OPTIONS *`, matches no route and gets the JDK's own
 404 instead of the JSON one.
 
-The API has no authentication. Binding to loopback does not stop a browser on the same machine, or
-one reaching the port through an SSH tunnel, from sending requests; the `Origin` check blocks
-browser-originated run requests, including cross-site and DNS-rebinding POSTs, while curl,
-`java.net.http`, Airflow and the healthchecks send no `Origin`. Compose publishes the API on
-`127.0.0.1` only ([`deployment_env.py`](../deploy/scripts/deployment_env.py) `check` rejects a
-`datacraft-api` port on any host address other than `127.0.0.1` or `::1`, and any non-tmpfs
-`datacraft-api` volume that is not read-only), Swarm leaves it on the overlay network, and
-`serve-api` needs `DATACRAFT_DATA_ROOT` off loopback. Put an authenticated gateway in front before
-exposing it externally.
+Binding to loopback does not stop a browser on the same machine, or one reaching the port through
+an SSH tunnel, from sending requests; the `Origin` check blocks browser-originated run requests,
+including cross-site and DNS-rebinding POSTs, with or without a token, while curl, `java.net.http`,
+Airflow and the healthchecks send no `Origin`. The API speaks plain HTTP, so a token is only as
+private as the network it crosses. Compose therefore publishes the API on `127.0.0.1` only:
+[`deployment_env.py`](../deploy/scripts/deployment_env.py) `check` rejects a `datacraft-api` port
+on any host address other than `127.0.0.1` or `::1`, any non-tmpfs `datacraft-api` volume that is
+not read-only, and a `DATACRAFT_API_TOKEN` that is missing, a placeholder, outside the token syntax
+or equal to one of the database and Airflow secrets. Swarm leaves the API on the overlay network,
+and `serve-api` needs the token and `DATACRAFT_DATA_ROOT` off loopback. Both stacks hand the token
+to `datacraft-api` from `.env`; the Airflow containers read the same file and can see it, which is
+within the trust the stacks already place in them. Put a gateway that terminates TLS in front
+before exposing the API beyond the host.
 
 ## Where the contracts are tested
 
@@ -399,7 +457,7 @@ in CI's `dags` job (see [CI gates](build-and-quality.md#ci-gates)).
 | `CsvFiles` | [`CsvFilesTest`](../tests/jvm/datacraft-io/java/com/example/datacraft/io/CsvFilesTest.java) |
 | IO boundaries | [`StorageServiceTest`](../tests/jvm/datacraft-io/java/com/example/datacraft/io/StorageServiceTest.java), [`LocalFilesTest`](../tests/jvm/datacraft-io/java/com/example/datacraft/io/LocalFilesTest.java) |
 | SFTP | [`SftpClientTest`](../tests/jvm/datacraft-io/java/com/example/datacraft/io/SftpClientTest.java) (embedded SFTP server), [`RemoteFileTransferTest`](../tests/jvm/datacraft-io/java/com/example/datacraft/io/RemoteFileTransferTest.java), [`SftpConfigTest`](../tests/jvm/datacraft-io/java/com/example/datacraft/io/SftpConfigTest.java) |
-| HTTP status contract | [`EngineHttpServerTest`](../tests/jvm/datacraft-api/java/com/example/datacraft/api/EngineHttpServerTest.java) |
+| HTTP status contract, token and run limit | [`EngineHttpServerTest`](../tests/jvm/datacraft-api/java/com/example/datacraft/api/EngineHttpServerTest.java), [`EngineHttpServerConfigTest`](../tests/jvm/datacraft-api/java/com/example/datacraft/api/EngineHttpServerConfigTest.java) |
 | Airflow data paths, host-key guard and task wiring | [`tests/orchestration/test_dags.py`](../tests/orchestration/test_dags.py), [`tests/smoke/airflow_runtime_smoke.py`](../tests/smoke/airflow_runtime_smoke.py) |
-| API port and mount checks of `deployment_env.py` | [`tests/deploy/test_deployment_env.py`](../tests/deploy/test_deployment_env.py) |
+| API token, port and mount checks of `deployment_env.py` | [`tests/deploy/test_deployment_env.py`](../tests/deploy/test_deployment_env.py) |
 | Exit codes and results of the shaded jar | [`cicd/build/smoke-cli-jar.sh`](../cicd/build/smoke-cli-jar.sh) and [`cicd/build/check-cli-exit-codes.sh`](../cicd/build/check-cli-exit-codes.sh), run by the `build` job of [`ci.yml`](../.github/workflows/ci.yml) |

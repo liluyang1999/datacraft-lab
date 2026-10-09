@@ -56,6 +56,15 @@ object CliParser {
         )
         .action((value, args) => args.copy(port = value))
         .text("HTTP API port used by online engine commands."),
+      opt[Int]("max-concurrent-runs")
+        .optional()
+        .validate(value =>
+          if (value >= 1) success else failure("Max concurrent runs must be at least 1.")
+        )
+        .action((value, args) => args.copy(maxConcurrentRuns = value))
+        .text(
+          "Job runs serve-api executes at one time (default 4); a further run request gets 503."
+        ),
       opt[String]("config")
         .optional()
         .validate(value =>

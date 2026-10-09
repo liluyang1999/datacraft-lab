@@ -14,6 +14,15 @@ concurrency:
 permissions:
   contents: read
 
+# Every run step goes through cicd/step.py. It runs the step with bash -e, which is what the runner
+# would use anyway, and when the step fails it repeats the decisive lines of the output as an error
+# annotation. Annotations can be read through the public API and job logs cannot, so the cause of a
+# failure is visible without access to the repository. The script comes from the checkout, which
+# is therefore the first step of every job.
+defaults:
+  run:
+    shell: python3 -B cicd/step.py bash -e {0}
+
 # Actions are pinned to full commit SHAs (the comment names the release) and runners to an explicit
 # image, so neither a moved tag nor an ubuntu-latest migration changes CI without a commit here.
 jobs:
@@ -68,14 +77,14 @@ jobs:
 
       - name: Upload test reports
         if: failure()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: surefire-reports-jdk25
           path: "**/target/surefire-reports/**"
           if-no-files-found: ignore
 
       - name: Share the verified CLI with runtime tests
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: verified-cli
           path: ${{ env.CLI_JAR }}
@@ -106,7 +115,7 @@ jobs:
           distribution: temurin
           java-version: "25"
 
-      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: verified-cli
           path: target/runtime
@@ -144,7 +153,7 @@ jobs:
           python-version: "3.13"
 
       - name: Set up Node.js
-        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: "24"
 

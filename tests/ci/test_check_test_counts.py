@@ -3,6 +3,7 @@
 import contextlib
 import importlib.util
 import io
+import os
 from pathlib import Path
 import subprocess
 import sys
@@ -185,6 +186,30 @@ class CheckTestCountsTests(unittest.TestCase):
         self.assertEqual(1, failing.returncode, failing.stdout + failing.stderr)
         self.assertIn("::error::datacraft-spark executed 1 tests", failing.stdout)
         self.assertEqual("", failing.stderr)
+
+    def test_a_passing_check_on_a_runner_records_the_counts_as_one_notice(self):
+        command = [sys.executable, "-B", str(SCRIPT), "--platform", "linux", str(self.root)]
+        local = {key: value for key, value in os.environ.items() if key != "GITHUB_ACTIONS"}
+        runner = {**local, "GITHUB_ACTIONS": "true"}
+
+        def notices(environment):
+            result = subprocess.run(command, capture_output=True, text=True, env=environment)
+            return result.returncode, [line for line in result.stdout.splitlines()
+                                       if line.startswith("::notice")]
+
+        self.assertEqual((0, []), notices(local))
+        status, recorded = notices(runner)
+        self.assertEqual(0, status)
+        self.assertEqual(1, len(recorded), recorded)
+        total = sum(counts.FLOORS.values())
+        self.assertTrue(
+            recorded[0].startswith(f"::notice title=JVM tests executed on linux::{total} in total: "),
+            recorded[0])
+        for module, floor in counts.FLOORS.items():
+            self.assertIn(f"{module} {floor}", recorded[0])
+        # A failing check reports errors only.
+        write_report(self.root, "datacraft-spark", "com.example.FirstSpec", 0)
+        self.assertEqual((1, []), notices(runner))
 
     def test_every_reactor_module_has_a_positive_floor(self):
         pom = ET.parse(REPOSITORY / "pom.xml").getroot()

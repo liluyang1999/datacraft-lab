@@ -543,17 +543,20 @@ class DocsConsistencyTests(unittest.TestCase):
                     offenders.append(f"{name}:{number}")
         self.assertEqual([], offenders, "use a JAVA_HOME placeholder, not this workstation's path")
 
-    def test_serve_api_off_loopback_names_the_data_root(self):
+    def test_serve_api_off_loopback_names_the_token_and_the_data_root(self):
         offenders = []
         for name in doc_pages():
             lines = logical_lines(page_text(name))
             for index, (number, text) in enumerate(lines):
                 following = lines[index + 1][1] if index + 1 < len(lines) else ""
-                if binds_off_loopback(text) and "DATACRAFT_DATA_ROOT" not in text + following:
-                    offenders.append(f"{name}:{number}")
+                if binds_off_loopback(text):
+                    missing = [variable for variable in ("DATACRAFT_API_TOKEN", "DATACRAFT_DATA_ROOT")
+                               if variable not in text + following]
+                    if missing:
+                        offenders.append(f"{name}:{number} lacks {' and '.join(missing)}")
         self.assertEqual([], offenders,
-                         "serve-api refuses a non-loopback --host without DATACRAFT_DATA_ROOT; "
-                         "name the variable on the same or the next line")
+                         "serve-api refuses a non-loopback --host without DATACRAFT_API_TOKEN and "
+                         "DATACRAFT_DATA_ROOT; name both on the same or the next line")
 
     def test_airflow_pins_agree(self):
         found = {}

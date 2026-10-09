@@ -6,6 +6,119 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### API token, CSV encoding, diagnosable CI and an advisory check (2026-10-09)
+
+This round works through what the 2026-10-07 round left open and the residual risks its report
+listed. The HTTP API gets authentication and a bound on concurrent runs, the Spark CSV jobs get an
+`encoding` parameter and stop converting undecodable input into damaged text, every pipeline step
+reports the cause of a failure as a public annotation, a scheduled workflow checks every pinned
+version for advisories, and the build moves to Maven 3.10.0. Not changed, because nothing here can
+run them for real: the Swarm stack's network encryption and Redis authentication. The JVM suite
+was run on Windows and on Linux (WSL, Temurin 25.0.4.1), the three DAGs ran for real on Linux, and
+each new rule was checked by breaking it on purpose and requiring a test to fail. Items marked
+**BREAKING** need action from callers, operators or scripts.
+
+#### Security
+- **BREAKING:** the HTTP API authenticates its callers. `serve-api` reads a bearer token from
+  `DATACRAFT_API_TOKEN` (32 to 512 characters of the RFC 6750 token syntax); with one, every
+  request under `/jobs` must carry `Authorization: Bearer <token>` and gets 401 `unauthorized`
+  otherwise, before anything else about the request is checked. `/health` stays open. The server
+  keeps a SHA-256 digest of the token, compares digests and never logs the token. Off loopback
+  `serve-api` now refuses to start without the token as well as `DATACRAFT_DATA_ROOT`, so the
+  `datacraft/jvm` image starts only with `-e DATACRAFT_API_TOKEN`. Both stack files require the
+  variable like every other secret: an existing `deploy/compose/.env` needs a
+  `DATACRAFT_API_TOKEN` line (`openssl rand -hex 32`), and callers of the API must send the
+  header. `deployment_env.py init` generates the token, and `check` rejects a missing, weak,
+  placeholder or reused one.
+- The API runs at most `--max-concurrent-runs` jobs at one time (default 4). A further run request
+  gets 503 `busy` with `Retry-After: 1` at once instead of starting another job; reads and
+  requests that fail before they run take no place.
+- `cicd/security/check_advisories.py` asks OSV about every version the repository pins: the
+  dependencies the root POM manages, Airflow, pyspark, the FAB provider floor, shellcheck-py,
+  pyright and the actions of the workflows. `.github/workflows/advisories.yml` runs it every
+  Monday, on demand and when a pinning file changes. An advisory fails the run (exit 1), and so
+  does an OSV that cannot be asked (exit 2). On 2026-10-09 none of the 25 pins had an advisory.
+
+#### Fixed
+- **BREAKING:** `csv-to-parquet`, and `row-count` on CSV, turned bytes that were not valid UTF-8
+  into U+FFFD and reported SUCCEEDED, so a GBK or Latin-1 export became damaged text. Both jobs
+  now decode the input strictly before reading it and fail with "requirement failed: input is not
+  valid <charset>: <n> line(s) cannot be decoded, the first in <file>; set encoding to the charset
+  the data was written in"; `csv-to-parquet` fails before it writes. Name the charset with the new
+  `encoding` parameter to convert such a file. A conversion that used to succeed with damaged
+  output now fails.
+- `fail` in `cicd/lib.sh` printed a message with a line break as an annotation that ended at its
+  first line, the rest becoming ordinary log output (the HTTP check of the image smoke test builds
+  such a message). The message is now escaped as a workflow command requires.
+- `docs/README.md` still listed the container and Compose smoke tests under `tests/smoke`, and
+  `design/architecture.md` said a storage adapter could be added without touching the plain-JVM
+  jobs, although `InputFiles` builds a `LocalStorageService` itself. Both describe the code now.
+- The evaluation report's label colour was below a 4.5:1 contrast on all three surfaces of its
+  light theme (4.0:1 on the page ground, 4.4:1 on white, 3.7:1 on the sunken tone); it is now
+  5.0, 5.5 and 4.6:1.
+
+#### Added
+- `encoding` for the Spark CSV jobs: the name or alias of any charset the JVM supports that
+  encodes ASCII as ASCII (UTF-8 by default; GBK, GB18030, Big5, Shift_JIS, the ISO-8859 and Windows
+  code pages). UTF-16, UTF-32, EBCDIC, an unknown name and a blank value fail before Spark starts.
+  Spark 4 accepts only seven charsets by itself, so for any other the job sets
+  `spark.sql.legacy.javaCharsets=true` on its own session. Both data DAGs take `encoding` in their
+  trigger configuration.
+- `cicd/step.py`, the shell of every `run:` step (`defaults.run.shell` in both workflows). It runs
+  the step with `bash -e`, passes the output through and keeps the exit status; when the step
+  fails on a runner it adds an error annotation with the step's command, the first lines that name
+  a failure and the last 30 lines of output, within the 4096 characters the runner keeps.
+  Annotations are public, job logs are not, so a failure can be diagnosed without access to the
+  repository.
+- `diagnose TITLE COMMAND...` in `cicd/lib.sh` prints a command's output as a named group of the
+  log, and `cicd/step.py` repeats the last eight groups of a failed step as annotations of their
+  own. `smoke-compose.sh` reports the log of each service, the Airflow task logs and the container
+  states this way before it removes a failed stack, and removes the stack silently, so the last
+  lines of a failed step are no longer the removal of its containers.
+- `notice` in `cicd/lib.sh`, and notices from `check_test_counts.py` (tests executed per module),
+  `smoke-images.sh` and `smoke-compose.sh` (what was verified), as evidence of a passing run that
+  can be read through the same public API.
+- `make checks`: the checks CI's `build` job runs on the test reports and the jar after `verify`.
+- Tests. JVM: 17 new test cases, 300 in all (Linux runs 293, Windows 284): the token and its
+  order among the checks, the run limit and its release on every path, the configuration's
+  validation and redaction, the `serve-api` rules, the encoding parameter, strict decoding for
+  UTF-8, GBK, Latin-1, gzip and directory input, and a GBK conversion. Python: `tests/ci` 75
+  (the step wrapper, the helpers of `cicd/lib.sh`, the advisory check, two workflow rules, the
+  count notice), `tests/deploy` 51 (the token in the stacks and in `deployment_env.py`, the
+  Resolver option), `tests/orchestration` 17 (the DAG parameter). The Airflow runtime smoke test
+  converts a GBK file with `encoding=GBK`.
+- Twenty deliberate breakages of the new rules, each of which a test must notice. One of them
+  found a weak test: with the token ignored, a test that expects `serve-api` to refuse a malformed
+  token blocked in the server it had started instead of failing. Every such call in `RunnerSpec`
+  now has a 30 second limit.
+
+#### Changed
+- Maven 3.9.16 -> 3.10.0, through the wrapper and in the builder image
+  (`maven:3.10.0-eclipse-temurin-25`). The pinned SHA-256 was computed from a download whose
+  SHA-512 matches the value published on Maven Central and on downloads.apache.org.
+  `.mvn/maven.config` (new) sets `-Daether.remoteRepositoryFilter.prefixes.resolvePrefixFiles=false`:
+  Maven 3.10's Resolver otherwise asks every repository a dependency's POM names for a prefix
+  file on each online build and warns when one is unreachable or serves an expired certificate.
+  `Dockerfile.build` copies `.mvn/` before its first Maven run. Both Maven versions compute the
+  same class path, in the same order, for all eight modules (`dependency:build-classpath`, test
+  scope); the note of 2026-10-07 about a changed order did not reproduce.
+- `serve-api`'s refusal off loopback names what is missing, for example "serve-api refuses --host
+  0.0.0.0 without DATACRAFT_API_TOKEN and DATACRAFT_DATA_ROOT: off loopback, callers must present
+  a token and file jobs must be confined to a data root. Bind 127.0.0.1 or set them." The old
+  text named only the data root.
+- `deployment_env.py check` says "datacraft-api has no TLS and may only be published on loopback"
+  and "datacraft-api may only mount volumes read-only"; both messages used to begin with "The
+  unauthenticated datacraft-api".
+- The run check order of the HTTP API is token (401), method (405), `Origin` (403), request syntax
+  (400), job lookup (404), free capacity (503), then the run.
+- Test-count floors on Linux: api 27 (was 17), cli 31 (was 28), spark 56 (was 52); on Windows
+  spark 47 (was 44).
+- Dependencies, rechecked on 2026-10-09: spotless-maven-plugin 3.10.3 -> 3.10.4,
+  actions/upload-artifact v7.0.1 -> v7.0.2, actions/download-artifact v8.0.1 -> v8.0.2,
+  actions/setup-node v7.0.0 -> v7.1.0. Still not adopted: google-java-format 1.37.0, whose
+  formatter step fails on the first Java file under Spotless 3.10.4 as well. Spark 4.2.0, Airflow
+  3.3.2 and the other pins are still the newest releases.
+
 ### CI repair, module review and pipeline layout (2026-10-07)
 
 The `containers` job had failed on GitHub since the 2026-09-26 restructure: runs 36220947705 and

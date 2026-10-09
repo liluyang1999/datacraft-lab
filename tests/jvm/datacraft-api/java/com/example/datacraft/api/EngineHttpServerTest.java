@@ -27,6 +27,7 @@ import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.BlockingQueue;
@@ -52,6 +53,7 @@ class EngineHttpServerTest {
 
   private static final Duration REQUEST_TIMEOUT = Duration.ofSeconds(10);
   private static final String JSON = "application/json; charset=utf-8";
+  private static final String TOKEN = "0123456789abcdef0123456789abcdef";
 
   @Test
   void rejectsInvalidRequestsWithoutDroppingTheConnection() throws Exception {
@@ -539,6 +541,198 @@ class EngineHttpServerTest {
     }
   }
 
+  @Test
+  void requiresTheBearerTokenForEveryRequestUnderJobs() throws Exception {
+    AtomicInteger runs = new AtomicInteger();
+    JobRegistry registry = new JobRegistry();
+    registry.register(countingJob(runs));
+    try (HttpClient client = HttpClient.newHttpClient();
+        EngineHttpServer server =
+            EngineHttpServer.start(
+                EngineHttpServerConfig.localEphemeral().withApiToken(TOKEN), registry)) {
+      // The last three are wrong in every other way too: the missing token is reported first.
+      List<HttpRequest.Builder> anonymous =
+          List.of(
+              request(server, "/jobs").GET(),
+              request(server, "/jobs").HEAD(),
+              post(server, "/jobs/count/runs"),
+              request(server, "/jobs/count/runs").GET(),
+              post(server, "/jobs/missing/runs?lifecycle=bogus").header("Origin", "null"),
+              request(server, "/jobs/no/such/route").DELETE());
+      for (HttpRequest.Builder request : anonymous) {
+        HttpResponse<String> response = send(client, request);
+        String sent = response.request().method() + " " + response.request().uri().getPath();
+
+        assertEquals(401, response.statusCode(), sent);
+        assertEquals(
+            Optional.of("Bearer realm=\"datacraft-api\""),
+            response.headers().firstValue("WWW-Authenticate"),
+            sent);
+        if (!"HEAD".equals(response.request().method())) {
+          assertEquals("{\"error\":\"unauthorized\"}", response.body(), sent);
+        }
+      }
+      for (String credentials :
+          new String[] {
+            "Bearer " + TOKEN + "0",
+            "Bearer " + TOKEN.substring(1),
+            "Bearer " + TOKEN.toUpperCase(Locale.ROOT),
+            "Bearer",
+            "Basic " + TOKEN,
+            TOKEN
+          }) {
+        HttpResponse<String> response =
+            send(client, post(server, "/jobs/count/runs").header("Authorization", credentials));
+
+        assertEquals(401, response.statusCode(), credentials);
+      }
+      // A request with two Authorization headers is ambiguous, even when both carry the token.
+      String twice =
+          rawRequest(
+              server,
+              "POST",
+              "/jobs/count/runs".getBytes(StandardCharsets.US_ASCII),
+              "Authorization: Bearer " + TOKEN,
+              "Authorization: Bearer " + TOKEN);
+      assertTrue(twice.startsWith("HTTP/1.1 401"), twice);
+      assertEquals(0, runs.get());
+
+      HttpResponse<String> jobs =
+          send(client, request(server, "/jobs").header("Authorization", "Bearer " + TOKEN).GET());
+      // The scheme is case-insensitive and may be followed by more than one space.
+      HttpResponse<String> run =
+          send(
+              client, post(server, "/jobs/count/runs").header("Authorization", "bearer  " + TOKEN));
+      HttpResponse<String> health = send(client, request(server, "/health").GET());
+      HttpResponse<String> unknownRoute = send(client, request(server, "/").GET());
+
+      assertEquals(200, jobs.statusCode());
+      assertTrue(jobs.body().contains("\"name\":\"count\""), jobs.body());
+      assertEquals(200, run.statusCode());
+      assertEquals(1, runs.get());
+      assertEquals(200, health.statusCode());
+      assertEquals(404, unknownRoute.statusCode());
+      assertEquals("{\"error\":\"not_found\"}", unknownRoute.body());
+    }
+  }
+
+  @Test
+  void aTokenHolderStillPassesTheOtherChecksInOrder() throws Exception {
+    JobRegistry registry = new JobRegistry();
+    registry.register(new EchoJob());
+    try (HttpClient client = HttpClient.newHttpClient();
+        EngineHttpServer server =
+            EngineHttpServer.start(
+                EngineHttpServerConfig.localEphemeral().withApiToken(TOKEN), registry)) {
+      String everythingWrong = "/jobs/missing/runs?lifecycle=bogus";
+      String bearer = "Bearer " + TOKEN;
+      HttpResponse<String> wrongMethod =
+          send(
+              client,
+              request(server, everythingWrong)
+                  .header("Authorization", bearer)
+                  .header("Origin", "null")
+                  .GET());
+      HttpResponse<String> crossOrigin =
+          send(
+              client,
+              post(server, everythingWrong)
+                  .header("Authorization", bearer)
+                  .header("Origin", "null"));
+      HttpResponse<String> malformed =
+          send(client, post(server, everythingWrong).header("Authorization", bearer));
+
+      assertEquals(405, wrongMethod.statusCode());
+      assertEquals(403, crossOrigin.statusCode());
+      assertEquals(400, malformed.statusCode());
+    }
+  }
+
+  @Test
+  void aRunBeyondTheConcurrencyLimitGets503AndRunsNothing() throws Exception {
+    CountDownLatch started = new CountDownLatch(1);
+    CountDownLatch release = new CountDownLatch(1);
+    AtomicInteger runs = new AtomicInteger();
+    JobRegistry registry = new JobRegistry();
+    registry.register(countingJob(runs));
+    registry.register(
+        new FunctionJob(
+            "slow",
+            request -> {
+              started.countDown();
+              awaitUninterruptibly(release);
+              return JobExecutionResult.success(
+                  request.jobName(), "done", request.startedAt(), Instant.now());
+            }));
+    try (HttpClient client = HttpClient.newHttpClient();
+        EngineHttpServer server =
+            EngineHttpServer.start(
+                EngineHttpServerConfig.localEphemeral().withMaxConcurrentRuns(1), registry)) {
+      try {
+        CompletableFuture<HttpResponse<String>> inFlight =
+            client.sendAsync(
+                post(server, "/jobs/slow/runs").build(), HttpResponse.BodyHandlers.ofString());
+        assertTrue(started.await(5, TimeUnit.SECONDS), "job did not start");
+
+        HttpResponse<String> refused = send(client, post(server, "/jobs/count/runs"));
+        // Only a run takes a place: reads, and requests that fail before they run, do not.
+        HttpResponse<String> jobs = send(client, request(server, "/jobs").GET());
+        HttpResponse<String> health = send(client, request(server, "/health").GET());
+        HttpResponse<String> unknownJob = send(client, post(server, "/jobs/missing/runs"));
+
+        assertEquals(503, refused.statusCode());
+        assertEquals("{\"error\":\"busy\"}", refused.body());
+        assertEquals(Optional.of("1"), refused.headers().firstValue("Retry-After"));
+        assertEquals(Optional.of(JSON), refused.headers().firstValue("Content-Type"));
+        assertEquals(0, runs.get());
+        assertEquals(200, jobs.statusCode());
+        assertEquals(200, health.statusCode());
+        assertEquals(404, unknownJob.statusCode());
+
+        release.countDown();
+        assertEquals(200, inFlight.get(5, TimeUnit.SECONDS).statusCode());
+        HttpResponse<String> accepted = send(client, post(server, "/jobs/count/runs"));
+
+        assertEquals(200, accepted.statusCode());
+        assertEquals(1, runs.get());
+      } finally {
+        // Before the server closes: close() waits for the run in flight.
+        release.countDown();
+      }
+    }
+  }
+
+  @Test
+  void aRunThatFailsFreesItsPlaceForTheNext() throws Exception {
+    AtomicInteger runs = new AtomicInteger();
+    JobRegistry registry = new JobRegistry();
+    registry.register(countingJob(runs));
+    registry.register(
+        new FunctionJob(
+            "rejects",
+            request -> {
+              throw new IllegalArgumentException("Missing required parameter: input");
+            }));
+    registry.register(
+        new FunctionJob(
+            "deep",
+            request -> {
+              throw new StackOverflowError();
+            }));
+    try (UncaughtErrors uncaught = new UncaughtErrors();
+        HttpClient client = HttpClient.newHttpClient();
+        EngineHttpServer server =
+            EngineHttpServer.start(
+                EngineHttpServerConfig.localEphemeral().withMaxConcurrentRuns(1), registry)) {
+      assertEquals(500, send(client, post(server, "/jobs/rejects/runs")).statusCode());
+      // The engine lets a VirtualMachineError through, so the place must be freed on that path too.
+      assertEquals(500, send(client, post(server, "/jobs/deep/runs")).statusCode());
+      assertInstanceOf(StackOverflowError.class, uncaught.next());
+      assertEquals(200, send(client, post(server, "/jobs/count/runs")).statusCode());
+      assertEquals(1, runs.get());
+    }
+  }
+
   /** A catalog whose lookup throws {@code failure} and whose listing throws an AssertionError. */
   private static JobCatalog brokenCatalog(RuntimeException failure) {
     return new JobCatalog() {
@@ -572,12 +766,25 @@ class EngineHttpServerTest {
     return client.send(request.build(), HttpResponse.BodyHandlers.ofString());
   }
 
+  /** A job named {@code count} that succeeds and counts how often it ran. */
+  private static DataJob countingJob(AtomicInteger runs) {
+    return new FunctionJob(
+        "count",
+        request -> {
+          runs.incrementAndGet();
+          return JobExecutionResult.success(
+              request.jobName(), "counted", request.startedAt(), request.startedAt());
+        });
+  }
+
   /** Sends a POST whose request target is exactly these bytes and returns the whole response. */
   private static String rawPost(EngineHttpServer server, byte[] target) throws IOException {
     return rawRequest(server, "POST", target);
   }
 
-  private static String rawRequest(EngineHttpServer server, String method, byte[] target)
+  /** Sends one request with these extra header lines and returns the whole response. */
+  private static String rawRequest(
+      EngineHttpServer server, String method, byte[] target, String... headerLines)
       throws IOException {
     URI root = server.uri("/");
     try (Socket socket = new Socket(root.getHost(), root.getPort())) {
@@ -585,9 +792,12 @@ class EngineHttpServerTest {
       OutputStream out = socket.getOutputStream();
       out.write((method + " ").getBytes(StandardCharsets.US_ASCII));
       out.write(target);
-      out.write(
-          " HTTP/1.1\r\nHost: localhost\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"
-              .getBytes(StandardCharsets.US_ASCII));
+      StringBuilder head = new StringBuilder(" HTTP/1.1\r\nHost: localhost\r\n");
+      for (String line : headerLines) {
+        head.append(line).append("\r\n");
+      }
+      head.append("Content-Length: 0\r\nConnection: close\r\n\r\n");
+      out.write(head.toString().getBytes(StandardCharsets.US_ASCII));
       out.flush();
       return new String(socket.getInputStream().readAllBytes(), StandardCharsets.UTF_8);
     }

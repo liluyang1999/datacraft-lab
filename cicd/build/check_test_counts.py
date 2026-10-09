@@ -12,11 +12,15 @@ pending <testcase> a <skipped/> child. Both forms are read, and a test marked bo
 The floors depend on the platform that ran the tests, because the build excludes the other
 platform's tagged tests: --platform names it and defaults to the platform this script runs on.
 
+On a GitHub runner a passing check also records the counts as a notice annotation: annotations can
+be read through the public API, so the number of tests a run executed is visible without its log.
+
 Usage: python3 -B cicd/build/check_test_counts.py [--platform {linux,windows}] [REPOSITORY_ROOT]
 Exit status: 0 when every module meets its floor, 1 otherwise.
 """
 
 import argparse
+import os
 from pathlib import Path
 import sys
 import xml.etree.ElementTree as ET
@@ -25,19 +29,19 @@ import xml.etree.ElementTree as ET
 # counts: adding tests needs no change, but deliberately removing tests needs a lower floor in the
 # same commit.
 FLOORS = {
-    "datacraft-api": 17,
+    "datacraft-api": 27,
     "datacraft-common": 7,
     "datacraft-config": 13,
     "datacraft-engine": 32,
     "datacraft-io": 57,
     "datacraft-jobs": 70,
-    "datacraft-cli": 28,
-    "datacraft-spark": 52,
+    "datacraft-cli": 31,
+    "datacraft-spark": 56,
 }
 
 # The same on Windows, where the build excludes the posix-only tests (symbolic links, `?` in file
 # names, Hadoop local writes) and runs datacraft-io's windows-only junction tests instead.
-WINDOWS_FLOORS = {**FLOORS, "datacraft-io": 59, "datacraft-jobs": 68, "datacraft-spark": 44}
+WINDOWS_FLOORS = {**FLOORS, "datacraft-io": 59, "datacraft-jobs": 68, "datacraft-spark": 47}
 
 PLATFORM_FLOORS = {"linux": FLOORS, "windows": WINDOWS_FLOORS}
 
@@ -111,8 +115,11 @@ def host_platform():
     return "windows" if sys.platform == "win32" else "linux"
 
 
-def check(root, floors=None):
-    """Returns the list of failure messages; empty when every module meets its floor."""
+def check(root, floors=None, executed_by_module=None):
+    """Returns the list of failure messages; empty when every module meets its floor.
+
+    executed_by_module, when given, receives the executed count of each module that has reports.
+    """
     floors = FLOORS if floors is None else floors
     failures = []
     for module, floor in floors.items():
@@ -121,6 +128,8 @@ def check(root, floors=None):
         except ReportError as error:
             failures.append(f"{module}: {error}")
             continue
+        if executed_by_module is not None:
+            executed_by_module[module] = executed
         status = "ok" if executed >= floor else "BELOW FLOOR"
         print(f"{module}: executed {executed} (skipped {skipped}), floor {floor} - {status}")
         if executed < floor:
@@ -135,9 +144,14 @@ def main(argv=None):
                         help="platform that ran the tests (default: this one)")
     args = parser.parse_args(argv)
     print(f"floors for tests run on {args.platform}")
-    failures = check(Path(args.root), PLATFORM_FLOORS[args.platform])
+    executed = {}
+    failures = check(Path(args.root), PLATFORM_FLOORS[args.platform], executed)
     for failure in failures:
         print(f"::error::{failure}")
+    if not failures and os.environ.get("GITHUB_ACTIONS"):
+        modules = ", ".join(f"{module} {count}" for module, count in sorted(executed.items()))
+        print(f"::notice title=JVM tests executed on {args.platform}::"
+              f"{sum(executed.values())} in total: {modules}")
     return 1 if failures else 0
 
 

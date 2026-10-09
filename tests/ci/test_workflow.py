@@ -15,6 +15,9 @@ PINNING_CHECK = CICD / "lint" / "check-actions-pinned.sh"
 SPARK_SUITE_CHECK = CICD / "build" / "check-spark-suite.sh"
 
 RUN = re.compile(r"^\s*(?:-\s+)?run:\s*(.*)$")
+SHELL = re.compile(r"^(\s*)(?:-\s+)?shell:\s*(.*)$")
+# The shell of every run step: cicd/step.py around the runner's own default, bash -e.
+STEP_SHELL = "python3 -B cicd/step.py bash -e {0}"
 # Repository paths a command names: a script under cicd/ or a test entry point under tests/.
 REFERENCED_PATH = re.compile(r"(?<![\w./-])((?:cicd|tests)/[\w./-]+\.(?:sh|py|java|cjs))")
 # Shell syntax that would make a run step more than one command.
@@ -36,10 +39,14 @@ def run_commands():
     """(workflow, line number, command) of every `run:` step."""
     commands = []
     for workflow in workflow_files():
+        previous = ""
         for number, line in enumerate(workflow.read_text(encoding="utf-8").splitlines(), 1):
             match = RUN.match(line)
-            if match:
+            # `defaults: run:` is the mapping that holds the default shell, not a step.
+            if match and previous != "defaults:":
                 commands.append((workflow.name, number, match.group(1).strip()))
+            if line.strip() and not line.lstrip().startswith("#"):
+                previous = line.strip()
     return commands
 
 
@@ -68,6 +75,40 @@ class WorkflowTests(unittest.TestCase):
         offenders = [f"{name}:{number}: run: {command}" for name, number, command in run_commands()
                      if not command or command[0] in "|>" or COMPOUND.search(command)]
         self.assertEqual([], offenders, "move step logic into a script under cicd/")
+
+    def test_every_run_step_goes_through_the_step_wrapper(self):
+        # One shell, set once for the whole workflow; a job or a step that named its own would lose
+        # the failure annotations.
+        for workflow in workflow_files():
+            lines = workflow.read_text(encoding="utf-8").splitlines()
+            shells = [(index, match.group(1), match.group(2).strip())
+                      for index, line in enumerate(lines) if (match := SHELL.match(line))]
+            with self.subTest(workflow=workflow.name):
+                self.assertEqual([STEP_SHELL], [value for _, _, value in shells])
+                index, indent, _ = shells[0]
+                self.assertEqual("    ", indent)
+                self.assertEqual(["defaults:", "  run:"], lines[index - 2:index])
+        self.assertTrue((REPOSITORY / "cicd" / "step.py").is_file())
+
+    def test_every_job_checks_out_before_its_first_run_step(self):
+        # The step wrapper is a file of the repository: a run step before the checkout cannot start.
+        for workflow in workflow_files():
+            jobs, steps, inside_jobs = {}, None, False
+            for line in workflow.read_text(encoding="utf-8").splitlines():
+                job = re.match(r"^  ([\w-]+):\s*$", line)
+                if re.match(r"^jobs:\s*$", line):
+                    inside_jobs = True
+                elif inside_jobs and job:
+                    steps = jobs.setdefault(job.group(1), [])
+                elif steps is not None and re.match(r"^\s*(?:-\s+)?uses:\s*actions/checkout@", line):
+                    steps.append("checkout")
+                elif steps is not None and RUN.match(line):
+                    steps.append("run")
+            self.assertTrue(jobs, workflow.name)
+            for job_name, order in jobs.items():
+                with self.subTest(workflow=workflow.name, job=job_name):
+                    if "run" in order:
+                        self.assertEqual("checkout", order[0])
 
     def test_compound_commands_are_recognised(self):
         for command in ("a && b", "a || b", "a; b", "a | b", "echo `date`", "echo $(date)",

@@ -201,10 +201,16 @@ and other methods a JSON 405 with `Allow`; the full status contract, including t
 HTML 400 for request targets it cannot parse, is in
 [data-contracts.md](data-contracts.md#http-status-contract).
 
+When `DATACRAFT_API_TOKEN` is set, every request under `/jobs` must present it as a bearer token
+and gets 401 otherwise; `/health` stays open. At most `--max-concurrent-runs` runs (default 4) are
+in progress at one time, and a further run request gets 503 at once (decision 11 in
+[decisions.md](decisions.md)).
+
 `serve-api` binds `127.0.0.1` by default. It refuses to start (exit 2) on a non-loopback `--host`
-while `DATACRAFT_DATA_ROOT` is unset or blank, because the API is unauthenticated and its file jobs
-could otherwise read any path. The `datacraft/jvm` image serves on `0.0.0.0:8080` and sets
-`DATACRAFT_DATA_ROOT=/opt/datacraft/data`.
+unless both `DATACRAFT_API_TOKEN` and `DATACRAFT_DATA_ROOT` are set, because anyone who reaches the
+port could otherwise run jobs and the file jobs could read any path. The `datacraft/jvm` image
+serves on `0.0.0.0:8080` and sets `DATACRAFT_DATA_ROOT=/opt/datacraft/data`, so it starts only with
+a token, which both stacks pass from `.env`.
 
 On `close()` or SIGTERM the server stops accepting connections at once, waits up to 8 s for
 in-flight requests and up to 1 s more for handler threads, which fits Docker's 10 s default stop
@@ -235,7 +241,8 @@ All JVM code uses base package `com.example.datacraft` plus the module name (`.c
 
 The parent POM owns every version and the compiler, formatter, Checkstyle, Enforcer and test
 configuration; module POMs declare only their dependencies, their boundary rule and module-specific
-plugins. `./mvnw verify` runs the Enforcer rules (JDK 25.0.4.1+, Maven 3.9+, pinned plugins, no
+plugins. `./mvnw verify` (Maven 3.10.0 through the wrapper) runs the Enforcer rules (JDK
+25.0.4.1+, Maven 3.9+, pinned plugins, no
 POM repositories, no vulnerable Jackson, module boundaries), javac with `-Xlint:all` and scalac with
 `-Werror` (any warning fails), Spotless, Checkstyle, the JUnit and ScalaTest suites and the shaded
 package. GitHub Actions on `ubuntu-24.04` is the authoritative gate: on top of `verify` it runs
@@ -275,8 +282,10 @@ Extension points:
 - When the number of jobs grows, add a plugin-scanning or configuration-driven `JobCatalog`;
   `JobExecutionEngine` and `EngineHttpServer` depend only on the `JobCatalog` interface.
 - For object storage, HDFS or cloud storage, add an implementation of `StorageService` or
-  `RemoteFileTransfer` instead of changing the jobs. `StorageService` takes relative
-  `java.nio.file.Path` values, so such an adapter maps them to its own keys.
+  `RemoteFileTransfer`. `StorageService` takes relative `java.nio.file.Path` values, so such an
+  adapter maps them to its own keys. The plain-JVM jobs do not pick an implementation themselves:
+  `InputFiles` builds a `LocalStorageService` and checks the file type on the local path, so it is
+  the one class to change when their input should come from another store.
 - New Airflow DAGs reuse `datacraft_common.py` (`cli_task`, `spark_task`, `data_path_param`,
   `DEFAULT_ARGS`) for parameters, timeouts, retries and results, and add tests under
   `tests/orchestration` and, for DAGs that process data, a run in

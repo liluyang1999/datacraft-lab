@@ -94,7 +94,7 @@ Consequences elsewhere in the build:
 | google-java-format | `google.java.format.version` | 1.36.1 |
 | scalafmt | Spotless configuration and `.scalafmt.conf` | 3.11.5 |
 | Checkstyle engine | `checkstyle.version` | 14.3.0 |
-| Maven | `.mvn/wrapper/maven-wrapper.properties` | 3.9.16 |
+| Maven | `.mvn/wrapper/maven-wrapper.properties` | 3.10.0 |
 | Maven Wrapper | `.mvn/wrapper/maven-wrapper.properties` | 3.3.4 |
 
 | Plugin | Version |
@@ -112,14 +112,17 @@ Consequences elsewhere in the build:
 | maven-site-plugin | 3.22.0 |
 | maven-dependency-plugin | 3.11.0 |
 | maven-enforcer-plugin | 3.6.3 |
-| spotless-maven-plugin | 3.10.3 |
+| spotless-maven-plugin | 3.10.4 |
 | maven-checkstyle-plugin | 3.6.0 |
 
 The install, deploy and site plugins are pinned because the Enforcer checks plugins up to the
 `deploy` and `site` phases; maven-dependency-plugin serves the builder image's
 `dependency:go-offline` step. Spark constrains two choices: `scala.version` is the Scala version
 Spark 4.2.0 is built with (2.13.18), and Jackson stays on the 2.x line that Spark uses (decision 4
-in [decisions.md](decisions.md)).
+in [decisions.md](decisions.md)). One component is deliberately one release behind:
+google-java-format 1.37.0 does not run under Spotless 3.10.4, the newest release, whose formatter
+step fails on the first Java file (checked on 2026-10-09), so it stays at 1.36.1 until a Spotless
+release runs it.
 
 ## Compiler settings
 
@@ -291,7 +294,7 @@ tests bind to `slf4j-nop`.
 
 ### Test inventory and floors
 
-The JVM suites have 283 test cases.
+The JVM suites have 300 test cases.
 [`cicd/build/check_test_counts.py`](../cicd/build/check_test_counts.py) reads each module's
 `target/surefire-reports/TEST-*.xml`, counts executed tests (skipped, aborted and canceled ones do
 not count) and fails when a module is below its floor. Floors are minimums: adding tests needs no
@@ -305,15 +308,16 @@ the script's module map matches the POM's `<modules>`.
 | `datacraft-io` | 57 | 59 | 7 `windows-only`, 5 `posix-only` |
 | `datacraft-engine` | 32 | 32 | none |
 | `datacraft-jobs` | 70 | 68 | 2 `posix-only` |
-| `datacraft-spark` | 52 | 44 | 8 `posix-only` |
-| `datacraft-api` | 17 | 17 | none |
-| `datacraft-cli` | 28 | 28 | none |
-| Total | 276 | 268 | |
+| `datacraft-spark` | 56 | 47 | 9 `posix-only` |
+| `datacraft-api` | 27 | 27 | none |
+| `datacraft-cli` | 31 | 31 | none |
+| Total | 293 | 284 | |
 
 The script keeps a set of floors per platform, because each platform excludes the other's tagged
 tests: `--platform` names the platform that ran the tests and defaults to the one the script runs
 on. CI therefore checks the Linux floors, and the same command on a Windows workstation checks
-the Windows ones, where it used to report two modules below their Linux floors.
+the Windows ones, where it used to report two modules below their Linux floors. On a runner a
+passing check also records the counts as a notice annotation (see [CI gates](#ci-gates)).
 
 ### Python and Node suites
 
@@ -359,8 +363,10 @@ laptop experiments without `spark-submit`. CI checks the shaded jar in the `buil
 
 - The Apache Maven Wrapper 3.3.4 is script-only (`distributionType=only-script`): the repository
   commits `mvnw`, `mvnw.cmd` and `.mvn/wrapper/maven-wrapper.properties`, and no
-  `maven-wrapper.jar`. The scripts download Maven 3.9.16 (`bin.zip`) and verify it against
+  `maven-wrapper.jar`. The scripts download Maven 3.10.0 (`bin.zip`) and verify it against
   `distributionSha256Sum`; a mismatch stops with "Failed to validate Maven distribution SHA-256".
+  The pinned value was computed from a download whose SHA-512 matched the one published on both
+  Maven Central and downloads.apache.org.
 - The check runs only when the distribution is downloaded, that is when `MAVEN_USER_HOME`
   (default `~/.m2`) has no matching `wrapper/dists` entry; an existing one is reused. On Linux and
   macOS the script needs `unzip`: without it the script downloads the `.tar.gz`, whose checksum
@@ -372,10 +378,19 @@ laptop experiments without `spark-submit`. CI checks the shaded jar in the `buil
   `sun.misc.Unsafe`, and code running inside the Maven JVM does so (Spotless and the zinc compiler
   of scala-maven-plugin use `sun.misc.Unsafe`). Forked test JVMs do not read this file; they get
   their options from the test properties above.
-- The builder image `deploy/docker/Dockerfile.build` uses `maven:3.9.16-eclipse-temurin-25`, the
-  wrapper's Maven version; a test in `tests/deploy` keeps the two equal. It builds from the
-  Docker build context, not from the checkout: `cicd/build/check-image-build.sh` runs its Maven
-  command in a copy of that context.
+- [`.mvn/maven.config`](../.mvn/maven.config) holds one option for every Maven run of this build,
+  `-Daether.remoteRepositoryFilter.prefixes.resolvePrefixFiles=false`. Maven 3.10 brings Resolver
+  2, which by default asks every remote repository it meets for a prefix file, including the
+  repositories that only a dependency's POM names. On this build that meant requests to half a
+  dozen third-party hosts on each online build, and a `[WARNING]` whenever one of them was
+  unreachable or, like `maven.java.net`, served an expired certificate, so a clean build depended
+  on servers the project does not use. With the option Maven resolves as 3.9 did. Both versions
+  compute the same class path, in the same order, for every module.
+- The builder image `deploy/docker/Dockerfile.build` uses `maven:3.10.0-eclipse-temurin-25`, the
+  wrapper's Maven version; a test in `tests/deploy` keeps the two equal, and another one requires
+  the image to copy `.mvn/` before its first Maven run, so the option above applies there too. It
+  builds from the Docker build context, not from the checkout:
+  `cicd/build/check-image-build.sh` runs its Maven command in a copy of that context.
 - The [`Makefile`](../Makefile) targets call `./mvnw` (`make MVN=mvn ...` switches to a Maven on
   `PATH`), and `deploy/scripts/build-jar.sh` and `build.ps1` prefer the wrapper over a Maven on
   `PATH`.
@@ -405,6 +420,36 @@ point in `tests/`, or a single tool (`./mvnw -B -ntp verify`, pyright, a clean-u
 scripts therefore run and can be reviewed outside GitHub Actions. The shell scripts report through
 `fail` in `cicd/lib.sh`: an `::error::` annotation on a runner, standard error elsewhere; the
 Python checks print `::error::` lines on standard output everywhere.
+
+A job log can be read only with access to the repository, whereas the annotations of a run are
+public (`GET /repos/{owner}/{repo}/check-runs/{job id}/annotations`). The pipeline therefore puts
+what a reader needs into annotations:
+
+- **Failures.** The workflow sets `defaults.run.shell` to `python3 -B cicd/step.py bash -e {0}`, so
+  every `run:` step goes through [`cicd/step.py`](../cicd/step.py). It runs the step with
+  `bash -e`, the shell the runner would use anyway, passes the output through unchanged and keeps
+  the exit status. When the step fails on a runner it adds one `::error` annotation: the job and
+  the step's command in the title, and in the message the first lines that name a failure (Maven
+  and Docker errors, failed JUnit, ScalaTest and unittest tests, exception headers) followed by
+  the last 30 lines of output, within the 4096 characters the runner keeps. Without it, a failed
+  step left only "Process completed with exit code 1.", which is all the two failed runs of
+  2026-09-26 showed. The script is part of the checkout, so the checkout is the first step of
+  every job; `tests/ci/test_workflow.py` requires both.
+- **The state behind a failure.** A stack that failed is removed before the step ends, so the smoke
+  scripts first collect what explains it: `diagnose TITLE COMMAND...` in `cicd/lib.sh` prints a
+  command's output as a named group of the log (`::group::` and `::endgroup::`, which the runner
+  folds), and `cicd/step.py` repeats the last eight groups of a failed step as annotations of
+  their own, each under its title and within its own 4096 characters. `smoke-compose.sh` reports
+  the log of each service, the Airflow task logs and the container states this way. The lines of
+  a group stay out of the step's own annotation, which therefore shows what the step printed
+  before it failed; the teardown itself prints nothing. Eight groups, the step's annotation and
+  the one from `fail` are the ten error annotations a runner keeps for a step.
+- **Messages that span lines.** `fail` escapes `%`, CR and LF, so a message with a line break stays
+  one annotation instead of ending at the first line.
+- **Evidence of a passing run.** `notice` in `cicd/lib.sh` records what a check established:
+  `check_test_counts.py` the number of tests each module executed, `smoke-images.sh` the Java
+  runtime of the images and what was verified, `smoke-compose.sh` the stack checks. Outside a
+  runner the same text is ordinary output.
 [`tests/ci/test_workflow.py`](../tests/ci/test_workflow.py) keeps the split: a `run:` step must be
 a single command (no block scalar and no shell operator such as `&&`, `||`, `;` or `|`), the
 scripts the workflow and the Makefile name must exist, every file in `cicd/` must be used by the
@@ -418,8 +463,8 @@ the operator's `build-images.sh`, and nothing under `deploy/` depends on `cicd/`
 The workflow runs on pushes and pull requests to `main` and on demand, with read-only repository
 permissions; a newer run on the same ref cancels the older one. Every job runs on `ubuntu-24.04`,
 and every action is pinned to a full commit SHA with the release in a comment: `checkout` v7.0.1,
-`setup-java` v6.0.1, `setup-python` v7.0.0, `setup-node` v7.0.0, `upload-artifact` v7.0.1 and
-`download-artifact` v8.0.1. The `scripts` job fails on any `uses` that is not written as
+`setup-java` v6.0.1, `setup-python` v7.0.0, `setup-node` v7.1.0, `upload-artifact` v7.0.2 and
+`download-artifact` v8.0.2. The `scripts` job fails on any `uses` that is not written as
 `uses: owner/repo@<40-character SHA> # vX.Y.Z` or does not name a local `./` action
 (`cicd/lint/check-actions-pinned.sh`). The check reads lines, not YAML, so it also fails on
 anything it could misread: another spelling of the key (flow style, a quoted or explicit key, the
@@ -436,8 +481,8 @@ compose]`, so it does not start while a cheaper gate is failing.
 | `build`: Build & verify (JDK 25) | Temurin 25; `cicd/build/check-maven-wrapper.sh`: the wrapper must refuse a Maven download with a wrong SHA-256 (a copy with a zeroed `distributionSha256Sum` and an empty `MAVEN_USER_HOME`), and no `maven-wrapper.jar` may be committed; `./mvnw -B -ntp verify`; the test floors (`cicd/build/check_test_counts.py`); `cicd/build/check-spark-suite.sh`: the Spark suite must have run `SparkPipelineSpec` with `canceled 0`; the jar and exit-code checks and the build-context check below. |
 | `dags`: Airflow contracts and real pipelines (3.3.2) | Python 3.13, the version the `apache/airflow:3.3.2` image runs; `cicd/airflow/install-airflow.sh`: `apache-airflow==3.3.2` and the providers under the official `constraints-3.3.2` file for the running Python (the script derives the version, as `Dockerfile.airflow` does, and a test in `tests/docs` keeps it from being fixed), `pip check`, then pyspark 4.2.0; `cicd/airflow/check_security_floor.py`: apache-airflow 3.3.2 and FAB provider 3.9.0 at least; `tests/orchestration`; `tests/smoke/airflow_runtime_smoke.py` against the jar built by `build`, with pyspark 4.2.0's `spark-submit`. |
 | `scripts`: Script, documentation and type checks | `cicd/lint/check-actions-pinned.sh`; Python 3.13 and Node 24; `cicd/lint/install-shellcheck.sh`: ShellCheck 0.11.0 from the PyPI package `shellcheck-py`, so the result does not depend on the runner image; `cicd/lint/check-shell-scripts.sh`: `bash -n` and ShellCheck on every `*.sh` git knows (tracked or not yet ignored), with sourced files followed and every finding fatal; `tests/deploy`, `tests/ci` and `tests/docs`; `node --test tests/docs/cloud-costs.test.cjs`; pyright 1.1.414 with `--warnings`. |
-| `compose`: Compose / Swarm file validation | `cicd/stacks/check-stack-files.sh`: `docker compose config` and `docker stack config` with test-only secrets; for each required secret, interpolation must fail when it is missing. Nothing is built or deployed; the script refuses to run while `deploy/compose/.env` exists, because it writes that file from `.env.example`. |
-| `containers`: Build and smoke-test runtime images | Runs after `build`, `scripts` and `compose`. `cicd/images/smoke-images.sh`: builds the images; the build context must exclude `.env` and `backups/`; both runtime images carry the freshly pulled Temurin JRE, at least 25.0.4.1; the API runs as non-root, cannot modify its jar and answers `spark-version` with HTTP 500 FAILED; `pip check` and `cicd/airflow/check_security_floor.py` inside the Airflow image; a fresh data volume is writable by an Airflow task and read-only for the API; the real pipelines inside the image. `cicd/images/smoke-compose.sh`: the full Compose stack with generated secrets, all three image-baked DAGs registered, a triggered `datacraft_engine_jobs` run through the scheduler and LocalExecutor, and a `pg_dump` backup restored into a separate database that must contain the successful run; a failure prints the task logs before the stack is removed. |
+| `compose`: Compose / Swarm file validation | `cicd/stacks/check-stack-files.sh`: `docker compose config` and `docker stack config` with test-only secrets; for each required secret, the API token included, interpolation must fail when it is missing. Nothing is built or deployed; the script refuses to run while `deploy/compose/.env` exists, because it writes that file from `.env.example`. |
+| `containers`: Build and smoke-test runtime images | Runs after `build`, `scripts` and `compose`. `cicd/images/smoke-images.sh`: builds the images; the build context must exclude `.env` and `backups/`; both runtime images carry the freshly pulled Temurin JRE, at least 25.0.4.1; the API image refuses to start without `DATACRAFT_API_TOKEN`, and with one it answers 401 to a `/jobs` request without or with a wrong token; it runs as non-root, cannot modify its jar and answers `spark-version` with HTTP 500 FAILED; `pip check` and `cicd/airflow/check_security_floor.py` inside the Airflow image; a fresh data volume is writable by an Airflow task and read-only for the API; the real pipelines inside the image, a GBK file converted with `encoding=GBK` among them. `cicd/images/smoke-compose.sh`: the full Compose stack with generated secrets, the generated API token opening `datacraft-api` on its loopback port, all three image-baked DAGs registered, a triggered `datacraft_engine_jobs` run through the scheduler and LocalExecutor, and a `pg_dump` backup restored into a separate database that must contain the successful run; a failure prints the task logs before the stack is removed. |
 
 Checks of the shaded jar in the `build` job:
 
@@ -474,6 +519,29 @@ The build-context check, also in the `build` job:
 On failure the job uploads the test reports; on success it shares the verified jar with the
 `dags` job for one day.
 
+### Advisory check
+
+Pinning every version keeps the build reproducible, and also keeps a version in place after an
+advisory is published for it. A second workflow,
+[`advisories.yml`](../.github/workflows/advisories.yml), therefore runs
+[`cicd/security/check_advisories.py`](../cicd/security/check_advisories.py) every Monday, on demand
+and on a push that changes a file which pins a version:
+
+- It reads the pins from the files that hold them: the dependencies the root POM manages (the
+  Jackson BOM stands for `jackson-core` and `jackson-databind`), `apache-airflow` and `pyspark`
+  from `install-airflow.sh`, the FAB provider floor from `check_security_floor.py`, `shellcheck-py`,
+  `pyright` from the Makefile, and every action at the release its pinned commit is commented
+  with. A file in which no pin is found is an error, so a reworded pin cannot drop out unnoticed.
+- It asks [OSV](https://osv.dev) about each pin. OSV matches versions itself for Maven, PyPI and
+  npm; for GitHub Actions it only lists advisories, so the script evaluates their version ranges
+  the way the OSV schema describes.
+- Exit status 0 means no pin has an advisory, 1 that one has (one `::error::` line per pin, with
+  links), and 2 that OSV could not be asked, so a check that did not run never counts as a pass.
+
+It does not see transitive dependencies, which Spark and the Airflow constraints file pin, or the
+base images. No bot opens pull requests: a failed scheduled run is the signal, and the fix is an
+ordinary commit that raises the pin (decision 13 in [decisions.md](decisions.md)).
+
 ## Zero-warning policy
 
 A warning is fixed at its cause, made fatal or, when a third-party tool emits it, removed by
@@ -488,12 +556,13 @@ zero:
 | Build environment, plugin versions, dependencies | Enforcer rules | the build fails, including on a JDK older than 25.0.4.1 |
 | Shading | manifests filtered, NOTICE merged, one LICENSE, services merged, no `module-info.class` | configuration; CI checks the manifest and `module-info.class` |
 | JVM warnings in the Maven JVM | `.mvn/jvm.config` | configuration |
+| Resolver warnings about third-party repositories | prefix discovery switched off in `.mvn/maven.config` | configuration; a test in `tests/deploy` keeps the option and the builder image's copy of `.mvn/` |
 | JVM warnings in Spark test JVMs | `spark.test.jvm.args` | configuration |
 | Log noise from provoked failures | handler-less java.util.logging, Log4j 2 level `off`, `slf4j-nop`, the MINA transport for the SFTP test server | configuration |
 | Skipped and canceled tests | platform tags and host profiles | CI counts executed tests only and fails a canceled Spark suite |
 | Python | pyright configuration | CI and `make typecheck` fail on any pyright error or warning (`--warnings`) |
 | Shell | ShellCheck 0.11.0 over every shell script git knows, following sourced files; every finding fails, style notes included | CI (`cicd/lint/install-shellcheck.sh` installs that release); `make lint` |
-| Pipeline logic | a `run:` step is one command; logic lives in `cicd/` | `tests/ci/test_workflow.py` |
+| Pipeline logic | a `run:` step is one command; logic lives in `cicd/`; every step runs through `cicd/step.py` | `tests/ci/test_workflow.py` |
 
 A clean `./mvnw verify` on JDK 25.0.4.1 prints no Maven or JVM warning at all.
 

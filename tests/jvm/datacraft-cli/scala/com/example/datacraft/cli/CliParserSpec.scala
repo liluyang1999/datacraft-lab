@@ -62,6 +62,23 @@ class CliParserSpec extends AnyFunSuite {
       assert(CliParser.parseQuietly(Seq("--command", "serve-api", "--port", port)).isEmpty, port)
   }
 
+  test("--max-concurrent-runs defaults to 4 and must be at least 1") {
+    assert(CliParser.parseQuietly(Seq("--command", "serve-api")).exists(_.maxConcurrentRuns == 4))
+    for (limit <- Seq(1, 64))
+      assert(
+        CliParser
+          .parseQuietly(Seq("--command", "serve-api", "--max-concurrent-runs", limit.toString))
+          .exists(_.maxConcurrentRuns == limit)
+      )
+    for (limit <- Seq("0", "-1", "many"))
+      assert(
+        CliParser
+          .parseQuietly(Seq("--command", "serve-api", "--max-concurrent-runs", limit))
+          .isEmpty,
+        limit
+      )
+  }
+
   test("an option other than --param may be given only once") {
     assert(CliParser.parseQuietly(Seq("--command", "echo", "--json", "--json")).isEmpty)
     assert(

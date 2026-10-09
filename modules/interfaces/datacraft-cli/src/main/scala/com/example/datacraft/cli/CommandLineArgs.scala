@@ -1,5 +1,6 @@
 package com.example.datacraft.cli
 
+import com.example.datacraft.api.EngineHttpServerConfig
 import com.example.datacraft.common.Lifecycle
 
 import java.nio.file.Path
@@ -10,6 +11,7 @@ final case class CommandLineArgs(
     master: String = "local[*]",
     host: String = "127.0.0.1",
     port: Int = 8080,
+    maxConcurrentRuns: Int = EngineHttpServerConfig.DEFAULT_MAX_CONCURRENT_RUNS,
     configFile: Option[Path] = None,
     parameters: Map[String, String] = Map.empty,
     masterExplicit: Boolean = false,

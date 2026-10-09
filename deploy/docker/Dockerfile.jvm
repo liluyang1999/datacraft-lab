@@ -3,6 +3,8 @@
 # Runtime image for the non-Spark surface: the online HTTP API and lightweight engine jobs.
 # Small (JRE + ~9MB jar). Default command serves the API on all interfaces, port 8080, as the
 # unprivileged uid 10001; the jar stays root-owned, so that user can read but not modify it.
+# Off loopback the API refuses to start without DATACRAFT_API_TOKEN, the bearer token every /jobs
+# request must then present: pass it with `docker run -e DATACRAFT_API_TOKEN`, as the stacks do.
 #
 # Do not create /opt/datacraft/data here. Compose and Swarm mount the shared datacraft-data volume
 # there read-only, and Docker seeds an empty volume from whichever image mounts it first: this image
@@ -25,8 +27,8 @@ WORKDIR /opt/datacraft
 COPY --from=jar /dist/datacraft-cli.jar ./datacraft-cli.jar
 
 ENV DATACRAFT_HOME=/opt/datacraft
-# The API is unauthenticated, so its file jobs (csv-profile, file-checksum) fail closed unless the
-# data volume is mounted here. Only an ENV: the image must not create the directory itself.
+# The file jobs (csv-profile, file-checksum) read only below this directory and fail closed unless
+# the data volume is mounted here. Only an ENV: the image must not create the directory itself.
 ENV DATACRAFT_DATA_ROOT=/opt/datacraft/data
 EXPOSE 8080
 
