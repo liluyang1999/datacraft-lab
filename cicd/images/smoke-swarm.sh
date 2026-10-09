@@ -4,13 +4,14 @@
 # tag, then swarm-deploy.sh and airflow-init.sh exactly as an operator runs them. It requires every
 # long-running service to run (a service with a health check counts once it is healthy), the engine
 # API to answer on the overlay network only and its token only, the Airflow UI to sign the generated
-# admin in through the routing mesh, and one DAG run to pass through the scheduler, Redis and a
+# admin in through the routing mesh, Redis to refuse a client without its password, the overlay
+# network to be an encrypted one, and one DAG run to pass through the scheduler, Redis and a
 # Celery worker. Then the documented upgrade: the same images under a second tag, deployed again.
 # The one-shot initializer has to run again, the idle worker has to stop for its replacement, and
 # the run from before the upgrade has to be there afterwards.
 #
 # One node proves that the stack file, the two scripts and the images work together. It says
-# nothing about placement, about failover or about traffic between nodes.
+# nothing about placement, about failover or about traffic between nodes, encrypted or not.
 #
 # Needs Docker. Disposable CI runners only: it refuses to run unless CI=true, when
 # deploy/compose/.env exists or when the Docker engine is already part of a swarm, and it leaves
@@ -58,7 +59,7 @@ cleanup() {
       # Each part becomes an annotation of the failed step (cicd/step.py keeps the last eight), so
       # the parts that most often explain a failure come last.
       local service
-      for service in airflow-triggerer datacraft-api airflow-apiserver airflow-dag-processor \
+      for service in airflow-triggerer datacraft-api redis airflow-apiserver airflow-dag-processor \
         airflow-scheduler airflow-worker airflow-init; do
         diagnose "Swarm: log of $service" docker service logs --raw --tail 30 "${stack}_$service"
       done
@@ -221,6 +222,19 @@ test "$(cat /opt/datacraft/data/.swarm-rehearsal)" = probe &&
 ! touch /opt/datacraft/data/.api-write 2>/dev/null' ||
   fail "datacraft-api must run non-root, read what Airflow wrote and not write the data volume."
 
+# Redis refuses a client that has not authenticated and answers the password of .env, which is the
+# one the scheduler and the worker present in their broker URL.
+redis=$(container redis)
+unauthenticated=$(docker exec "$redis" redis-cli ping 2>&1) || true
+[[ "$unauthenticated" == *NOAUTH* ]] ||
+  fail "Redis answers a client that has not presented the password: $unauthenticated"
+authenticated=$(REDISCLI_AUTH=$(sed -n 's/^REDIS_PASSWORD=//p' "$env_file") \
+  docker exec --env REDISCLI_AUTH "$redis" redis-cli ping 2>&1) || true
+[[ "$authenticated" == PONG ]] || fail "Redis does not answer the REDIS_PASSWORD of .env."
+# What crosses from one node to another on the overlay network would be encrypted.
+[[ "$(docker network inspect --format '{{index .Options "encrypted"}}' "${stack}_datacraft-net")" == true ]] ||
+  fail "The overlay network ${stack}_datacraft-net was not created encrypted."
+
 grep -qx CeleryExecutor <<< "$(airflow_cli config get-value core executor)" ||
   fail "The scheduler of the Swarm stack does not use CeleryExecutor."
 ready=false
@@ -255,7 +269,8 @@ run_dag swarm-rehearsal-upgraded
 
 notice "Swarm stack rehearsed on one node" "swarm-deploy.sh and airflow-init.sh deployed the stack from" \
   "a registry: ${#services[@]} services run, the Airflow ones healthy; datacraft-api answers on the" \
-  "overlay network only and its token only; the routing mesh signs the generated admin in;" \
+  "overlay network only and its token only; the routing mesh signs the generated admin in; Redis" \
+  "refuses a client without its password; the overlay network was created encrypted;" \
   "datacraft_engine_jobs ran through Redis and a Celery worker. An upgrade to a second tag ran the" \
   "initializer again, replaced every Airflow task within $upgrade_seconds s, kept the earlier run" \
-  "and ran the DAG again. Not covered: more than one node."
+  "and ran the DAG again. Not covered: more than one node, so no traffic between nodes."

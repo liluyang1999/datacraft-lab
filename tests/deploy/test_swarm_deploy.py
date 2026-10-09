@@ -100,6 +100,35 @@ class SwarmScriptTests(unittest.TestCase):
         self.assertEqual(0, result.returncode, result.stderr)
         self.assertEqual(1, len(self.deployments(calls)))
 
+    def test_a_missing_weak_or_reused_redis_password_never_reaches_the_swarm(self):
+        self.write_env(DATACRAFT_TAG="1.2.3")
+        env_file = self.root / "deploy" / "compose" / ".env"
+        generated = env_file.read_text()
+        secrets = dict(line.split("=", 1) for line in generated.splitlines()
+                       if "=" in line and not line.startswith("#"))
+        cases = {
+            "": "Set REDIS_PASSWORD",
+            "short-password": "Set REDIS_PASSWORD",
+            "p" * 40 + "@host": "Set REDIS_PASSWORD",  # it sits in the broker URL, so URL-safe characters only
+            secrets["POSTGRES_PASSWORD"]: "REDIS_PASSWORD must be independent of POSTGRES_PASSWORD.",
+            secrets["DATACRAFT_API_TOKEN"]: "REDIS_PASSWORD must be independent of DATACRAFT_API_TOKEN.",
+        }
+        for value, message in cases.items():
+            with self.subTest(message=message, length=len(value)):
+                env_file.write_text(re.sub(r"(?m)^REDIS_PASSWORD=.*$", f"REDIS_PASSWORD={value}", generated))
+                result, calls = self.run_script("swarm-deploy.sh")
+                self.assertNotEqual(0, result.returncode)
+                self.assertIn(message, result.stderr)
+                if value:
+                    self.assertNotIn(value, result.stdout + result.stderr)
+                self.assertEqual([], self.deployments(calls))
+        # A .env from before the stack asked for the password has no such line at all.
+        env_file.write_text(re.sub(r"(?m)^REDIS_PASSWORD=.*\n", "", generated))
+        result, calls = self.run_script("swarm-deploy.sh")
+        self.assertNotEqual(0, result.returncode)
+        self.assertIn("Set REDIS_PASSWORD", result.stderr)
+        self.assertEqual([], self.deployments(calls))
+
     def ps_responses(self, *responses):
         paths = []
         for index, response in enumerate(responses):

@@ -46,8 +46,9 @@ bash deploy/scripts/build-images.sh
 bash deploy/scripts/compose-up.sh
 ```
 
-初始化会创建 `deploy/compose/.env`，为数据库、管理员、Airflow API、JWT、Fernet 和 JVM API 令牌
-（`DATACRAFT_API_TOKEN`）分别生成独立随机值，使用仅所有者可读写的权限，不在终端打印密钥，不覆盖已有
+初始化会创建 `deploy/compose/.env`，为数据库、管理员、Airflow API、JWT、Fernet、JVM API 令牌
+（`DATACRAFT_API_TOKEN`）和 Swarm 栈的 Redis 口令（`REDIS_PASSWORD`）分别生成独立随机值，
+使用仅所有者可读写的权限，不在终端打印密钥，不覆盖已有
 文件或符号链接。将文件安全备份，从中读取初始管理员密码与 JVM API 令牌。不要重新生成 Fernet 密钥，
 否则已有加密连接可能无法解密。
 留在仓库目录里的副本请放到 `backups/`，或命名为 `.env.<后缀>`（如 `.env.bak`）：这两类路径都被
@@ -62,6 +63,8 @@ JVM API 令牌须为 32 至 512 个字符（字母、数字与 `- . _ ~ + /`，�
 `POSTGRES_PASSWORD`、`AIRFLOW_FERNET_KEY`、`AIRFLOW_API_SECRET_KEY`、`AIRFLOW_JWT_SECRET`、
 `DATACRAFT_API_TOKEN` 使用 `${VAR:?...}`：任一值缺失或为空时，直接执行的 `docker compose` 或
 `docker stack deploy` 在变量插值阶段即报错，不再回退到公开默认值；但直接执行不检查长度与格式。
+Swarm 栈对 `REDIS_PASSWORD` 也是同样的写法；这个口令会被写进 Celery broker 的 URL，所以
+`swarm-deploy.sh` 要求它至少 32 位 URL 安全字符，并且与其他密钥都不相同。Compose 栈没有 Redis，不使用它。
 修改 `.env` 不会自动轮换已有数据库或管理员密码；JVM API 令牌在重建 `datacraft-api` 容器后生效。
 
 启动脚本先检查 `.env`，再确认本机存在 `datacraft/airflow:latest` 与 `datacraft/jvm:latest`，缺少时
@@ -139,7 +142,9 @@ PostgreSQL 18 数据卷挂在 `/var/lib/postgresql`，数据写入 `/var/lib/pos
 7. 解除暂停前按第 3 节为 `datacraft_sftp` 连接设置 `host_key`、检查触发参数中的路径，再做样本任务验收。
 
 Swarm 部署另需检查旧 `.env`：`swarm-deploy.sh` 拒绝空的或为 `latest` 的 `DATACRAFT_TAG`（旧模板为
-`latest`）；旧模板的 `AIRFLOW_WORKER_REPLICAS=2` 仍然生效（新模板为 1）。`airflow-init.sh` 不再进入调度器
+`latest`）；旧模板的 `AIRFLOW_WORKER_REPLICAS=2` 仍然生效（新模板为 1）。旧 `.env` 没有
+`REDIS_PASSWORD`，需要补一行（`openssl rand -hex 32`），否则 `swarm-deploy.sh` 在部署前退出；已有的
+`datacraft-net` 网络不会因为重新部署而变成加密网络，要先 `docker stack rm datacraft`（数据卷保留）再部署。`airflow-init.sh` 不再进入调度器
 容器执行初始化，改为等待一次性服务 `datacraft_airflow-init`，见第 6 节。
 
 ## 3. 访问与任务验收
@@ -302,8 +307,12 @@ worker 默认 `AIRFLOW_WORKER_REPLICAS=1`、`AIRFLOW_WORKER_CONCURRENCY=1`。所
 Swarm 模板的 Airflow UI 端口经路由网格在各节点发布，不是 Compose 的回环绑定，必须在云防火墙/认证网关处
 限制访问。JVM API 不发布端口，只在 overlay 网络内，同样只读挂载数据卷、设置 `DATACRAFT_DATA_ROOT`，
 并要求 `.env` 中的 `DATACRAFT_API_TOKEN`。Redis 与数据库不对公网发布。节点间的 2377/tcp、
-7946/tcp+udp 与 4789/udp 只允许 swarm 节点互访：overlay 网络 `datacraft-net` 可被附加且未加密，
-Redis 没有认证，JVM API 的令牌在其中以明文传输。
+7946/tcp+udp 与 4789/udp 只允许 swarm 节点互访。overlay 网络 `datacraft-net` 以 `encrypted` 选项创建，
+跨节点的流量经 IPsec 加密，因此节点之间还要放行 ESP（IP 协议 50）；Redis 要求 `REDIS_PASSWORD`，
+调度器与 worker 通过 broker 的 URL 提供它，没有口令的客户端会被拒绝。这两项只在单节点演练中验证过：
+带着它们的栈能够部署、运行和升级，Redis 确实拒绝未认证的客户端；跨节点的加密流量需要第二个节点才能验证。
+该网络仍然可被附加，同一网络里的容器之间不加密，JVM API 的令牌在其中仍是明文，所以只有可信节点才能加入 swarm。
+Redis 口令和其他密钥一样是服务定义的一部分，能在 manager 上查看服务定义的人可以读到它。
 
 worker 同样通过 `env_file` 收到完整 `.env`，持有 JWT 签名密钥、带密码的数据库与 Celery 结果后端地址、
 Fernet 密钥和管理员密码。让 worker 运行不可信代码或部署到不完全可信的主机之前，必须先把这些密钥与 worker

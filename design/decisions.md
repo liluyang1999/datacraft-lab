@@ -122,7 +122,8 @@ deprecates Java 25 releases older than 25.0.3), and every image runs a Java 25 r
 ## 5. The unauthenticated API stays safe through binding, Origin check and data confinement
 
 **Status:** Superseded in part by decision 11 (2026-10-09): the API now requires a bearer token
-wherever it listens off loopback. The binding, `Origin` and confinement rules below still apply.
+wherever it listens off loopback, and by decision 14: the overlay network is encrypted between
+nodes. The binding, `Origin` and confinement rules below still apply.
 
 **Context.** The HTTP API has no authentication, and its file jobs read paths given as
 parameters. Binding to loopback keeps other hosts out, but not a browser on the same machine: a
@@ -151,7 +152,8 @@ page can POST to `127.0.0.1`, including through DNS rebinding.
 
 ## 6. Single-host Docker Compose first; the Swarm template stays pinned to one data node
 
-**Status:** Accepted.
+**Status:** Accepted. Superseded in part by decision 14 (2026-10-09): CI now deploys the Swarm
+template on a swarm of one node, so it is no longer only validated. The rest still applies.
 
 **Context.** The workload is personal and small, and cost matters (decision 7). Airflow tasks hand
 CSV and Parquet data to each other through a local volume, so tasks on different hosts would not
@@ -172,10 +174,8 @@ rejects an empty tag and `latest`), and `airflow-init` runs as a one-shot servic
   data and logs, a highly available database, secret management and authenticated networking;
   adding worker replicas alone does not scale out.
 - CI runs the Compose path for real (`cicd/images/smoke-compose.sh`: the full stack, a DAG run
-  and a restored metadata backup) and rehearses the Swarm path on a swarm of one node
-  (`cicd/images/smoke-swarm.sh`: the documented deployment from a registry, a DAG run through
-  Redis and a Celery worker, and an upgrade to a second tag). The template has not run on more
-  than one node, so placement, failover and traffic between nodes are unverified.
+  and a restored metadata backup). The Swarm template is only validated (`docker stack config` and
+  static tests) and has not run on a real multi-node swarm.
 - Every secret must be set: both stack files fail interpolation without one, and
   `deployment_env.py init` generates them.
 
@@ -457,3 +457,47 @@ pinning file changes. An advisory fails the run (exit 1), and so does an OSV tha
   trigger and a manual dispatch still work.
 
 Details: [Advisory check](build-and-quality.md#advisory-check).
+
+## 14. The Swarm template is rehearsed on one node, authenticates Redis and encrypts its network
+
+**Status:** Accepted (2026-10-09). Supersedes the "only validated" part of decision 6 and the
+"unencrypted" part of decision 5.
+
+**Context.** The Swarm stack had been parsed (`docker stack config`) and its scripts tested against
+a Docker stub, but it had never been deployed. The evaluation report listed that first among its
+residual risks, with an overlay network that was not encrypted and a Redis that asked for no
+password. The workstation has no Docker and there is no second host, so a real swarm of several
+nodes is out of reach. A GitHub runner, however, can be a swarm of one node.
+
+**Decision.**
+
+- `cicd/images/smoke-swarm.sh`, a step of the `containers` job, follows the deployment guide on a
+  swarm of one node: a registry, both images under an exact tag, `swarm-deploy.sh` and
+  `airflow-init.sh`. It requires every long-running service to run its current tasks, the engine
+  API to answer its token only and only on the overlay network, the generated admin to sign in
+  through the routing mesh, Redis to refuse a client without its password, and a DAG run to pass
+  through Redis and a Celery worker. It then deploys a second tag and requires the initializer to
+  run again, the idle worker to stop, the earlier run to survive and the DAG to run again.
+- Redis demands `REDIS_PASSWORD`, which the Airflow services present in the broker URL.
+  `deployment_env.py init` generates it; `swarm-deploy.sh` rejects a missing, weak or reused one.
+- The overlay network `datacraft-net` is created with `encrypted: "true"`.
+
+**Consequences.**
+
+- The stack file, both scripts and the images are known to work together, through a deployment and
+  an upgrade, on every push.
+- **Breaking** for a Swarm deployment created before this change: its `.env` needs a
+  `REDIS_PASSWORD` line, and `swarm-deploy.sh` stops before it deploys without one. Docker does not
+  change an existing network, so the stack must be removed and deployed again to get the encrypted
+  one (`docker stack rm datacraft` keeps the volumes).
+- One node proves nothing about placement, failover or traffic between nodes. Encryption between
+  nodes needs ESP (IP protocol 50) to pass, which only a second node can show; while every service
+  is pinned to `DATACRAFT_DATA_NODE`, no service traffic crosses nodes at all.
+- The Redis password is part of the service specification and of the Redis command line, as the
+  other secrets are environment values of their services: whoever may inspect the services on a
+  manager can read it. Docker secrets remain future work.
+- The network stays attachable, which the rehearsal uses for its own check, so a container started
+  on any node of the swarm can join it. It then meets an API that demands its token and a Redis
+  that demands its password, but only trusted nodes may join the swarm.
+
+Steps: [deployment guide](../docs/guides/deployment.md) (Chinese).

@@ -77,6 +77,9 @@ elif args[:2] == ['stack', 'deploy']:
     record['settings'] = {key: os.environ.get(key) for key in
                           ('DATACRAFT_REGISTRY', 'DATACRAFT_TAG', 'DATACRAFT_DATA_NODE')}
     state['first_tag'] = state['first_tag'] or os.environ['DATACRAFT_TAG']
+    # The script removes .env when it ends; the tests look up what it held.
+    with open(os.path.join(os.environ['STUB_ROOT'], 'env-at-deploy'), 'w') as copy:
+        copy.write(open(env_file).read())
 elif args[:2] == ['service', 'inspect']:
     if 'ContainerSpec.Image' in args[3]:
         print(image(service_of(args[4])))
@@ -109,6 +112,15 @@ elif args[:1] == ['exec'] and args[2:3] == ['airflow']:
         status = 97
 elif args[:1] == ['exec'] and args[2:3] in (['python'], ['sh']):
     pass
+elif args[:1] == ['exec'] and args[-2:] == ['redis-cli', 'ping']:
+    # Redis as deployed: an answer for the password of .env, which the client hands over in
+    # REDISCLI_AUTH, and for nothing else.
+    record['authenticated'] = args[1:3] == ['--env', 'REDISCLI_AUTH']
+    presented = os.environ.get('REDISCLI_AUTH') if record['authenticated'] else None
+    known = presented == setting('REDIS_PASSWORD') and os.environ.get('REDIS') != 'rejects everyone'
+    print('PONG' if known or os.environ.get('REDIS') == 'open' else 'NOAUTH Authentication required.')
+elif args[:2] == ['network', 'inspect']:
+    print(os.environ.get('NETWORK_ENCRYPTED', 'true'))
 else:
     print('unexpected docker call: ' + ' '.join(args), file=sys.stderr)
     status = 97
@@ -279,6 +291,15 @@ class SwarmRehearsalRunTests(unittest.TestCase):
                            "datacraft_engine_jobs"] for run in ("swarm-rehearsal", "swarm-rehearsal-upgraded")],
                          triggered)
         self.assertLess(calls.index(triggered[0]), [call[:2] for call in calls].index(["stack", "deploy"], 30))
+        # Redis is asked twice in its own container: without the password, then with it in the
+        # client's environment, never on a command line.
+        pings = [record for record in records if record["args"][-2:] == ["redis-cli", "ping"]]
+        self.assertEqual([False, True], [record["authenticated"] for record in pings])
+        self.assertTrue(all(record["args"][-3] == "container-of-redis" for record in pings))
+        password = found(r"(?m)^REDIS_PASSWORD=(.+)$", (self.root / "env-at-deploy").read_text())
+        self.assertFalse(any(password in argument for call in calls for argument in call))
+        self.assertIn(["network", "inspect", "--format", '{{index .Options "encrypted"}}', "datacraft_datacraft-net"],
+                      calls)
         self.assert_torn_down(calls)
         self.assertIn("Swarm stack rehearsed on one node: ", result.stdout)
         self.assertNotIn("--- Swarm:", result.stdout)
@@ -311,6 +332,16 @@ class SwarmRehearsalRunTests(unittest.TestCase):
     def test_a_sign_in_that_accepts_any_password_fails_the_rehearsal(self):
         self.assert_failed("The Airflow UI on the routing mesh does not sign the generated admin in, or signs "
                            "anyone in.", lenient_sign_in=True)
+
+    def test_a_redis_without_its_password_or_an_open_network_fails_the_rehearsal(self):
+        self.assert_failed("Redis answers a client that has not presented the password: PONG", REDIS="open")
+        self.calls.write_text("")
+        (self.root / "stub-state.json").unlink()
+        self.assert_failed("Redis does not answer the REDIS_PASSWORD of .env.", REDIS="rejects everyone")
+        self.calls.write_text("")
+        (self.root / "stub-state.json").unlink()
+        self.assert_failed("The overlay network datacraft_datacraft-net was not created encrypted.",
+                           NETWORK_ENCRYPTED="<no value>")
 
     def test_another_executor_or_a_failed_run_fails_the_rehearsal(self):
         self.assert_failed("The scheduler of the Swarm stack does not use CeleryExecutor.", EXECUTOR="LocalExecutor")

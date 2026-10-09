@@ -38,6 +38,18 @@ each new rule was checked by breaking it on purpose and requiring a test to fail
   pyright and the actions of the workflows. `.github/workflows/advisories.yml` runs it every
   Monday, on demand and when a pinning file changes. An advisory fails the run (exit 1), and so
   does an OSV that cannot be asked (exit 2). On 2026-10-09 none of the 25 pins had an advisory.
+- **BREAKING for Swarm deployments:** the Redis of the Swarm stack demands a password. The stack
+  starts it with `--requirepass` and puts the same `REDIS_PASSWORD` into the Celery broker URL of
+  the Airflow services. `deployment_env.py init` generates the value, and `swarm-deploy.sh` stops
+  before it deploys when the value is missing, shorter than 32 URL-safe characters or equal to
+  another secret, without printing it. An `.env` written earlier needs a `REDIS_PASSWORD` line
+  (`openssl rand -hex 32`). The Compose stack has no Redis and is not affected.
+- The overlay network of the Swarm stack is created with `encrypted: "true"`, so what crosses from
+  one node to another on it is encrypted; the nodes must allow ESP (IP protocol 50) between each
+  other. Docker does not change an existing network: remove the stack and deploy it again
+  (`docker stack rm datacraft` keeps the volumes). Both settings run in the one-node rehearsal
+  below, which also requires Redis to refuse a client without the password; encrypted traffic
+  between two nodes has not been exercised.
 
 #### Fixed
 - **BREAKING:** `csv-to-parquet`, and `row-count` on CSV, turned bytes that were not valid UTF-8
@@ -98,13 +110,14 @@ each new rule was checked by breaking it on purpose and requiring a test to fail
 - Tests. JVM: 17 new test cases, 300 in all (Linux runs 293, Windows 284): the token and its
   order among the checks, the run limit and its release on every path, the configuration's
   validation and redaction, the `serve-api` rules, the encoding parameter, strict decoding for
-  UTF-8, GBK, Latin-1, gzip and directory input, and a GBK conversion. Python: `tests/ci` 92
+  UTF-8, GBK, Latin-1, gzip and directory input, and a GBK conversion. Python: `tests/ci` 93
   (the step wrapper, the helpers of `cicd/lib.sh`, the advisory check, the credential check
   against a stand-in stack, the Swarm rehearsal against a recording Docker stub, two workflow
-  rules, the count notice), `tests/deploy` 51 (the token in the stacks and in
-  `deployment_env.py`, the Resolver option), `tests/orchestration` 17 (the DAG parameter). The
-  Airflow runtime smoke test converts a GBK file with `encoding=GBK`.
-- Thirty-eight deliberate breakages of the new rules, each of which a test must notice. One of
+  rules, the count notice), `tests/deploy` 54 (the token and the Redis password in the stacks, in
+  `deployment_env.py` and in `swarm-deploy.sh`, the encrypted network, the Resolver option),
+  `tests/orchestration` 17 (the DAG parameter). The Airflow runtime smoke test converts a GBK
+  file with `encoding=GBK`.
+- Forty-nine deliberate breakages of the new rules, each of which a test must notice. One of
   them found a weak test: with the token ignored, a test that expects `serve-api` to refuse a
   malformed token blocked in the server it had started instead of failing. Every such call in
   `RunnerSpec` now has a 30 second limit.

@@ -226,7 +226,9 @@ stack pins every service to one explicit data node (`DATACRAFT_DATA_NODE`) becau
 node-local; configure shared storage before spreading workers. In both stacks `datacraft-api`
 mounts the shared `datacraft-data` volume read-only at `/opt/datacraft/data`, so its small-file
 jobs read what Airflow tasks wrote; Compose publishes the API on loopback only, and Swarm keeps it
-on the overlay network.
+on the overlay network. In the Swarm stack that network is encrypted between nodes and Redis
+demands a password; CI deploys and upgrades the stack on a swarm of one node (decision 14 in
+[decisions.md](decisions.md)).
 
 Steps, sizing, upgrades, backup and restore are in the deployment guide
 ([docs/guides/deployment.md](../docs/guides/deployment.md), Chinese); the reasons behind the

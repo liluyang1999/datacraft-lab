@@ -13,7 +13,7 @@ import sys
 
 TEMPLATE = Path(__file__).resolve().parents[1] / "compose" / ".env.example"
 SECRET_KEYS = ("POSTGRES_PASSWORD", "AIRFLOW_ADMIN_PASSWORD", "AIRFLOW_API_SECRET_KEY",
-               "AIRFLOW_JWT_SECRET", "AIRFLOW_FERNET_KEY", "DATACRAFT_API_TOKEN")
+               "AIRFLOW_JWT_SECRET", "AIRFLOW_FERNET_KEY", "DATACRAFT_API_TOKEN", "REDIS_PASSWORD")
 LOOPBACK = ("127.0.0.1", "::1")
 # The token rule of the API itself (EngineHttpServerConfig): the bearer-token syntax of RFC 6750,
 # 32 to 512 characters. A token the check accepts must be one the server starts with.

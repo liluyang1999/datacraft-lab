@@ -8,6 +8,7 @@ DEPLOY = Path(__file__).resolve().parents[2] / "deploy"
 DATA_NODE = 'constraints: ["node.hostname == ${DATACRAFT_DATA_NODE:?Set the persistent data hostname}"]'
 HEALTHCHECKED = ("airflow-apiserver", "airflow-scheduler", "airflow-dag-processor", "airflow-triggerer")
 API_TOKEN = "DATACRAFT_API_TOKEN: ${DATACRAFT_API_TOKEN:?Set DATACRAFT_API_TOKEN in .env}"
+REDIS_PASSWORD = "${REDIS_PASSWORD:?Set REDIS_PASSWORD in .env}"
 
 
 def children(text, indent):
@@ -87,6 +88,19 @@ class SwarmTemplateTests(unittest.TestCase):
         self.assertNotIn("ports:", api)  # overlay-only: the API has no TLS
         self.assertIn(API_TOKEN, api)
         self.assertIn("DATACRAFT_DATA_ROOT: /opt/datacraft/data", self.common)
+
+    def test_redis_demands_the_password_the_airflow_services_present(self):
+        redis = self.services["redis"]
+        self.assertIn(f'command: ["redis-server", "--requirepass", "{REDIS_PASSWORD}"]', redis)
+        self.assertNotIn("ports:", redis)
+        self.assertIn(f"AIRFLOW__CELERY__BROKER_URL: redis://:{REDIS_PASSWORD}@redis:6379/0", self.common)
+        # The Compose stack has no broker, so it must not ask for the password.
+        self.assertNotIn("REDIS", (DEPLOY / "compose" / "docker-compose.yml").read_text(encoding="utf-8"))
+
+    def test_the_overlay_network_is_encrypted_between_nodes(self):
+        options = children(children(self.top["networks"], 2)["datacraft-net"], 4)
+        self.assertEqual("    driver: overlay", options["driver"])
+        self.assertIn('      encrypted: "true"', options["driver_opts"].splitlines())
 
 
 class ComposeTemplateTests(unittest.TestCase):

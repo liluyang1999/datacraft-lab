@@ -17,6 +17,7 @@ SCRIPT = DEPLOY / "scripts" / "deployment_env.py"
 STACK_FILES = (DEPLOY / "compose" / "docker-compose.yml", DEPLOY / "swarm" / "docker-stack.yml")
 SECRET_VARIABLES = ("POSTGRES_PASSWORD", "AIRFLOW_FERNET_KEY", "AIRFLOW_API_SECRET_KEY", "AIRFLOW_JWT_SECRET",
                     "DATACRAFT_API_TOKEN")
+SWARM_SECRET_VARIABLES = ("REDIS_PASSWORD",)
 SERVER_CONFIG = (REPOSITORY / "modules" / "interfaces" / "datacraft-api" / "src" / "main" / "java" / "com"
                  / "example" / "datacraft" / "api" / "EngineHttpServerConfig.java")
 API_TOKEN = "f" * 40
@@ -53,10 +54,11 @@ class DeploymentEnvironmentTests(unittest.TestCase):
             values = dict(line.split("=", 1) for line in path.read_text().splitlines()
                           if line and not line.startswith("#"))
             keys = ("POSTGRES_PASSWORD", "AIRFLOW_ADMIN_PASSWORD", "AIRFLOW_API_SECRET_KEY",
-                    "AIRFLOW_JWT_SECRET", "AIRFLOW_FERNET_KEY", "DATACRAFT_API_TOKEN")
-            self.assertEqual(6, len({values[key] for key in keys}))
+                    "AIRFLOW_JWT_SECRET", "AIRFLOW_FERNET_KEY", "DATACRAFT_API_TOKEN", "REDIS_PASSWORD")
+            self.assertEqual(7, len({values[key] for key in keys}))
             self.assertEqual(32, len(base64.urlsafe_b64decode(values["AIRFLOW_FERNET_KEY"])))
-            self.assertRegex(values["DATACRAFT_API_TOKEN"], r"\A[0-9a-f]{64}\Z")
+            for key in ("DATACRAFT_API_TOKEN", "REDIS_PASSWORD"):
+                self.assertRegex(values[key], r"\A[0-9a-f]{64}\Z")
             for key in keys:
                 self.assertNotIn(values[key], result.stdout + result.stderr)
             before = path.read_bytes()
@@ -158,7 +160,7 @@ class DeploymentEnvironmentTests(unittest.TestCase):
         self.assertEqual(int(maximum.group(1)), module.API_TOKEN_MAX_LENGTH)
 
     def test_stack_files_refuse_to_start_without_every_secret(self):
-        reference = re.compile(r"\$\{(" + "|".join(SECRET_VARIABLES) + r")([^}]*)\}")
+        reference = re.compile(r"\$\{(" + "|".join((*SECRET_VARIABLES, *SWARM_SECRET_VARIABLES)) + r")([^}]*)\}")
         for path in STACK_FILES:
             text = path.read_text(encoding="utf-8")
             found = set()
@@ -166,7 +168,9 @@ class DeploymentEnvironmentTests(unittest.TestCase):
                 found.add(match.group(1))
                 with self.subTest(file=path.name, reference=match.group(0)):
                     self.assertTrue(match.group(2).startswith(":?"), "secrets must use ${NAME:?message}")
-            self.assertEqual(set(SECRET_VARIABLES), found, path.name)
+            # Only the Swarm stack has a Redis, so only it takes the broker's password.
+            swarm_only = set(SWARM_SECRET_VARIABLES) if path.parent.name == "swarm" else set()
+            self.assertEqual(set(SECRET_VARIABLES) | swarm_only, found, path.name)
 
     def test_preflight_errors_never_echo_secret_or_raw_configuration(self):
         payload = {"services": {"postgres": {"environment": {"POSTGRES_PASSWORD": "PRIVATE@VALUE"}}}}
