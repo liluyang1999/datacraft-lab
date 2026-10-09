@@ -6,17 +6,22 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
-### API token, CSV encoding, diagnosable CI and an advisory check (2026-10-09)
+### API token, CSV encoding, diagnosable CI, an advisory check and a Swarm rehearsal (2026-10-09)
 
 This round works through what the 2026-10-07 round left open and the residual risks its report
 listed. The HTTP API gets authentication and a bound on concurrent runs, the Spark CSV jobs get an
 `encoding` parameter and stop converting undecodable input into damaged text, every pipeline step
 reports the cause of a failure as a public annotation, a scheduled workflow checks every pinned
 version for advisories, and the build moves to Maven 3.10.0. The Swarm stack, which had only been
-parsed, is now deployed and upgraded for real in CI on a swarm of one node. The JVM suite
+parsed, is now deployed and upgraded for real in CI on a swarm of one node, with a Redis that
+demands a password and an encrypted overlay network. The JVM suite
 was run on Windows and on Linux (WSL, Temurin 25.0.4.1), the three DAGs ran for real on Linux, and
-each new rule was checked by breaking it on purpose and requiring a test to fail. Items marked
-**BREAKING** need action from callers, operators or scripts.
+each new rule was checked by breaking it on purpose and requiring a test to fail. Four pushes ran
+CI and passed every job: `ff71f21` (run 37890414173), `6fe217a` (37891411817, the first with the
+Swarm rehearsal), `2d97f9a` (37894167389) and `287c1b2` (37898567994); the advisory workflow passed
+on the three of them that changed a file it watches. What each run verified was read back from its
+annotations through the public API. Items marked **BREAKING** need action from callers, operators
+or scripts.
 
 #### Security
 - **BREAKING:** the HTTP API authenticates its callers. `serve-api` reads a bearer token from
@@ -173,6 +178,10 @@ each new rule was checked by breaking it on purpose and requiring a test to fail
   actions/setup-node v7.0.0 -> v7.1.0. Still not adopted: google-java-format 1.37.0, whose
   formatter step fails on the first Java file under Spotless 3.10.4 as well. Spark 4.2.0, Airflow
   3.3.2 and the other pins are still the newest releases.
+- The evaluation report is at v4.2. It maps every item the previous version listed as open to
+  what was done about it, records the two reviews, the 66 deliberate breakages and the four CI
+  runs, lowers the Swarm item from P1 to P2 (more than one node remains unverified) and puts the
+  overall score at 4.4, from 4.2.
 
 ### CI repair, module review and pipeline layout (2026-10-07)
 
