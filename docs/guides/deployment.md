@@ -23,13 +23,19 @@ Spark 和 Airflow；不要求在云主机上额外安装 Maven、JDK 或 Airflow
 `build-images.sh` 每次先拉取基础镜像（Maven 构建镜像、`eclipse-temurin:25-jre`、`apache/airflow:3.3.2`），
 使重建的镜像带上这些标签当前的 JDK 与系统补丁；`MAVEN_IMAGE`、`JRE_IMAGE`、`AIRFLOW_IMAGE`、
 `SPARK_IMAGE` 可改用其他基础镜像。CI 的 `cicd/images/smoke-images.sh` 检查两个运行镜像的 JRE
-与新拉取的 `JRE_IMAGE` 一致，且版本不低于 25.0.4.1。
+与新拉取的 `JRE_IMAGE` 一致，且版本不低于 25.0.4.1；可选的 Spark 镜像同样检查。
 
 只用 `bash deploy/scripts/build-images.sh` 构建镜像。`Dockerfile.jvm`、`Dockerfile.airflow`、
 `Dockerfile.spark` 的 `JAR_IMAGE` 没有默认值，由脚本传入本机构建的 `datacraft/jar-builder:latest`；
 `docker compose build`、`docker compose up --build` 或直接 `docker build` 缺少这个参数会失败，
 不会去 Docker Hub 解析同名镜像。Compose 对 `datacraft/*` 镜像设置 `pull_policy: never`，
 `docker compose pull` 也不拉取它们：这些名称在 Docker Hub 上属于本项目以外的命名空间。
+`Dockerfile.spark` 是可选的独立 spark-submit 镜像，只有设置 `BUILD_SPARK_IMAGE=true` 时脚本才构建它
+（基础镜像约 740 MB）；两个栈和 DAG 都不使用它（DAG 在 Airflow 镜像里运行 spark-submit）。它与其他镜像
+一样把 `DATACRAFT_DATA_ROOT` 设为 `/opt/datacraft/data`，转换作业的路径须在该目录内，数据卷挂到那里；
+它的 Java 也换成与其他镜像相同的、构建时新拉取的 Temurin JRE（官方 Spark 镜像自带的是 25.0.3，低于
+构建要求的 25.0.4.1）。CI 的 `smoke-images.sh` 会构建它，并以它的非 root 用户在数据目录内完成一次转换和
+计数、拒绝一次目录外的输出。
 
 8 GB 小主机构建时也会占用较多内存和磁盘，可在相同架构的构建机完成镜像。Compose 只使用本机名为
 `datacraft/airflow:latest` 与 `datacraft/jvm:latest` 的镜像，因此要以这两个名称导入目标主机
@@ -54,9 +60,22 @@ bash deploy/scripts/compose-up.sh
 留在仓库目录里的副本请放到 `backups/`，或命名为 `.env.<后缀>`（如 `.env.bak`）：这两类路径都被
 `.gitignore` 与 `.dockerignore` 排除，不会被提交，也不会进入镜像构建上下文。
 `AIRFLOW_UID` 保持 50000 即可（Linux 也是）：没有绑定挂载主机目录，不需要与主机用户一致。
+改成其他 UID 也能运行（组固定为 0）：一次性初始化与各服务都经镜像自带的入口脚本启动，它会先给镜像里
+没有的 UID 补上用户名，Airflow 拒绝以没有用户名的用户运行。CI 的 `cicd/images/smoke-images.sh` 以
+UID 1000 运行一次初始化。
+
+Compose 项目名取自目录名，即 `compose`：容器名以 `compose-` 开头，数据卷是 `compose_postgres-db`、
+`compose_datacraft-data` 与 `compose_airflow-logs`。同一台主机上本仓库的第二份检出，或任何一个目录也叫
+`compose` 的其他项目，都是同一个项目：在那里运行 `compose-up.sh` 会用另一套密钥重建这里的容器，
+`compose-down.sh -v` 会删掉这里的数据卷。一台主机只运行一份；确实需要第二份（例如演练升级）时，
+对它的每次脚本调用都导出不同的 `COMPOSE_PROJECT_NAME`，并在它的 `.env` 里换用不同的
+`AIRFLOW_WEB_PORT` 与 `DATACRAFT_API_PORT`。
 
 部署前会验证 Compose 最终生效配置（包括外部环境变量覆盖），拒绝占位符、空密钥、不一致的
-Airflow 密钥和不适合直接放入数据库 URI 的凭据。当前模板的 Postgres 用户名/库名使用简单标识符，
+Airflow 密钥和不适合直接放入数据库 URI 的凭据。`compose-up.sh` 与 `compose-down.sh` 都在
+`deploy/compose` 目录内、不带 `-f` 调用 Compose，所以被检查的配置就是随后启动和停止的配置：放在该目录的
+`docker-compose.override.yml` 或环境变量 `COMPOSE_FILE` 指定的文件同样会被检查，例如把 `datacraft-api`
+发布到回环以外的 override 会在启动前被拒绝。当前模板的 Postgres 用户名/库名使用简单标识符，
 数据库密码须为至少 32 位 URL 安全字符；自定义复杂密码必须先实现 URI 编码，不能直接拼入现有 URI。
 JVM API 令牌须为 32 至 512 个字符（字母、数字与 `- . _ ~ + /`，可以 `=` 结尾），不能是占位符，也不能
 与其他密钥相同。这些强度检查只在 `compose-up.sh` 与 `swarm-deploy.sh` 中运行。两个栈文件对
@@ -66,6 +85,10 @@ JVM API 令牌须为 32 至 512 个字符（字母、数字与 `- . _ ~ + /`，�
 Swarm 栈对 `REDIS_PASSWORD` 也是同样的写法；这个口令会被写进 Celery broker 的 URL，所以
 `swarm-deploy.sh` 要求它至少 32 位 URL 安全字符，并且与其他密钥都不相同。Compose 栈没有 Redis，不使用它。
 修改 `.env` 不会自动轮换已有数据库或管理员密码；JVM API 令牌在重建 `datacraft-api` 容器后生效。
+再次运行 `compose-up.sh` 时，Compose 会重建配置有变化的容器。每个 Airflow 容器都通过 `env_file` 得到整份
+`.env`，所以改动其中任何一项（哪怕只是 API 令牌）都会重建全部 Airflow 容器，调度器也在内：LocalExecutor
+正在运行的任务只有 10 秒的停止宽限，随后被终止并按 DAG 的重试设置处理。请在没有运行中的 DAG 时修改
+`.env` 并重新运行脚本。Swarm 的 worker 则会等任务结束（见第 6 节）。
 
 启动脚本先检查 `.env`，再确认本机存在 `datacraft/airflow:latest` 与 `datacraft/jvm:latest`，缺少时
 提示先运行 `build-images.sh` 并退出。随后等待容器运行及已配置的健康检查通过，默认最长 300 秒；
@@ -122,7 +145,7 @@ PostgreSQL 18 数据卷挂在 `/var/lib/postgresql`，数据写入 `/var/lib/pos
    - `AIRFLOW_API_SECRET_KEY` 与 `AIRFLOW_JWT_SECRET`：在没有运行中任务时直接替换。
    - Fernet 密钥：保留原值，否则已加密的连接和变量无法解密。旧文件从未设置时补一个新密钥；此前未加密
      保存的连接和变量仍可读取，但要重新保存才会加密。
-   - 管理员密码：见第 6 步。
+   - 管理员密码：见第 7 步。
 5. `AIRFLOW_UID` 不是 50000 时，已有的 `datacraft-data` 卷不会得到新镜像的组写权限（Docker 只为空卷
    复制镜像内容）。执行一次下面的命令，或把 `AIRFLOW_UID` 改回 50000：
 
@@ -131,7 +154,27 @@ PostgreSQL 18 数据卷挂在 `/var/lib/postgresql`，数据写入 `/var/lib/pos
      --entrypoint chmod airflow-scheduler g+rwx /opt/datacraft/data
    ```
 
-6. 运行 `bash deploy/scripts/compose-up.sh`。若替换了 `AIRFLOW_ADMIN_PASSWORD`，已有账号仍是旧密码，
+6. 只有最早的版本需要这一步：它们把 `postgres-db` 卷挂在 `/var/lib/postgresql/data`（PostgreSQL 16）。
+   这样的卷根目录里就是数据库文件，现在的 `postgres:18` 容器发现后拒绝启动（日志：`there appears to
+   be PostgreSQL data in: /var/lib/postgresql`），`compose-up.sh` 随之失败，数据不会被改动。此时用第 1 步
+   的备份迁移：先确认备份可读，再删除旧卷，只启动数据库（得到一个空的新库），把备份恢复进去。
+
+   ```bash
+   backup=backups/YOUR_STEP_1_FILE.dump   # 第 1 步生成的备份文件
+   docker run --rm -i postgres:18 pg_restore --list < "$backup" | head
+   docker compose -f deploy/compose/docker-compose.yml down
+   # 下一条命令删除旧数据库文件：只在上面的 pg_restore --list 列出了备份内容之后执行。
+   docker volume rm compose_postgres-db
+   docker compose -f deploy/compose/docker-compose.yml up -d --wait postgres
+   docker compose -f deploy/compose/docker-compose.yml exec -T postgres \
+     sh -c 'pg_restore --exit-on-error -U "$POSTGRES_USER" -d "$POSTGRES_DB"' < "$backup"
+   ```
+
+   之后的 `compose-up.sh` 会让 `airflow-init` 把恢复出来的旧表结构迁移到当前版本。卷已经挂在
+   `/var/lib/postgresql` 的部署（数据在 `18/docker` 子目录）跳过这一步。本机用 `postgres:18` 验证过
+   这里的两点：卷根目录有数据库文件时容器拒绝启动；在空卷上启动后按上面的命令恢复备份成功。从
+   PostgreSQL 16 的真实旧部署一路升级到当前 Airflow 版本没有演练过。
+7. 运行 `bash deploy/scripts/compose-up.sh`。若替换了 `AIRFLOW_ADMIN_PASSWORD`，已有账号仍是旧密码，
    执行下面的命令并两次输入 `.env` 中的新值：
 
    ```bash
@@ -139,7 +182,7 @@ PostgreSQL 18 数据卷挂在 `/var/lib/postgresql`，数据写入 `/var/lib/pos
      airflow users reset-password --username "<管理员用户名>"
    ```
 
-7. 解除暂停前按第 3 节为 `datacraft_sftp` 连接设置 `host_key`、检查触发参数中的路径，再做样本任务验收。
+8. 解除暂停前按第 3 节为 `datacraft_sftp` 连接设置 `host_key`、检查触发参数中的路径，再做样本任务验收。
 
 Swarm 部署另需检查旧 `.env`：`swarm-deploy.sh` 拒绝空的或为 `latest` 的 `DATACRAFT_TAG`（旧模板为
 `latest`）；旧模板的 `AIRFLOW_WORKER_REPLICAS=2` 仍然生效（新模板为 1）。旧 `.env` 没有
@@ -163,6 +206,8 @@ ssh -L 8080:127.0.0.1:8080 -L 8088:127.0.0.1:8088 your-user@your-vm
 不需要公开应用端口。需要团队访问时可配置
 Cloudflare Tunnel 与 Access 或其他认证网关；Tunnel 要有可用出站路由，私网 NAT、域名或额外服务可能收费。
 `AIRFLOW_WEB_BIND` 可显式修改，但应先完成相应访问控制。Swarm 的发布端口行为与此不同，见后文。
+主机端口可在 `.env` 里改：`AIRFLOW_WEB_PORT`（默认 8080，Compose 与 Swarm 都读取）和
+`DATACRAFT_API_PORT`（默认 8088，仅 Compose；Swarm 不发布 JVM API）。
 
 JVM API 容器以非 root 用户（uid 10001）运行，jar 对它只读。它把 `datacraft-data` 卷只读挂载在
 `/opt/datacraft/data`，并把 `DATACRAFT_DATA_ROOT` 设为该目录，`csv-profile` 与 `file-checksum` 只能读取
@@ -221,6 +266,8 @@ JVM API 自身同时最多执行 4 个作业，超出的运行请求得到 503�
 `-XX:+ExitOnOutOfMemoryError` 启动，内存耗尽时进程退出，由 Compose 的 `restart: unless-stopped` 或
 Swarm 的重启策略拉起新实例，而不是留下一个不再响应请求的进程。
 
+两个栈都没有给容器设置内存或 CPU 上限，JVM API 也没有固定的堆上限（JVM 默认取可用内存的四分之一）；
+需要限制时按实测值在 `docker-compose.override.yml`（Compose）或栈文件的 `deploy.resources`（Swarm）里添加。
 记录代表性数据的耗时、峰值内存、磁盘余量、CPU 积分（如适用）和出站量，再决定提高并发或升配。
 本轮不承诺固定空闲/峰值内存，也不承诺 4 GB 一定够用。Airflow 调度器关闭时不会按时调度任务；
 按需停机方案适合手动/批次运行，不适合要求全天准点执行的流程。
@@ -268,10 +315,20 @@ bash deploy/scripts/compose-down.sh
 Airflow 各组件、worker 与 JVM API）固定在 `DATACRAFT_DATA_NODE`，并非多机高可用。要跨节点扩展，
 必须先解决共享输入输出、任务日志、数据库高可用、密钥管理和网络认证；不能仅增加 worker 数就宣称完成扩展。
 CI 的 `containers` 作业在一个单节点 Swarm 上按本节的步骤演练部署与升级
-（`cicd/images/smoke-swarm.sh`，见第 8 节）；多节点下的放置、故障切换与节点间流量没有验证过。
+（`cicd/images/smoke-swarm.sh`，见第 7 节）。两个节点的情形在 2026-10-11 手工验证过一次，不属于 CI：在一台
+机器上用两个嵌套的 Docker 引擎组成一个 manager 加一个数据节点的 Swarm，用本节的两个脚本从 manager 部署。
+结果是全部任务都落在数据节点上，管理员能经没有任何任务的 manager 的 8080 端口登录（路由网格），manager 上
+一个接入 `datacraft-net` 的容器能凭令牌访问数据节点上的 JVM API，这些请求在两个节点之间由 ESP 承载
+（内核的安全关联计数从 0 增加），一次 DAG 运行经过 Redis 与 Celery worker。没有验证的是：真实主机之间的
+防火墙是否放行 ESP 与 Swarm 端口、节点故障之后的行为，以及把服务分散到多个节点所需的共享存储。
 
 在可信 `.env` 中填写实际 registry、精确版本标签和数据节点主机名；Swarm 脚本使用 shell 加载此受信配置，
-不要将外部不可信文本当作 `.env`。所有节点必须能拉取相同架构的镜像。发布操作由运维者在 manager 上执行：
+不要将外部不可信文本当作 `.env`。这份文件在 Swarm 部署里有三个读取者：`swarm-deploy.sh` 的 shell、
+做配置检查的 Compose，以及把它交给各服务的 Docker `env_file` 解析器，三者对引号、空格、`$`、`#`、反斜杠
+的理解各不相同。所以 `swarm-deploy.sh` 在读取之前先要求每一行都是三者读法一致的 `KEY=value`
+（`python3 deploy/scripts/deployment_env.py plain deploy/compose/.env` 是同一项检查）：值里只能有字母、数字和
+`_ @ % + = : , . / [ ] * ~ ^ -`，不能有引号和空格，`~` 不能在开头或紧跟冒号；否则指出行号与变量名
+（不显示值）并在读取文件之前退出。`deployment_env.py init` 生成的文件满足这一要求。所有节点必须能拉取相同架构的镜像。发布操作由运维者在 manager 上执行：
 
 ```bash
 bash deploy/scripts/build-images.sh
@@ -352,11 +409,30 @@ API 只读，并让 `datacraft_engine_jobs` 经调度器、Redis 与 Celery work
 一次性初始化服务必须再次运行，空闲的 worker 必须在收到第一个信号后停止（否则更新要等满一小时的任务宽限期），
 升级前的运行记录必须还在，升级后 DAG 再运行一次。脚本拒绝在已加入 Swarm 的 Docker 上或已有 `.env`
 时运行，结束时离开 Swarm 并删除栈、数据卷与 registry。单节点演练证明栈文件、两个脚本与镜像能一起工作，
-不能说明多节点下的行为。
+不能说明多节点下的行为；两个节点的一次手工验证见第 6 节。
 CI 的每个步骤失败时，原因（失败的命令、指出错误的输出行与最后 30 行输出）会写成一条错误注解；注解不需要
 仓库权限即可通过 GitHub 的公开接口读取，读取方法见[开发指南](development.md#ci)。
 没有 Docker 的机器可以运行 `bash cicd/build/check-image-build.sh`：它在一份按 `.dockerignore` 过滤的
 仓库副本里执行构建镜像的 Maven 命令，提前发现“只有完整检出才能构建”的问题。
+
+有 Docker 的机器可以在本地运行容器阶段的四个脚本（`cicd/stacks/check-stack-files.sh` 与
+`cicd/images/` 下的三个），不需要登录任何 registry。它们需要 Linux shell、Docker CLI 与 Compose 插件、
+Python 3 和 curl，并且只在 `CI=true` 时运行：脚本会创建和删除 `.env`、容器与数据卷，Swarm 演练还会把这台
+Docker 初始化为 Swarm 再退出，所以只在不承载其他部署的 Docker 上运行。Linux 或已启用 Docker 集成的 WSL
+里按 CI 的顺序直接执行：
+
+```bash
+CI=true bash cicd/stacks/check-stack-files.sh
+CI=true bash cicd/images/smoke-images.sh
+CI=true bash cicd/images/smoke-compose.sh
+CI=true bash cicd/images/smoke-swarm.sh
+```
+
+Windows 的 Docker Desktop 没有为 WSL 发行版启用集成时，可以在一个带 Docker CLI、挂载了
+`/var/run/docker.sock` 并使用主机网络的 Linux 容器里执行同样的命令；仓库必须挂载在 Docker 引擎自己看到的
+那个路径上（Docker Desktop 下是 `/run/desktop/mnt/host/<盘符>/...`），容器内外路径相同，因为脚本用
+`$PWD` 做绑定挂载。2026-10-11 就是这样在本机的 Docker Desktop 上跑通了全部四个脚本。首次构建要下载
+Maven 依赖、pyspark（450 MB）和 Spark 基础镜像（740 MB），慢速网络上以小时计；之后的构建复用镜像层。
 
 本地构建需要 JDK 25.0.4.1 及以上（含 2026 年 7、8 月的安全修复），更低的版本会被 Enforcer 直接拒绝。
 开发环境、构建命令与 `cicd/` 脚本的本地用法见[开发指南](development.md)。
@@ -368,7 +444,7 @@ Selector 的主机上 Spark 套件取消，而 CI 中 Spark 套件出现取消�
 平台相关测试按标签排除，而不是在运行时跳过：按操作系统自动激活的 `windows-host` profile 排除
 `posix-only` 测试（符号链接、文件名含 `?`、需要 winutils 的 Hadoop 本地写入），`posix-host` 排除
 `windows-only` 测试（NTFS junction），因此在 Windows 上运行测试不再需要开发者模式或 winutils。
-全部 304 个测试中，Linux 执行 297 个（7 个 junction 测试只在 Windows 运行），Windows 执行 287 个
+全部 314 个测试中，Linux 执行 307 个（7 个 junction 测试只在 Windows 运行），Windows 执行 297 个
 （17 个 posix-only 测试只在 Linux 等非 Windows 系统运行）。
 
 当前尚未执行真实云部署、ARM 主机测试或多机 Swarm 故障切换；这些边界与“部署资料已准备”分开记录，

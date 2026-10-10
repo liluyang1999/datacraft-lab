@@ -28,15 +28,11 @@ COPY --from=jre /opt/java/openjdk /opt/java/openjdk
 ENV JAVA_HOME=/opt/java/openjdk
 ENV PATH="${JAVA_HOME}/bin:${PATH}"
 
-# --- Application artifact ---
-USER root
-COPY --from=jar /dist/datacraft-cli.jar /opt/datacraft/datacraft-cli.jar
-# Docker seeds the empty datacraft-data volume from this directory. Group 0 needs write access:
-# Compose runs Airflow as ${AIRFLOW_UID}:0, and a UID other than 50000 only matches the group.
-RUN mkdir -p /opt/datacraft/data && chown -R airflow:0 /opt/datacraft && chmod -R g+rwX /opt/datacraft/data
-USER airflow
-
 # --- Python deps: providers + pyspark (spark-submit lives under the pyspark package) ---
+# Before everything that changes with the code (the jar, the bootstrap script, the DAGs), so that
+# a rebuild after a code change reuses this layer instead of downloading the packages again.
+# The base image refuses to run pip as root.
+USER airflow
 COPY orchestration/airflow/requirements.txt /tmp/requirements.txt
 RUN pip install --no-cache-dir "apache-airflow==${AIRFLOW_VERSION}" -r /tmp/requirements.txt \
       --constraint "https://raw.githubusercontent.com/apache/airflow/constraints-${AIRFLOW_VERSION}/constraints-$(python -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")').txt" \
@@ -48,10 +44,18 @@ RUN pip install --no-cache-dir "apache-airflow==${AIRFLOW_VERSION}" -r /tmp/requ
 RUN python -c 'import pathlib, pyspark; print(pathlib.Path(pyspark.__file__).parent)' > /tmp/pyspark_home
 USER root
 RUN ln -sfn "$(cat /tmp/pyspark_home)" /opt/pyspark && rm /tmp/pyspark_home
-COPY --chmod=755 deploy/scripts/airflow-bootstrap.sh /opt/datacraft/airflow-bootstrap.sh
 USER airflow
 ENV SPARK_HOME=/opt/pyspark
 ENV PATH="${SPARK_HOME}/bin:${PATH}"
+
+# --- Application artifact ---
+USER root
+COPY --from=jar /dist/datacraft-cli.jar /opt/datacraft/datacraft-cli.jar
+# Docker seeds the empty datacraft-data volume from this directory. Group 0 needs write access:
+# Compose runs Airflow as ${AIRFLOW_UID}:0, and a UID other than 50000 only matches the group.
+RUN mkdir -p /opt/datacraft/data && chown -R airflow:0 /opt/datacraft && chmod -R g+rwX /opt/datacraft/data
+COPY --chmod=755 deploy/scripts/airflow-bootstrap.sh /opt/datacraft/airflow-bootstrap.sh
+USER airflow
 
 # --- DAGs + datacraft environment ---
 COPY orchestration/airflow/dags/ ${AIRFLOW_HOME}/dags/

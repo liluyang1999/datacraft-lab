@@ -36,7 +36,7 @@ x-airflow-common: &airflow-common
     AIRFLOW__CELERY__WORKER_CONCURRENCY: ${AIRFLOW_WORKER_CONCURRENCY:-1}
     DATACRAFT_HOME: /opt/datacraft
     DATACRAFT_CLI_JAR: /opt/datacraft/datacraft-cli.jar
-    DATACRAFT_SPARK_MASTER: ${DATACRAFT_SPARK_MASTER:-local[*]}
+    DATACRAFT_SPARK_MASTER: ${DATACRAFT_SPARK_MASTER:-local[2]}
     # Job and DAG path parameters must stay inside the shared data volume.
     DATACRAFT_DATA_ROOT: /opt/datacraft/data
   networks:
@@ -79,11 +79,11 @@ services:
 
   # One-shot: migrate the metadata DB and create the admin user. Swarm retries it until Postgres is
   # reachable; the other Airflow services exit ("Database migration required") and restart until it
-  # completes. A redeploy that changes the image runs it again (migrations are idempotent).
+  # completes. A redeploy that changes the image runs it again (migrations are idempotent). The
+  # script runs through the image's entrypoint, as in the Compose stack.
   airflow-init:
     <<: *airflow-common
-    entrypoint: /opt/datacraft/airflow-bootstrap.sh
-    command: []
+    command: ["bash", "/opt/datacraft/airflow-bootstrap.sh"]
     deploy:
       replicas: 1
       restart_policy:

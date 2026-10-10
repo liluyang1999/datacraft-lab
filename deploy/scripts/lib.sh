@@ -38,8 +38,12 @@ ensure_env_file() {
   fi
 }
 
+# Every Compose call of these scripts: in the project directory and without -f, so that Compose
+# resolves its files the same way each time (docker-compose.yml, a docker-compose.override.yml next
+# to it, or COMPOSE_FILE). The configuration that is checked is then the one that starts and stops.
+compose() { (cd "${REPO_ROOT}/deploy/compose" && docker compose "$@"); }
+
 validate_compose_env() {
   require_cmd python3 || die "Python 3 is required to validate deployment secrets."
-  docker compose -f "${REPO_ROOT}/deploy/compose/docker-compose.yml" config --format json |
-    python3 -B "${DEPLOY_SCRIPTS_DIR}/deployment_env.py" check
+  compose config --format json | python3 -B "${DEPLOY_SCRIPTS_DIR}/deployment_env.py" check
 }

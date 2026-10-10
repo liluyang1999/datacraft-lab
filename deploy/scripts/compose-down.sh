@@ -5,6 +5,5 @@ set -euo pipefail
 source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib.sh"
 
 require_docker
-cd "${REPO_ROOT}/deploy/compose"
 log "Stopping datacraft-lab..."
-docker compose down "$@"
+compose down "$@"

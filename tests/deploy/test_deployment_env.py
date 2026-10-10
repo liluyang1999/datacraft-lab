@@ -87,9 +87,12 @@ class DeploymentEnvironmentTests(unittest.TestCase):
             broken["airflow-init"]["environment"][key] = value
             with self.assertRaises(ValueError):
                 module.validate({"services": broken})
-        services["postgres"]["environment"]["POSTGRES_PASSWORD"] = "has@reserved:chars"
-        with self.assertRaises(ValueError):
-            module.validate({"services": services})
+        # A placeholder is no secret, however long it is.
+        for password in ("has@reserved:chars", "change-me-postgres-" + "a" * 20,
+                         "Please-Change-" + "a" * 30):
+            services["postgres"]["environment"]["POSTGRES_PASSWORD"] = password
+            with self.assertRaises(ValueError, msg=password):
+                module.validate({"services": services})
 
     def test_preflight_rejects_publishing_the_unauthenticated_api_beyond_loopback(self):
         module = load_module()
@@ -178,6 +181,46 @@ class DeploymentEnvironmentTests(unittest.TestCase):
                                 input=json.dumps(payload), capture_output=True, text=True)
         self.assertNotEqual(0, result.returncode)
         self.assertNotIn("PRIVATE@VALUE", result.stdout + result.stderr)
+
+    def test_only_values_every_reader_takes_literally_pass_as_plain(self):
+        # Compose, the shell swarm-deploy.sh sources the file with, and Docker's env_file parser
+        # each read .env. They agree on these lines and on none of the others.
+        module = load_module()
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / ".env"
+            created = subprocess.run([sys.executable, "-B", str(SCRIPT), "init", str(path)],
+                                     capture_output=True, text=True)
+            self.assertEqual(0, created.returncode, created.stderr)
+            module.require_plain(path)
+            generated = path.read_text(encoding="utf-8")
+            for line in ("DATACRAFT_SPARK_MASTER=spark://spark-master:7077", "DATACRAFT_SPARK_MASTER=local[*]",
+                         "DATACRAFT_REGISTRY=registry.example.com:5000/team", "AIRFLOW_ADMIN_EMAIL=a+b@example.com",
+                         "DATACRAFT_API_TOKEN=abc~def+/==", "EMPTY=", "  # an indented comment", ""):
+                with self.subTest(accepted=line):
+                    path.write_text(generated + line + "\n", encoding="utf-8")
+                    module.require_plain(path)
+            for line in ('AIRFLOW_ADMIN_PASSWORD="quoted-PRIVATE"', "AIRFLOW_ADMIN_PASSWORD='quoted-PRIVATE'",
+                         "AIRFLOW_ADMIN_PASSWORD=two PRIVATE", "AIRFLOW_ADMIN_PASSWORD=PRIVATE$HOME",
+                         "AIRFLOW_ADMIN_PASSWORD=PRIVATE`id`", "AIRFLOW_ADMIN_PASSWORD=PRIVATE;id",
+                         "AIRFLOW_ADMIN_PASSWORD=PRIVATE#1", "AIRFLOW_ADMIN_PASSWORD=PRIVATE" + chr(92) + "n",
+                         "AIRFLOW_ADMIN_PASSWORD=~PRIVATE", "DATACRAFT_JAVA_BIN=/opt:~PRIVATE/java",
+                         "AIRFLOW_ADMIN_PASSWORD=PRIVATE ", "export AIRFLOW_ADMIN_PASSWORD=PRIVATE",
+                         "AIRFLOW_ADMIN_PASSWORD = PRIVATE", "touch /tmp/PRIVATE"):
+                with self.subTest(rejected=line):
+                    path.write_text(generated + line + "\n", encoding="utf-8")
+                    with self.assertRaises(ValueError) as refused:
+                        module.require_plain(path)
+                    self.assertNotIn("PRIVATE", str(refused.exception))
+                    self.assertIn(f"line {len(generated.splitlines()) + 1}", str(refused.exception))
+            result = subprocess.run([sys.executable, "-B", str(SCRIPT), "plain", str(path)],
+                                    capture_output=True, text=True)
+            self.assertEqual(1, result.returncode)
+            self.assertNotIn("PRIVATE", result.stdout + result.stderr)
+            # Saved with Windows line endings, every value would end in a carriage return for the
+            # shell. The first line that is more than a comment says so: the blank second line.
+            path.write_bytes(generated.replace("\n", "\r\n").encode("utf-8"))
+            with self.assertRaisesRegex(ValueError, "^[.]env line 2: "):
+                module.require_plain(path)
 
     @unittest.skipIf(sys.platform == "win32", "POSIX symlink and mode contract")
     def test_initialization_never_follows_an_existing_symlink(self):

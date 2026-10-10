@@ -2,7 +2,7 @@
 # Builds all datacraft container images. The jar is compiled once in the builder image and reused.
 #
 # Env toggles:
-#   BUILD_SPARK_IMAGE=true   also build datacraft/spark (large; needs a valid apache/spark tag)
+#   BUILD_SPARK_IMAGE=true   also build datacraft/spark (its base image is a 740 MB download)
 #   MAVEN_IMAGE / JRE_IMAGE / AIRFLOW_IMAGE / SPARK_IMAGE   override a public base image
 set -euo pipefail
 # shellcheck source=lib.sh
@@ -42,7 +42,7 @@ if [[ "${BUILD_SPARK_IMAGE:-false}" == "true" ]]; then
   log "Building datacraft/spark (Spark job runner)..."
   docker pull "${SPARK_IMAGE}"
   docker build -f deploy/docker/Dockerfile.spark --build-arg JAR_IMAGE="${JAR_IMAGE}" \
-    --build-arg SPARK_IMAGE="${SPARK_IMAGE}" -t datacraft/spark:latest .
+    --build-arg JRE_IMAGE="${JRE_IMAGE}" --build-arg SPARK_IMAGE="${SPARK_IMAGE}" -t datacraft/spark:latest .
 fi
 
 log "Done. Next: bash deploy/scripts/compose-up.sh"

@@ -82,6 +82,25 @@ class SwarmScriptTests(unittest.TestCase):
                            "datacraft"]], self.deployments(calls))
         self.assertIn("airflow-init.sh", result.stdout)
 
+    def test_an_environment_file_the_shell_would_interpret_is_never_sourced(self):
+        # The script reads .env with `source`. A value with shell syntax in it would run as a
+        # command there, and reach the containers, through Docker's env_file, as different text.
+        marker = self.root / "executed"
+        for line in (f"AIRFLOW_ADMIN_EMAIL=$(touch {marker})", f"AIRFLOW_ADMIN_EMAIL=a@example.com; touch {marker}",
+                     f"touch {marker}"):
+            with self.subTest(line=line):
+                self.write_env(DATACRAFT_REGISTRY="registry.example.com:5000", DATACRAFT_TAG="1.2.3")
+                env_file = self.root / "deploy" / "compose" / ".env"
+                env_file.write_text(env_file.read_text() + line + "\n")
+                try:
+                    result, calls = self.run_script("swarm-deploy.sh")
+                finally:
+                    env_file.unlink()
+                self.assertNotEqual(0, result.returncode)
+                self.assertFalse(marker.exists(), "a line of .env ran as a command")
+                self.assertIn("deploy/compose/.env", result.stderr)
+                self.assertEqual([], self.deployments(calls))
+
     def test_moving_or_missing_tags_never_reach_the_swarm(self):
         for tag in ("latest", ""):
             with self.subTest(tag=tag):

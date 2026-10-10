@@ -9,6 +9,13 @@ require_docker
 ensure_env_file
 cd "${REPO_ROOT}"
 
+# The shell reads .env below, Compose reads it for the check further down, and Docker's env_file
+# parser reads it for the services. Only lines all three read alike may pass: anything else would
+# run as a command here, or reach the containers as another value than the one that was checked.
+require_cmd python3 || die "Python 3 is required to validate deployment secrets."
+python3 -B "${DEPLOY_SCRIPTS_DIR}/deployment_env.py" plain deploy/compose/.env ||
+  die "deploy/compose/.env must be plain KEY=value text; nothing was read from it or deployed."
+
 # Export .env so the stack file's ${VARS} interpolate (stack deploy does not read .env).
 set -a
 # shellcheck disable=SC1091

@@ -78,11 +78,12 @@ services:
       retries: 5
     restart: unless-stopped
 
-  # One-shot: migrate the metadata DB and create the admin user, then exit.
+  # One-shot: migrate the metadata DB and create the admin user, then exit. The script runs through
+  # the image's entrypoint, which first gives an AIRFLOW_UID the image does not know a user name;
+  # Airflow refuses to run as a user without one.
   airflow-init:
     <<: *airflow-common
-    entrypoint: /opt/datacraft/airflow-bootstrap.sh
-    command: []
+    command: ["bash", "/opt/datacraft/airflow-bootstrap.sh"]
     restart: "no"
 
   airflow-apiserver:

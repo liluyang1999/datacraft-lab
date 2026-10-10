@@ -1,8 +1,8 @@
 # syntax=docker/dockerfile:1
 #
 # Optional standalone spark-submit runner (the official Apache Spark image plus the CLI jar), built
-# only with BUILD_SPARK_IMAGE=true. It is not used by the Compose/Swarm stacks, the DAGs or CI: the
-# DAGs run spark-submit inside the Airflow image.
+# only with BUILD_SPARK_IMAGE=true. The Compose/Swarm stacks and the DAGs do not use it: the DAGs
+# run spark-submit inside the Airflow image. CI builds it and runs a conversion in it.
 #
 # The java25 variant is required: the jar targets Java 25 bytecode, so the Spark runtime must be
 # Java 25 too. Spark 4.2.0 supports Java 17/21/25.
@@ -11,17 +11,31 @@
 # docker.io/datacraft/*, a Docker Hub namespace this project does not own.
 ARG JAR_IMAGE
 ARG SPARK_IMAGE=apache/spark:4.2.0-scala2.13-java25-python3-ubuntu
+ARG JRE_IMAGE=eclipse-temurin:25-jre
 
 FROM ${JAR_IMAGE} AS jar
+FROM ${JRE_IMAGE} AS jre
 
 FROM ${SPARK_IMAGE}
 USER root
+# --- JRE 25 (the freshly pulled one the other images run) ---
+# The Spark image is rebuilt less often than Java is patched: on 2026-10-11 it carried 25.0.3,
+# below the 25.0.4.1 the build requires. Its runtime is removed first, so that no file of the old
+# one is left among the new.
+RUN rm -rf /opt/java/openjdk
+COPY --from=jre /opt/java/openjdk /opt/java/openjdk
+ENV JAVA_HOME=/opt/java/openjdk
+ENV PATH="${JAVA_HOME}/bin:${PATH}"
+
+# --- Application artifact ---
 COPY --from=jar /dist/datacraft-cli.jar /opt/datacraft/datacraft-cli.jar
 RUN mkdir -p /opt/datacraft/data && chown -R spark:spark /opt/datacraft
 USER spark
 WORKDIR /opt/datacraft
 
-ENV DATACRAFT_HOME=/opt/datacraft
+# Job path parameters must stay inside the data directory, as in the other images; mount data there.
+ENV DATACRAFT_HOME=/opt/datacraft \
+    DATACRAFT_DATA_ROOT=/opt/datacraft/data
 
 # Pass spark-submit/job arguments at run time. Give spark-submit and the CLI the same --master,
 # e.g. after BUILD_SPARK_IMAGE=true bash deploy/scripts/build-images.sh:

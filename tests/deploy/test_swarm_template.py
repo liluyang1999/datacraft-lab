@@ -9,6 +9,9 @@ DATA_NODE = 'constraints: ["node.hostname == ${DATACRAFT_DATA_NODE:?Set the pers
 HEALTHCHECKED = ("airflow-apiserver", "airflow-scheduler", "airflow-dag-processor", "airflow-triggerer")
 API_TOKEN = "DATACRAFT_API_TOKEN: ${DATACRAFT_API_TOKEN:?Set DATACRAFT_API_TOKEN in .env}"
 REDIS_PASSWORD = "${REDIS_PASSWORD:?Set REDIS_PASSWORD in .env}"
+# Through the image's entrypoint: it gives a UID outside /etc/passwd a user name, without which
+# Airflow refuses to run, and then hands over to bash.
+BOOTSTRAP = 'command: ["bash", "/opt/datacraft/airflow-bootstrap.sh"]'
 
 
 def children(text, indent):
@@ -42,7 +45,8 @@ class SwarmTemplateTests(unittest.TestCase):
     def test_one_shot_initializer_replaces_docker_exec(self):
         init = self.services["airflow-init"]
         self.assertIn("<<: *airflow-common", init)
-        self.assertIn("entrypoint: /opt/datacraft/airflow-bootstrap.sh", init)
+        self.assertIn(BOOTSTRAP, init)
+        self.assertNotIn("entrypoint:", init)
         self.assertRegex(init, r"restart_policy:\n\s+condition: on-failure\n\s+delay: 10s")
         self.assertIn(DATA_NODE, init)
         self.assertNotIn("docker exec", (DEPLOY / "scripts" / "airflow-init.sh").read_text(encoding="utf-8"))
@@ -80,6 +84,14 @@ class SwarmTemplateTests(unittest.TestCase):
         self.assertNotIn("spread across", (DEPLOY / "compose" / ".env.example").read_text(encoding="utf-8"))
         self.assertEqual("", env["DATACRAFT_TAG"])  # swarm-deploy.sh requires an exact pushed version
 
+    def test_spark_runs_on_two_cores_unless_told_otherwise(self):
+        # The same conservative fallback as Compose: an .env without the line must not hand every
+        # core of the data node to one Spark job.
+        compose = (DEPLOY / "compose" / "docker-compose.yml").read_text(encoding="utf-8")
+        for text in (self.common, compose):
+            self.assertIn("DATACRAFT_SPARK_MASTER: ${DATACRAFT_SPARK_MASTER:-local[2]}", text)
+        self.assertEqual("local[2]", env_example()["DATACRAFT_SPARK_MASTER"])
+
     def test_api_reads_the_node_local_data_volume(self):
         api = self.services["datacraft-api"]
         self.assertIn("- datacraft-data:/opt/datacraft/data:ro", api)
@@ -114,6 +126,12 @@ class ComposeTemplateTests(unittest.TestCase):
             if "build:" in block or "<<: *airflow-common" in block:
                 with self.subTest(service=name):
                     self.assertTrue("pull_policy: never" in block or "<<: *airflow-common" in block)
+
+    def test_initializer_runs_through_the_image_entrypoint(self):
+        init = self.services["airflow-init"]
+        self.assertIn(BOOTSTRAP, init)
+        self.assertNotIn("entrypoint:", init)
+        self.assertIn('user: "${AIRFLOW_UID:-50000}:0"', self.common)
 
     def test_dags_come_from_the_image(self):
         self.assertNotIn("/opt/airflow/dags", self.common)

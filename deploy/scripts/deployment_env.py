@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-"""Create private deployment secrets, or check Compose's resolved configuration."""
+"""Create private deployment secrets, check Compose's resolved configuration, or check that the
+environment file is plain enough for every program that reads it."""
 
 import argparse
 import base64
@@ -20,6 +21,13 @@ LOOPBACK = ("127.0.0.1", "::1")
 API_TOKEN_PATTERN = r"[A-Za-z0-9._~+/-]+=*"
 API_TOKEN_MIN_LENGTH = 32
 API_TOKEN_MAX_LENGTH = 512
+PLACEHOLDERS = ("change-me", "please-change")
+# A line every reader of .env takes the same way: Compose, the shell that swarm-deploy.sh sources
+# the file with, and Docker's env_file parser, through which the Swarm services receive it. Quotes,
+# spaces, $, #, ;, backslashes and backticks mean something to one of them and not to another.
+PLAIN_LINE = re.compile(r"([A-Za-z_][A-Za-z0-9_]*)=([A-Za-z0-9_@%+=:,./\[\]*~^-]*)")
+PLAIN_RULE = ("write KEY=value with only letters, digits and _ @ % + = : , . / [ ] * ~ ^ - in the value, "
+              "without quotes or spaces; ~ may not start the value or follow a colon")
 
 
 def initialize(path: Path) -> None:
@@ -38,6 +46,23 @@ def initialize(path: Path) -> None:
     except OSError:
         path.unlink()  # Only the file exclusively created by this invocation.
         raise
+
+
+def require_plain(path: Path) -> None:
+    """Accept blank lines, comment lines and the KEY=value lines all readers of the file agree on.
+
+    The message names the line and its key, never the value.
+    """
+    # Bytes, not text mode: a carriage return would stay in every value the shell reads.
+    for number, line in enumerate(path.read_bytes().decode("utf-8").split("\n"), 1):
+        if not line.strip(" \t") or line.lstrip(" \t").startswith("#"):
+            continue
+        match = PLAIN_LINE.fullmatch(line)
+        # The shell expands ~ at the start of a value and after a colon.
+        if match is None or re.search(r"(^|:)~", match.group(2)):
+            key = re.match(r"[A-Za-z_][A-Za-z0-9_]*(?==)", line)
+            where = f"{path.name} line {number}" + (f" ({key.group()})" if key else "")
+            raise ValueError(f"{where}: {PLAIN_RULE}")
 
 
 def validate(config: dict) -> None:
@@ -63,6 +88,8 @@ def validate(config: dict) -> None:
     # The URI in Compose interpolates credentials; reserved characters need URI encoding.
     if not isinstance(password, str) or not re.fullmatch(r"[A-Za-z0-9_-]{32,}", password):
         raise ValueError("POSTGRES_PASSWORD must contain at least 32 URL-safe letters, digits, _ or -")
+    if password.lower().startswith(PLACEHOLDERS):
+        raise ValueError("Set a generated POSTGRES_PASSWORD for postgres")
     for key in ("POSTGRES_USER", "POSTGRES_DB"):
         if not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", postgres.get(key, "airflow")):
             raise ValueError(f"{key} must be a simple SQL identifier for the connection URI")
@@ -74,7 +101,7 @@ def validate(config: dict) -> None:
         env = environment(name)
         for key in (*keys, "AIRFLOW_ADMIN_PASSWORD"):
             value = env.get(key, "")
-            if not isinstance(value, str) or len(value) < 32 or value.lower().startswith(("change-me", "please-change")):
+            if not isinstance(value, str) or len(value) < 32 or value.lower().startswith(PLACEHOLDERS):
                 raise ValueError(f"Set a generated {key} for {name}")
             if key in keys and value != reference.get(key):
                 raise ValueError(f"{key} must match across Airflow components")
@@ -105,7 +132,7 @@ def validate(config: dict) -> None:
         token = environment("datacraft-api").get("DATACRAFT_API_TOKEN", "")
         if (not isinstance(token, str) or not re.fullmatch(API_TOKEN_PATTERN, token)
                 or not API_TOKEN_MIN_LENGTH <= len(token) <= API_TOKEN_MAX_LENGTH
-                or token.lower().startswith(("change-me", "please-change"))):
+                or token.lower().startswith(PLACEHOLDERS)):
             raise ValueError("Set a generated DATACRAFT_API_TOKEN for datacraft-api")
         if token in {password, reference.get("AIRFLOW_ADMIN_PASSWORD"), *(reference.get(key) for key in keys)}:
             raise ValueError("DATACRAFT_API_TOKEN must be independent of the database and Airflow secrets")
@@ -113,13 +140,15 @@ def validate(config: dict) -> None:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("command", choices=("init", "check"))
+    parser.add_argument("command", choices=("init", "check", "plain"))
     parser.add_argument("path", type=Path, nargs="?", default=TEMPLATE.with_name(".env"))
     args = parser.parse_args()
     try:
         if args.command == "init":
             initialize(args.path)
             print("Created private environment file. Read the admin password there; keep a secure backup.")
+        elif args.command == "plain":
+            require_plain(args.path)
         else:
             try:
                 config = json.load(sys.stdin)
@@ -130,7 +159,9 @@ def main() -> int:
             validate(config)
             print("Deployment secrets validated.")
     except (OSError, ValueError) as error:
-        if isinstance(error, OSError):
+        if isinstance(error, OSError) and args.command == "plain":
+            print("Cannot read the environment file.", file=sys.stderr)
+        elif isinstance(error, OSError):
             print("Cannot create environment file; check permissions and keep existing files unchanged.", file=sys.stderr)
         else:
             print(str(error), file=sys.stderr)

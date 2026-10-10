@@ -116,6 +116,50 @@ class ImageBuildContractTests(unittest.TestCase):
                           "/opt/datacraft/datacraft-cli.jar"], entrypoint)
         airflow = (DOCKERFILES / "Dockerfile.airflow").read_text(encoding="utf-8")
         self.assertRegex(airflow, r"(?m)^RUN mkdir -p /opt/datacraft/data .*chmod -R g\+rwX /opt/datacraft/data$")
+        # The Spark image creates the same directory, and its jobs stay inside it in the same way.
+        spark = (DOCKERFILES / "Dockerfile.spark").read_text(encoding="utf-8")
+        self.assertRegex(spark, r"(?m)^RUN mkdir -p /opt/datacraft/data ")
+        self.assertRegex(spark, r"(?m)^\s+DATACRAFT_DATA_ROOT=/opt/datacraft/data$")
+
+    def test_every_runtime_image_takes_its_java_from_the_same_jre_image(self):
+        # The Spark base image is rebuilt less often than Java is patched: it carried 25.0.3 while
+        # the build required 25.0.4.1. Each image therefore copies the runtime of JRE_IMAGE, which
+        # the script pulls before it builds.
+        calls = self.run_build(BUILD_SPARK_IMAGE="true", JRE_IMAGE="jre:test")
+        builds = {dockerfile(call): build_args(call) for call in calls if call[:1] == ["build"]}
+        for name in RUNTIME_DOCKERFILES:
+            with self.subTest(dockerfile=name):
+                self.assertEqual("jre:test", builds[name]["JRE_IMAGE"])
+                text = (DOCKERFILES / name).read_text(encoding="utf-8")
+                self.assertEqual("eclipse-temurin:25-jre", arg_defaults(name)["JRE_IMAGE"])
+                self.assertRegex(text, r"(?m)^FROM \$\{JRE_IMAGE\}( AS jre)?$")
+        spark = (DOCKERFILES / "Dockerfile.spark").read_text(encoding="utf-8").splitlines()
+        # Removed before the copy: a COPY onto the old runtime would leave its other files in place.
+        removal, copy = spark.index("RUN rm -rf /opt/java/openjdk"), spark.index(
+            "COPY --from=jre /opt/java/openjdk /opt/java/openjdk")
+        self.assertLess(removal, copy)
+        self.assertIn("ENV JAVA_HOME=/opt/java/openjdk", spark[copy:])
+
+    def test_one_failed_package_download_does_not_fail_an_image_build(self):
+        # A mirror answering one request with 502 failed a build on 2026-10-11. apt gives up at
+        # once unless told to retry; pip retries by default.
+        for name in RUNTIME_DOCKERFILES + ("Dockerfile.build",):
+            text = (DOCKERFILES / name).read_text(encoding="utf-8")
+            for call in re.findall(r"apt-get [^\n]*", re.sub(r"(?m)^#.*$", "", text)):
+                with self.subTest(dockerfile=name, call=call):
+                    self.assertRegex(call, r"^apt-get -o Acquire::Retries=[3-9] ")
+        jvm = (DOCKERFILES / "Dockerfile.jvm").read_text(encoding="utf-8")
+        self.assertEqual(2, len(re.findall(r"apt-get -o Acquire::Retries=", jvm)))
+
+    def test_a_code_change_does_not_download_the_python_packages_again(self):
+        # Docker rebuilds every layer after the first one whose input changed. The jar and the DAGs
+        # change with the code, the Python packages (pyspark alone is about 450 MB) do not.
+        lines = (DOCKERFILES / "Dockerfile.airflow").read_text(encoding="utf-8").splitlines()
+        install = next(i for i, line in enumerate(lines) if line.startswith("RUN pip install "))
+        for copied in ("COPY --from=jar ", "COPY orchestration/airflow/dags/ ",
+                       "COPY --chmod=755 deploy/scripts/airflow-bootstrap.sh "):
+            position = next(i for i, line in enumerate(lines) if line.startswith(copied))
+            self.assertLess(install, position, copied.strip())
 
 
 if __name__ == "__main__":
