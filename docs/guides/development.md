@@ -212,10 +212,10 @@ steps of the `containers` job and live with the pipeline scripts in `cicd/images
 
 | Script | Needs | What it proves | CI job |
 | --- | --- | --- | --- |
-| `tests/smoke/airflow_runtime_smoke.py --jar <jar>` | The Airflow environment plus `pyspark==4.2.0`, Java 25, Bash | Runs the three DAGs for real against the packaged CLI, local Spark and a temporary local SFTP server, including a GBK file converted with `encoding=GBK`; all state lives in a temporary directory | `dags`, and inside the Airflow image in `smoke-images.sh` |
-| `cicd/images/smoke-images.sh` | Docker | Builds the images; checks that the JRE is at least 25.0.4.1, the API image (no start without a token, health, 401 without the token, non-root user, read-only jar, a Spark job answering 500 FAILED), the Airflow image's dependency and security floors (`cicd/airflow/check_security_floor.py`, run inside the image), and the shared data volume's permissions; then runs the Airflow smoke test inside the Airflow image | `containers` |
+| `tests/smoke/airflow_runtime_smoke.py --jar <jar>` | The Airflow environment plus `pyspark==4.2.0`, Java 25, Bash | Runs the three DAGs for real against the packaged CLI, local Spark and a temporary local SFTP server, including a GBK file converted with `encoding=GBK`, and then requires a run of the SFTP DAG through a connection that verifies no host key to fail before it downloads anything; all state lives in a temporary directory | `dags`, and inside the Airflow image in `smoke-images.sh` |
+| `cicd/images/smoke-images.sh` | Docker | Builds the images, the optional `datacraft/spark` among them; checks that the JRE is at least 25.0.4.1 and the same in all three runtime images, the API image (no start without a token, health, 401 without the token, non-root user, read-only jar, a Spark job answering 500 FAILED), the Airflow image's dependency and security floors (`cicd/airflow/check_security_floor.py`, run inside the image), the shared data volume's permissions, a conversion and a count inside the Spark image's data directory and the refusal of an output outside it, and the stacks' one-shot initializer under UID 1000; then runs the Airflow smoke test inside the Airflow image | `containers` |
 | `cicd/images/smoke-compose.sh` | Docker, the images, `CI=true` | Starts the Compose stack with fresh secrets, checks the admin login and that the generated API token opens `datacraft-api`, waits for all three image-baked DAGs to be registered, runs the engine DAG through the scheduler, and restores a metadata backup into a separate database; then removes the stack and its volumes. When it fails it prints the task logs first | `containers` |
-| `cicd/images/smoke-swarm.sh` | Docker outside any swarm, the images, `CI=true` | Rehearses the documented Swarm deployment on a swarm of one node: a loopback registry, both images under an exact tag, `swarm-deploy.sh` and `airflow-init.sh`; requires every service to run (healthy where it has a health check), the engine API to answer its token only and only on the overlay network, the generated admin to sign in through the routing mesh, and the engine DAG to run through Redis and a Celery worker; then deploys a second tag and requires the initializer to run again, the idle worker to stop, the earlier run to survive and the DAG to run again. Leaves the swarm and removes the stack, its volumes and the registry. One node says nothing about placement or failover | `containers` |
+| `cicd/images/smoke-swarm.sh` | Docker outside any swarm, the images, `CI=true` | Rehearses the documented Swarm deployment on a swarm of one node: a loopback registry, both images under an exact tag, `swarm-deploy.sh` and `airflow-init.sh`; requires every service to run (healthy where it has a health check), the engine API to answer its token only and only on the overlay network, the generated admin to sign in through the routing mesh, and the engine DAG to run through Redis and a Celery worker; then deploys a second tag and requires the initializer to run again, the idle worker to stop, the earlier run to survive and the DAG to run again. Leaves the swarm and removes the stack, its volumes, the registry and the names it gave the images, and fails when a volume stays. One node says nothing about placement or failover | `containers` |
 
 The `cicd/images` scripts are meant for disposable CI runners: the first creates and removes the
 canary files `.env` and `backups/ci-probe.dump` and refuses to run when they exist; the other two
@@ -224,6 +224,12 @@ when the Docker engine is already part of a swarm. Both stack scripts check cred
 `cicd/images/check_access.py`, which runs anywhere: given the stack's `.env` or the same values in
 the environment, `--airflow URL` requires a token for the admin password and none for another
 password, and `--api URL` requires `/jobs` to open for the API token only.
+
+With Docker on the workstation the four container scripts also run locally, and it is worth doing
+before a push that changes an image, a stack file or a deployment script: two defects of the
+rehearsal's teardown only showed on an engine that is kept. The commands, and how to run them on
+Docker Desktop for Windows, are in the
+[deployment guide](deployment.md#7-验证与已知范围).
 
 ## Type checking
 
