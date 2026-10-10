@@ -58,8 +58,23 @@ elif args[:2] in (['swarm', 'init'], ['swarm', 'leave'], ['node', 'ls'], ['stack
     pass
 elif args[:3] == ['node', 'inspect', 'self']:
     print('runner-1')
-elif args[:1] in (['tag'], ['push'], ['rm']) or args[:2] == ['volume', 'ls']:
+elif args[:1] in (['tag'], ['push'], ['rm']):
     pass
+elif args[:3] == ['ps', '--all', '--quiet']:
+    # The containers of a removed stack, which the engine deletes a moment after its services:
+    # there for the first STOPPING_LOOKS looks.
+    if state.setdefault('stopping', int(os.environ.get('STOPPING_LOOKS', '0'))) > 0:
+        state['stopping'] -= 1
+        print('container-not-deleted-yet')
+elif args[:2] == ['volume', 'ls']:
+    print('\n'.join(state.get('volumes', [])))
+elif args[:2] == ['volume', 'rm']:
+    # A volume that a container still refers to, running or not, cannot be removed.
+    in_use = state.get('stopping', int(os.environ.get('STOPPING_LOOKS', '0'))) > 0
+    if in_use or os.environ.get('VOLUMES') == 'stuck' or sorted(args[2:]) != sorted(state.get('volumes', [])):
+        status = 1
+    else:
+        state['volumes'] = []
 elif args[:2] == ['run', '--detach']:
     print('registry-container')
 elif args[:2] == ['run', '--rm']:
@@ -77,6 +92,7 @@ elif args[:2] == ['stack', 'deploy']:
     record['settings'] = {key: os.environ.get(key) for key in
                           ('DATACRAFT_REGISTRY', 'DATACRAFT_TAG', 'DATACRAFT_DATA_NODE')}
     state['first_tag'] = state['first_tag'] or os.environ['DATACRAFT_TAG']
+    state['volumes'] = ['datacraft_airflow-logs', 'datacraft_datacraft-data', 'datacraft_postgres-db']
     # The script removes .env when it ends; the tests look up what it held.
     with open(os.path.join(os.environ['STUB_ROOT'], 'env-at-deploy'), 'w') as copy:
         copy.write(open(env_file).read())
@@ -242,6 +258,24 @@ class SwarmRehearsalRunTests(unittest.TestCase):
         self.assertEqual(1, result.returncode, result.stdout)
         self.assertEqual(f"error: {message}\n", result.stderr)
         self.assertFalse(any(call[:1] in (["swarm"], ["stack"], ["run"], ["rm"]) for call in calls), calls)
+
+    def volumes_left(self):
+        return json.loads((self.root / "stub-state.json").read_text())["volumes"]
+
+    def test_the_volumes_of_the_stack_go_once_its_containers_are_deleted(self):
+        # A rehearsal on 2026-10-11 left the stack's volumes behind without a word: it waited for
+        # the running containers only, and the stopped ones still held the volumes.
+        result, calls, _ = self.rehearse(CI="true", STOPPING_LOOKS="3")
+        self.assertEqual(0, result.returncode, result.stdout + result.stderr)
+        self.assertEqual([], self.volumes_left())
+        self.assert_torn_down(calls)
+
+    def test_volumes_that_cannot_be_removed_fail_the_rehearsal(self):
+        result, calls, _ = self.rehearse(CI="true", VOLUMES="stuck")
+        self.assertEqual(1, result.returncode, result.stdout)
+        self.assertIn("The volumes of the stack could not be removed.", result.stderr)
+        self.assertEqual(3, len(self.volumes_left()))
+        self.assert_torn_down(calls)
 
     def test_it_runs_on_ci_runners_only(self):
         result, calls, _ = self.rehearse()

@@ -1,9 +1,10 @@
 #!/usr/bin/env bash
-# Builds the real images and verifies both runtime surfaces: the API image (no start without a
+# Builds the real images and verifies the runtime surfaces: the API image (no start without a
 # token, health, 401 without the token, non-root user, read-only jar, no data directory, a Spark job
-# answering 500 FAILED) and the Airflow image
-# (dependency and security floors, the shared data volume's permissions, the three pipelines run
-# inside the image). Needs Docker. Disposable CI runners only: it creates and removes the build
+# answering 500 FAILED), the optional spark-submit image (a conversion inside its data directory,
+# none outside it) and the Airflow image (dependency and security floors, the shared data volume's
+# permissions, the initializer under an unknown UID, the three pipelines run inside the image).
+# Needs Docker. Disposable CI runners only: it creates and removes the build
 # context canaries .env and backups/ci-probe.dump, and refuses to run when either exists.
 set -euo pipefail
 # shellcheck source=cicd/lib.sh
@@ -12,6 +13,8 @@ cd "$REPO_ROOT"
 
 container="datacraft-ci-api-${GITHUB_RUN_ID:-$$}"
 probe_volume="datacraft-ci-data-${GITHUB_RUN_ID:-$$}"
+spark_volume="datacraft-ci-spark-${GITHUB_RUN_ID:-$$}"
+work=$(scratch_dir image-smoke)
 # Build-context canaries: .dockerignore must keep database dumps and env files out of every image.
 canaries=(.env backups/ci-probe.dump)
 created=()
@@ -20,7 +23,8 @@ cleanup() {
   local status=$?
   trap - EXIT
   docker rm -f "$container" "$container-unauthenticated" >/dev/null 2>&1 || true
-  docker volume rm -f "$probe_volume" >/dev/null 2>&1 || true
+  docker volume rm -f "$probe_volume" "$spark_volume" >/dev/null 2>&1 || true
+  rm -rf -- "$work"
   if ((${#created[@]})); then rm -f -- "${created[@]}"; fi
   if [[ "$created_backups" == true ]]; then rmdir -- backups 2>/dev/null || true; fi
   exit "$status"
@@ -39,13 +43,14 @@ for canary in "${canaries[@]}"; do
   : > "$canary"
 done
 
-bash deploy/scripts/build-images.sh
+# The optional Spark image too: no stack uses it, and it would otherwise never be built.
+BUILD_SPARK_IMAGE=true bash deploy/scripts/build-images.sh
 
 docker run --rm --entrypoint sh datacraft/jar-builder:latest -c \
   'test ! -e /workspace/backups/ci-probe.dump && test ! -e /workspace/.env' ||
   fail "The build context leaked backups/ or .env into datacraft/jar-builder."
 
-# Both runtime images carry the freshly pulled Temurin JRE, at or above the documented floor.
+# Every runtime image carries the freshly pulled Temurin JRE, at or above the documented floor.
 jre_image="${JRE_IMAGE:-eclipse-temurin:25-jre}"
 jre_release() { # <image> <key>: one value from the JRE's release file
   docker run --rm --entrypoint sed "$1" -n "s/^$2=\"\\(.*\\)\"\$/\\1/p" /opt/java/openjdk/release
@@ -54,7 +59,7 @@ base_version=$(jre_release "$jre_image" JAVA_VERSION)
 base_runtime=$(jre_release "$jre_image" JAVA_RUNTIME_VERSION)
 [[ -n "$base_version" && -n "$base_runtime" ]] || fail "Cannot read the Java version of $jre_image."
 printf '%s\n' 25.0.4.1 "$base_version" | sort -V -C || fail "$jre_image ships Java $base_version, below 25.0.4.1."
-for image in datacraft/jvm:latest datacraft/airflow:latest; do
+for image in datacraft/jvm:latest datacraft/airflow:latest datacraft/spark:latest; do
   image_runtime=$(jre_release "$image" JAVA_RUNTIME_VERSION)
   [[ "$image_runtime" == "$base_runtime" ]] ||
     fail "$image runs Java '$image_runtime', but the freshly pulled $jre_image has '$base_runtime'."
@@ -141,9 +146,55 @@ docker run --rm --entrypoint sh -v "$probe_volume:/opt/datacraft/data:ro" datacr
   'test "$(cat /opt/datacraft/data/ingest/probe)" = probe && ! touch /opt/datacraft/data/api-write 2>/dev/null' ||
   fail "datacraft/jvm cannot read Airflow output, or can write the read-only data volume."
 
+# The optional spark-submit image, through its entry point and as its non-root user: a conversion
+# and a count inside the data directory, and no output outside it. The last line a job prints is
+# its JSON result; what Spark logs goes to a file that is shown when a check fails.
+spark_job() { # <CLI arguments>: the JSON result of one job
+  docker run --rm -v "$spark_volume:/opt/datacraft/data" datacraft/spark:latest --master 'local[1]' \
+    /opt/datacraft/datacraft-cli.jar --master 'local[1]' --json "$@" 2> "$work/spark-job.log" | tail -n 1
+}
+spark_failed() { # <message>
+  tail -n 30 "$work/spark-job.log"
+  fail "$1"
+}
+docker volume create "$spark_volume" >/dev/null
+# shellcheck disable=SC2016
+docker run --rm --entrypoint sh -v "$spark_volume:/opt/datacraft/data" datacraft/spark:latest -c \
+  'test "$(id -u)" != 0 && printf "id,note\n1,a\n2,b\n" > /opt/datacraft/data/in.csv' ||
+  fail "datacraft/spark runs as root, or its user cannot write a fresh data volume."
+converted=$(spark_job --command csv-to-parquet --param input=/opt/datacraft/data/in.csv \
+  --param output=/opt/datacraft/data/out.parquet) || true
+[[ "$converted" == *'"status":"SUCCEEDED"'* && "$converted" == *'"rows":"2"'* ]] ||
+  spark_failed "datacraft/spark did not convert a CSV file inside its data directory: $converted"
+counted=$(spark_job --command row-count --param input=/opt/datacraft/data/out.parquet \
+  --param expectedRows=2) || true
+[[ "$counted" == *'"status":"SUCCEEDED"'* ]] ||
+  spark_failed "datacraft/spark did not count the rows it had written: $counted"
+escaped=$(spark_job --command csv-to-parquet --param input=/opt/datacraft/data/in.csv \
+  --param output=/tmp/out.parquet) || true
+[[ "$escaped" == *'"status":"FAILED"'* && "$escaped" == *'must be inside the configured data root'* ]] ||
+  spark_failed "datacraft/spark accepted an output outside its data directory: $escaped"
+
+# The one-shot initializer as both stacks start it, under an AIRFLOW_UID the image does not know:
+# Airflow refuses to run as a user without a name, and only the image's entrypoint gives this UID
+# one. The database is SQLite inside the container, which is removed with it.
+if ! initialized=$(docker run --rm --user 1000:0 \
+  -e AIRFLOW__CORE__AUTH_MANAGER=airflow.providers.fab.auth_manager.fab_auth_manager.FabAuthManager \
+  -e AIRFLOW__CORE__LOAD_EXAMPLES=false \
+  -e AIRFLOW_ADMIN_USERNAME=uid-probe -e AIRFLOW_ADMIN_EMAIL=uid-probe@example.invalid \
+  -e AIRFLOW_ADMIN_PASSWORD="$(python3 -c 'import secrets; print(secrets.token_urlsafe(24))')" \
+  datacraft/airflow:latest bash /opt/datacraft/airflow-bootstrap.sh 2>&1); then
+  printf '%s\n' "$initialized" | tail -n 40
+  fail "The initializer cannot migrate the database and create the admin under AIRFLOW_UID=1000."
+fi
+[[ "$initialized" == *'User "uid-probe" created with role "Admin"'* ]] ||
+  fail "The initializer under AIRFLOW_UID=1000 ended without creating the admin."
+
 docker run --rm --entrypoint python \
   -v "$PWD:/workspace:ro" datacraft/airflow:latest \
   -B /workspace/tests/smoke/airflow_runtime_smoke.py --jar /opt/datacraft/datacraft-cli.jar
-notice "Runtime images verified" "The jar builder, datacraft/jvm and datacraft/airflow were built" \
-  "from this commit; both runtime images run Java $base_runtime; the API starts only with a token" \
-  "and answers 401 without it; the three pipelines ran inside the Airflow image."
+notice "Runtime images verified" "The jar builder, datacraft/jvm, datacraft/airflow and" \
+  "datacraft/spark were built from this commit; the three runtime images run Java $base_runtime;" \
+  "the API starts only with a token and answers 401 without it; the Spark image converted and" \
+  "counted a file inside its data directory; the initializer ran under UID 1000; the three" \
+  "pipelines ran inside the Airflow image, and the SFTP pipeline was refused without a host key."

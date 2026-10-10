@@ -69,18 +69,29 @@ cleanup() {
     fi
     # Quiet: the removal of each service would otherwise be the last lines of a failed step.
     docker stack rm "$stack" >/dev/null 2>&1 || true
-    local attempt
+    # The engine deletes the containers of a removed stack a moment after its services. Until then
+    # they hold the stack's volumes, stopped or not, so the wait is for every container to be gone.
+    local attempt volumes
     for ((attempt = 0; attempt < 30; attempt++)); do
-      [[ -n "$(docker ps --quiet --filter "label=com.docker.stack.namespace=$stack")" ]] || break
+      [[ -n "$(docker ps --all --quiet --filter "label=com.docker.stack.namespace=$stack")" ]] || break
       sleep 2
     done
     docker swarm leave --force >/dev/null 2>&1 || {
       echo "This Docker engine could not leave the swarm." >&2
       status=1
     }
-    # The stack's named volumes; containers that are still stopping keep theirs.
-    docker volume ls --quiet --filter "label=com.docker.stack.namespace=$stack" |
-      xargs --no-run-if-empty docker volume rm >/dev/null 2>&1 || true
+    # The stack's named volumes. A next rehearsal on this engine would start from them: from the
+    # database of this one, with the password of this one.
+    for ((attempt = 0; attempt < 5; attempt++)); do
+      volumes=$(docker volume ls --quiet --filter "label=com.docker.stack.namespace=$stack")
+      [[ -n "$volumes" ]] || break
+      # shellcheck disable=SC2086  # one argument for each volume name
+      docker volume rm $volumes >/dev/null 2>&1 || sleep 2
+    done
+    if [[ -n "$(docker volume ls --quiet --filter "label=com.docker.stack.namespace=$stack")" ]]; then
+      echo "The volumes of the stack could not be removed." >&2
+      status=1
+    fi
   fi
   docker rm --force --volumes "$registry_container" >/dev/null 2>&1 || true
   [[ "$created_env" != true ]] || rm -f -- "$env_file"

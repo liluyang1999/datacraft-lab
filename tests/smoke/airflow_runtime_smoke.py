@@ -157,6 +157,19 @@ def run_dags(data):
             if (data / "nested/ingest.csv").read_bytes() != source.read_bytes():
                 raise AssertionError("SFTP content differs from source")
             verify_output(data / "ingested.parquet")
+            # The same server through a connection that would accept any host key. The guard is a
+            # hook the task runner calls, so only a real run shows that it still gets called.
+            os.environ["AIRFLOW_CONN_DATACRAFT_SFTP"] = json.dumps(
+                {**connection, "extra": {"no_host_key_check": True}})
+            refused = bag.dags["datacraft_sftp_ingest"].test(run_conf={
+                "remote_path": "/input.csv", "local_path": str(data / "nested/unverified.csv"),
+                "output": str(data / "unverified.parquet"),
+            })
+            if refused.state != "failed" or (data / "nested/unverified.csv").exists():
+                raise AssertionError("datacraft_sftp_ingest downloaded through a connection that "
+                                     f"verifies no host key (run state {refused.state})")
+            print("Verified host-key guard: a connection without host-key verification is refused",
+                  flush=True)
         finally:
             os.environ.pop("AIRFLOW_CONN_DATACRAFT_SFTP", None)
 

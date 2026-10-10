@@ -58,6 +58,11 @@ expect_rejected() {
 for variable in AIRFLOW_API_SECRET_KEY AIRFLOW_FERNET_KEY AIRFLOW_JWT_SECRET DATACRAFT_API_TOKEN; do
   expect_rejected "$variable" "${compose[@]}"
 done
+# The copied .env carries a placeholder POSTGRES_PASSWORD, so removing the variable from the
+# environment alone would leave it set. Compose interpolates from this copy without the line.
+grep -v '^POSTGRES_PASSWORD=' "$env_file" > "$work/without-postgres-password.env"
+expect_rejected POSTGRES_PASSWORD docker compose --env-file "$work/without-postgres-password.env" \
+  -f deploy/compose/docker-compose.yml config --quiet
 for variable in POSTGRES_PASSWORD AIRFLOW_API_SECRET_KEY AIRFLOW_FERNET_KEY AIRFLOW_JWT_SECRET \
   DATACRAFT_API_TOKEN REDIS_PASSWORD; do
   expect_rejected "$variable" "${stack[@]}"
