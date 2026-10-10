@@ -19,8 +19,13 @@ is says so below. Each fix was then undone on purpose, 40 times, and a test had 
 one. The local runs found two defects of their own. One failed on a package mirror that answered
 502, which exercised the error annotations of the pipeline against a real failure for the first
 time. And when the Compose and Swarm steps were made to fail on purpose, to see their diagnostics
-on a real engine, the Swarm rehearsal turned out to leave its volumes behind. Items marked
-**BREAKING** need action from operators.
+on a real engine, the Swarm rehearsal turned out to leave its volumes behind. The JVM suite ran
+on Windows and on Linux (WSL, Temurin 25.0.4.1), the three DAGs ran for real on Linux and inside
+the Airflow image, and the push of the round, `e989fc4`, passed every job of CI (run 38067189382:
+307 JVM tests on Linux, the four images built and used, the Compose stack, the Swarm rehearsal
+with its upgrade) and the advisory workflow (38067189346); what the run verified was read back
+from its annotations through the public API. Items marked **BREAKING** need action from
+operators.
 
 #### Security
 - **BREAKING for Swarm deployments:** `swarm-deploy.sh` reads `deploy/compose/.env` with the
