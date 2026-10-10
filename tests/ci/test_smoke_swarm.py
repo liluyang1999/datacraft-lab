@@ -58,7 +58,7 @@ elif args[:2] in (['swarm', 'init'], ['swarm', 'leave'], ['node', 'ls'], ['stack
     pass
 elif args[:3] == ['node', 'inspect', 'self']:
     print('runner-1')
-elif args[:1] in (['tag'], ['push'], ['rm']):
+elif args[:1] in (['tag'], ['push'], ['rm']) or args[:2] == ['image', 'rm']:
     pass
 elif args[:3] == ['ps', '--all', '--quiet']:
     # The containers of a removed stack, which the engine deletes a moment after its services:
@@ -253,6 +253,11 @@ class SwarmRehearsalRunTests(unittest.TestCase):
         self.assertIn(["rm", "--force", "--volumes", "datacraft-rehearsal-registry-77"], calls)
         self.assertLess(calls.index(["stack", "rm", "datacraft"]), calls.index(["swarm", "leave", "--force"]))
         self.assertFalse(self.env_file.exists())
+        # The names this run gave the images are taken away again; the images keep their own.
+        tagged = sorted(call[2] for call in calls if call[:1] == ["tag"])
+        removed = sorted(name for call in calls if call[:2] == ["image", "rm"] for name in call[2:])
+        self.assertEqual(tagged, removed)
+        self.assertFalse([name for name in removed if not name.startswith("127.0.0.1:5000/datacraft-")], removed)
 
     def assert_refused(self, result, calls, message):
         self.assertEqual(1, result.returncode, result.stdout)

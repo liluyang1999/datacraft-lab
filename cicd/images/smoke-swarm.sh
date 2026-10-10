@@ -15,7 +15,7 @@
 #
 # Needs Docker. Disposable CI runners only: it refuses to run unless CI=true, when
 # deploy/compose/.env exists or when the Docker engine is already part of a swarm, and it leaves
-# the swarm and removes the stack, its volumes and the registry.
+# the swarm and removes the stack, its volumes, the registry and the names it gave the images.
 #
 # Env: DATACRAFT_REHEARSAL_TIMEOUT (seconds the initializer, and then the other services, may take
 # after each deployment; default 420, so that a stack that never settles fails long before the job
@@ -51,6 +51,8 @@ services=(postgres redis airflow-apiserver airflow-scheduler airflow-dag-process
 dags=(datacraft_engine_jobs datacraft_spark_etl datacraft_sftp_ingest)
 joined=false
 created_env=false
+# The names this run gave the runtime images, to take them away again.
+published=()
 cleanup() {
   local status=$?
   trap - EXIT
@@ -94,6 +96,8 @@ cleanup() {
     fi
   fi
   docker rm --force --volumes "$registry_container" >/dev/null 2>&1 || true
+  # Only the names: the images keep the ones they were built under.
+  if ((${#published[@]})); then docker image rm "${published[@]}" >/dev/null 2>&1 || true; fi
   [[ "$created_env" != true ]] || rm -f -- "$env_file"
   exit "$status"
 }
@@ -103,6 +107,7 @@ publish() { # <tag>: both runtime images in the registry under that tag
   local image
   for image in airflow jvm; do
     docker tag "datacraft/$image:latest" "$registry/datacraft-$image:$1"
+    published+=("$registry/datacraft-$image:$1")
     docker push --quiet "$registry/datacraft-$image:$1" >/dev/null
   done
 }

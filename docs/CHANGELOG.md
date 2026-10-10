@@ -15,7 +15,7 @@ reviews read the current state of the repository: the core, IO and job modules, 
 deployment code, and every document against the code. They reported 33 findings; each was checked
 against the code or reproduced before anything was changed. Defects were fixed behind a test that
 failed first, behaviour the documents did not describe was written down, and what was left as it
-is says so below. Each fix was then undone on purpose, 40 times, and a test had to notice every
+is says so below. Each fix was then undone on purpose, 42 times, and a test had to notice every
 one. The local runs found two defects of their own. One failed on a package mirror that answered
 502, which exercised the error annotations of the pipeline against a real failure for the first
 time. And when the Compose and Swarm steps were made to fail on purpose, to see their diagnostics
@@ -94,7 +94,8 @@ operators.
   which the engine deletes a moment later, still held the volumes; the failed removal was
   ignored. A CI runner is thrown away, so nothing showed. On a machine that is kept, the next
   rehearsal started from the database of the last one. The script now waits until every container
-  of the stack is deleted, retries the removal and fails when a volume remains.
+  of the stack is deleted, retries the removal and fails when a volume remains. It also left the
+  registry names it gives the two images, four more with every run; it takes them away again.
 - `check-stack-files.sh` did not show that the Compose file refuses a missing
   `POSTGRES_PASSWORD`: the `.env` it copies carries a placeholder for it. It now interpolates
   from a copy without that line.
@@ -126,8 +127,8 @@ operators.
   `.env` that must never run, the initializer's command in both stacks, the Spark fallback, the
   layer order, retries and Java runtime of the images; `tests/ci` 101 (was 99): the volumes of the
   rehearsed stack; `tests/docs` 15 (was 14): the floors table of two documents against the script.
-- Forty deliberate breakages of the fixes above, 18 in the JVM modules, 18 in the deployment code
-  and 4 in the rehearsal's teardown, each noticed by a test.
+- Forty-two deliberate breakages of the fixes above, 18 in the JVM modules, 18 in the deployment
+  code and 6 in the rehearsal's teardown, each noticed by a test.
 
 - A swarm of two nodes, tried once by hand (it is not part of the pipeline): two nested Docker
   engines on the development machine, a manager and a worker as the data node, the stack deployed

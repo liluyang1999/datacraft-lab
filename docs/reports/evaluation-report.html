@@ -368,7 +368,7 @@
     </div>
   </div>
   <p><strong>云平台结论（第六章）：</strong>每月运行不足 227.5 小时时选 Oracle OCI A1 按需（60 小时约 $4.79/月）；常开或超过 227.5 小时选腾讯云 Lighthouse 入门型（$10.15/月）；必须使用 AWS 时选 Lightsail 8 GB（$44.15/月）。托管 Airflow 与 Cloudflare 运行时不采用，R2 只用于备份。所有价格为 2026-09-19 的公开价快照，尚未购买任何云资源。</p>
-  <p><strong>本轮（2026-10-10）完成：</strong>本机装好了 Docker，容器阶段的四个脚本第一次在 CI 之外完整运行；同时另起三路独立复核，把当前所有功能模块、部署代码与文档重新过了一遍，共 33 条发现，逐条核实后处理。修复的缺陷里有三处值得单独提：<code>swarm-deploy.sh</code> 用 shell 读取 <code>.env</code>，文件里带 shell 语法的一行会被当作命令执行；<code>compose-up.sh</code> 检查的配置不是它启动的配置；<code>AIRFLOW_UID</code> 不是默认值时初始化必然失败。本机运行自己也找出两个问题：软件源的一次 502 让镜像构建失败（由此第一次在真实失败里验证了错误注解），以及 Swarm 演练结束后悄悄留下数据卷。上一版第八章的三项因此关闭或降级：容器阶段只能在 CI 上运行、可选 Spark 镜像的 JDK 偏低、多节点 Swarm 完全没有验证过。每处修复都先有失败的测试，之后又故意改坏 40 处，全部被测试发现。逐项对应见附录 A；上一轮（2026-10-09）的明细见附录 B。</p>
+  <p><strong>本轮（2026-10-10）完成：</strong>本机装好了 Docker，容器阶段的四个脚本第一次在 CI 之外完整运行；同时另起三路独立复核，把当前所有功能模块、部署代码与文档重新过了一遍，共 33 条发现，逐条核实后处理。修复的缺陷里有三处值得单独提：<code>swarm-deploy.sh</code> 用 shell 读取 <code>.env</code>，文件里带 shell 语法的一行会被当作命令执行；<code>compose-up.sh</code> 检查的配置不是它启动的配置；<code>AIRFLOW_UID</code> 不是默认值时初始化必然失败。本机运行自己也找出两个问题：软件源的一次 502 让镜像构建失败（由此第一次在真实失败里验证了错误注解），以及 Swarm 演练结束后悄悄留下数据卷。上一版第八章的三项因此关闭或降级：容器阶段只能在 CI 上运行、可选 Spark 镜像的 JDK 偏低、多节点 Swarm 完全没有验证过。每处修复都先有失败的测试，之后又故意改坏 42 处，全部被测试发现。逐项对应见附录 A；上一轮（2026-10-09）的明细见附录 B。</p>
 </section>
 
 <section id="scope" aria-labelledby="h-scope">
@@ -772,7 +772,7 @@
     <li><strong>两节点 Swarm 试验</strong>（两个嵌套的 Docker 引擎，引擎 29.9.0）：从 manager 部署，任务全部落在另一个节点；路由网格、跨节点的 API 访问与一次 DAG 运行通过；内核的 ESP 安全关联计数证明节点之间的请求经过了 IPsec（附录 A.1）。这是一次手工试验，不属于流水线。</li>
     <li><strong><code>cicd/lint</code> 脚本</strong>（WSL，ShellCheck 0.11.0）：23 个 Shell 脚本通过 <code>bash -n</code>，ShellCheck 在最低的 style 级别也没有任何发现；<code>check-actions-pinned.sh</code> 核对了两个工作流中的 14 处 <code>uses</code>。</li>
     <li><strong>类型检查与脚本测试：</strong><code>npx --yes pyright@1.1.414 --warnings</code> 0 errors、0 warnings、0 informations；WSL 中 <code>tests/deploy</code> 64 项、<code>tests/ci</code> 101 项、<code>tests/docs</code> 15 项全部通过（DeprecationWarning 视为错误）；计算器 6 项 Node 测试通过。</li>
-    <li><strong>测试确实能发现问题：</strong>三路复核指出的每个缺陷都先写出修复前失败的测试（附录 A.2）；修复完成后逐条做变异检查，共 40 处，全部被发现（附录 A.4）。</li>
+    <li><strong>测试确实能发现问题：</strong>三路复核指出的每个缺陷都先写出修复前失败的测试（附录 A.2）；修复完成后逐条做变异检查，共 42 处，全部被发现（附录 A.4）。</li>
     <li><strong>公告查询：</strong><code>cicd/security/check_advisories.py</code> 实际查询 OSV，26 个固定版本（含 JSch 2.28.8）没有已知公告。</li>
   </ul>
 <pre class="reactor"><code id="reactor">[INFO] Reactor Summary for datacraft-lab 0.1.0-SNAPSHOT:
@@ -809,7 +809,7 @@
   </table>
   </div>
   <p><strong>更正：</strong>v4.0 写的是“GitHub Actions 额度不足，推送不会触发 CI”，并据此把 CI 记为“未运行”。这个前提是错的：09-26 的两次推送都触发了运行，<code>containers</code> 作业两次都失败，而当时没有去看。失败的原因是上一轮自己引入的（附录 C.1）：根 POM 给 Surefire 显式设置了 <code>&lt;skip&gt;</code>，它取代了构建镜像所依赖的 <code>-Dmaven.test.skip=true</code>，而 Docker 构建上下文里没有 <code>tests/</code>。作业日志需要仓库权限才能下载，所以根因是在本机用一份按 <code>.dockerignore</code> 过滤的仓库副本复现的：旧配置同样以 “No tests to run!” 失败，修复后通过。</p>
-  <p><strong>容器阶段现在也在本机运行：</strong>到上一版为止，镜像构建之后的步骤、Compose 冒烟与 Swarm 演练只在 CI 上执行，因为本机没有 Docker。本轮本机装好了 Docker，四个脚本在推送之前先在本机跑通（附录 A.3），做法写进了部署教程第 7 节。上一版还留着一句“错误注解尚未在真实的失败里用过”：本轮有了三次，一次是软件源的 502，两次是故意制造的超时，注解都给出了足以定位的那几行。CI 上的结论仍然从公开接口 <code>/repos/{owner}/{repo}/check-runs/{job id}/annotations</code> 读回，上表各行就是这样得到的。</p>
+  <p><strong>容器阶段现在也在本机运行：</strong>到上一版为止，镜像构建之后的步骤、Compose 冒烟与 Swarm 演练只在 CI 上执行，因为本机没有 Docker。本轮本机装好了 Docker，四个脚本在推送之前先在本机跑通（附录 A.3），做法写进了部署教程第 7 节。上一版还留着一句“错误注解尚未在真实的失败里用过”：本轮有了三次，一次是软件源的 502，两次是故意制造的超时，注解都给出了足以定位的那几行。CI 上的结论仍然从公开接口 <code>/repos/{owner}/{repo}/check-runs/{job id}/annotations</code> 读回，上表各行就是这样得到的。表中最后一行之后还有两次推送：本报告，以及让 Swarm 演练不再留下镜像标签的修复（附录 A.3）。它们各自触发的运行不在表中，因为报告无法引用包含它自己的那一次运行；结果以 <a href="https://github.com/liluyang1999/datacraft-lab/actions">Actions 页面</a>为准。</p>
 </section>
 
 <section id="security" aria-labelledby="h-security">
@@ -1156,12 +1156,12 @@ bash deploy/scripts/compose-up.sh                # 预检机密与端口后启�
     <li><strong>第一次构建的代价：</strong>在这条网络上，构建镜像里的 Maven 依赖下载用了 834 秒，pyspark 的 450 MB 用了 930 秒。原来的 <code>Dockerfile.airflow</code> 在安装 Python 包之前复制 jar，所以每次改代码都会重新下载 pyspark；本轮把安装挪到前面，最终那次重建四个镜像一共约两分钟。</li>
     <li><strong>真实的失败：</strong>第一次运行在 <code>Dockerfile.jvm</code> 的 <code>apt-get install</code> 处失败，软件源对其中一个包返回 502。错误注解的正文以 <code>E: Failed to fetch … 502 Bad Gateway</code> 与出错的 Dockerfile 行结束，不需要日志就能判断原因。<code>apt-get</code> 因此加上了 5 次重试。</li>
     <li><strong>故意制造的失败：</strong>把 Compose 的启动等待设为 5 秒、把 Swarm 演练的等待设为 20 秒。两次都得到 1 条主注解与 8 条分组注解（各服务日志、任务或容器状态），主注解分别以 <code>timeout waiting for dependencies</code> 和 <code>datacraft_airflow-init did not complete within 20s</code> 结束。</li>
-    <li><strong>由此发现的缺陷：</strong>Swarm 演练结束后，栈的命名数据卷还留在引擎里，通过的那两次运行也是如此，而脚本没有任何提示。原因是脚本只等“运行中”的容器消失，停止但尚未被引擎删除的容器仍占着卷，删除失败又被忽略。CI 的 runner 用完即弃，所以从未暴露；在保留的机器上，下一次演练会从上一次的数据库开始。修复后脚本等到栈的全部容器被删除，重试删除，删不掉时失败。</li>
+    <li><strong>由此发现的缺陷：</strong>Swarm 演练结束后，栈的命名数据卷还留在引擎里，通过的那两次运行也是如此，而脚本没有任何提示。原因是脚本只等“运行中”的容器消失，停止但尚未被引擎删除的容器仍占着卷，删除失败又被忽略。CI 的 runner 用完即弃，所以从未暴露；在保留的机器上，下一次演练会从上一次的数据库开始。修复后脚本等到栈的全部容器被删除，重试删除，删不掉时失败。同样留下来的还有演练给两个镜像加上的 registry 标签，每次运行多 4 个（不占额外空间）；脚本现在把自己加的标签删掉。修复后在真实引擎上复验：演练结束时没有数据卷、没有这些标签，引擎已退出 Swarm。</li>
     <li><strong>两节点试验：</strong>结果见 A.1。一个细节：Docker 只在两个节点都有容器接入该网络时才保留节点之间的 IPsec 状态，第一次查看是在探测容器退出之后，所以看到的是 0 条安全关联；让探测容器保持接入后，两端各 4 条，计数随请求增长。</li>
   </ul>
 
   <h3>A.4 修复的变异检查</h3>
-  <p>对本轮的每一处修复，都把它故意改回去或改坏一处，再运行相应的测试，要求测试失败；检查结束后文件恢复原样。40 处改动全部被测试发现。部署部分第一次运行时，有一项测试本身因为断言写错而失败，那一轮的结果因此不算数；改正测试、确认基线通过之后重新运行。</p>
+  <p>对本轮的每一处修复，都把它故意改回去或改坏一处，再运行相应的测试，要求测试失败；检查结束后文件恢复原样。42 处改动全部被测试发现。部署部分第一次运行时，有一项测试本身因为断言写错而失败，那一轮的结果因此不算数；改正测试、确认基线通过之后重新运行。</p>
   <div class="table-wrap">
   <table>
     <thead><tr><th>范围</th><th class="num">处数</th><th>改坏的规则</th></tr></thead>
@@ -1170,7 +1170,7 @@ bash deploy/scripts/compose-up.sh                # 预检机密与端口后启�
       <tr><td><code>csv-profile</code>、执行引擎与配置（JVM）</td><td class="num">9</td><td>CRLF 算两条记录；大小限制放到读取之后；接受 <code>null</code> 参数值；<code>null</code> 参数名得到 JDK 的消息；耗时溢出时抛出；起止颠倒时报告最大耗时；去掉空白后相同的键互相覆盖；<code>null</code> 值参与重复检查；数值错误串联 JDK 异常</td></tr>
       <tr><td>部署脚本与 <code>deployment_env.py</code></td><td class="num">12</td><td>预检只看一个 Compose 文件；从别的目录停止栈；预检失败仍然启动；够长的占位符通过数据库口令检查；Swarm 脚本不经检查就读取 <code>.env</code>；<code>$</code>、分号、空格算作纯文本；<code>~</code> 可以开头、可以跟在冒号后面；检查之前丢掉回车符；检查的消息带出整行</td></tr>
       <tr><td>栈文件与 Dockerfile</td><td class="num">6</td><td>Compose 与 Swarm 的初始化各自绕过镜像入口脚本；Swarm 栈回退到全部核心；<code>apt-get</code> 不重试；Spark 镜像不约束作业路径；jar 在安装 Python 包之前复制</td></tr>
-      <tr><td>Swarm 演练的拆除</td><td class="num">4</td><td>只等运行中的容器；完全不等；卷留下来不报告；从不删除卷</td></tr>
+      <tr><td>Swarm 演练的拆除</td><td class="num">6</td><td>只等运行中的容器；完全不等；卷留下来不报告；从不删除卷；镜像标签留下不删；只删第一个标签</td></tr>
     </tbody>
   </table>
   </div>
