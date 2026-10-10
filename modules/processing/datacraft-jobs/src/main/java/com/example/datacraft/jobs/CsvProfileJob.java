@@ -207,8 +207,9 @@ public final class CsvProfileJob implements DataJob {
 
   /**
    * Upper-bound estimate of the heap that {@code content} and its {@link CsvFiles#parse} records
-   * hold: every line terminator may end a record and every delimiter may end a field, even inside
-   * quotes. Only a field with no characters at all is costed as the shared empty string.
+   * hold: every line terminator (LF, CR, or CRLF as one) may end a record and every delimiter may
+   * end a field, even inside quotes. Only a field with no characters at all is costed as the shared
+   * empty string.
    */
   static long estimateHeapBytes(String content, char delimiter) {
     long records = 1;
@@ -218,6 +219,10 @@ public final class CsvProfileJob implements DataJob {
     boolean latin1 = true;
     for (int index = 0; index < content.length(); index++) {
       char c = content.charAt(index);
+      latin1 &= c <= 0xFF;
+      if (c == '\n' && index > 0 && content.charAt(index - 1) == '\r') {
+        continue; // CRLF ends one record, as it does for CsvFiles.parse
+      }
       if (c == '\n' || c == '\r' || c == delimiter) {
         if (fieldEmpty) {
           emptyFields++;
@@ -231,7 +236,6 @@ public final class CsvProfileJob implements DataJob {
       } else {
         fieldEmpty = false;
       }
-      latin1 &= c <= 0xFF;
     }
     return records * RECORD_HEAP_BYTES
         + fields * FIELD_HEAP_BYTES

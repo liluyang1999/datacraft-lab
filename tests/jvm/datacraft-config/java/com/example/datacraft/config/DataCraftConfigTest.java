@@ -3,6 +3,7 @@ package com.example.datacraft.config;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -12,6 +13,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Map;
 import java.util.Set;
+import java.util.TreeMap;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -71,7 +73,35 @@ class DataCraftConfigTest {
     DataCraftConfig config = DataCraftConfig.fromMap(Map.of("workers", "many"));
 
     assertThrows(DataCraftException.class, () -> config.require("missing"));
-    assertThrows(DataCraftException.class, () -> config.getInt("workers", 1));
+    DataCraftException notANumber =
+        assertThrows(DataCraftException.class, () -> config.getInt("workers", 1));
+    assertEquals("Configuration key must be an integer: workers", notANumber.getMessage());
+    // The JDK's NumberFormatException quotes the value, which the message deliberately leaves out.
+    assertNull(notANumber.getCause());
+  }
+
+  /** Trimming would make them one key, and which value survived would depend on their spelling. */
+  @Test
+  void rejectsKeysThatDifferOnlyInSurroundingWhitespace() throws Exception {
+    Map<String, String> ambiguous = new TreeMap<>(Map.of("mode", "append", " mode", "overwrite"));
+    Map<String, String> oneValue = new TreeMap<>(Map.of("mode", "append"));
+    oneValue.put(" mode", null);
+    Path file = tempDir.resolve("twice.properties");
+    // On disk the first key ends in an escaped space.
+    char backslash = '\\';
+    Files.writeString(file, "mode" + backslash + " =s3cr3t\nmode=append\n");
+
+    IllegalArgumentException fromMap =
+        assertThrows(IllegalArgumentException.class, () -> DataCraftConfig.fromMap(ambiguous));
+    DataCraftException fromFile =
+        assertThrows(DataCraftException.class, () -> DataCraftConfig.load(file));
+
+    assertEquals("Configuration key is defined more than once: mode", fromMap.getMessage());
+    assertTrue(
+        fromFile.getMessage().endsWith(": Configuration key is defined more than once: mode"),
+        fromFile.getMessage());
+    assertFalse(fromFile.getMessage().contains("s3cr3t"), fromFile.getMessage());
+    assertEquals(Map.of("mode", "append"), DataCraftConfig.fromMap(oneValue).asMap());
   }
 
   @Test

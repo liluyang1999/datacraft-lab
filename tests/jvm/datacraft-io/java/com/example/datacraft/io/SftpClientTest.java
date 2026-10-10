@@ -16,6 +16,7 @@ import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.OutputStream;
 import java.net.ConnectException;
 import java.net.InetAddress;
 import java.net.ServerSocket;
@@ -38,6 +39,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Random;
 import java.util.Set;
+import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.stream.Stream;
 import org.apache.sshd.common.config.keys.PublicKeyEntry;
 import org.apache.sshd.common.file.virtualfs.VirtualFileSystemFactory;
@@ -281,6 +283,63 @@ class SftpClientTest {
     assertThrows(DataCraftException.class, () -> client.size("dir/missing.csv"));
   }
 
+  /**
+   * JSch asks for the blocks of a transfer ahead of reading the answers. When the local side fails
+   * in the middle, answers nobody waits for are still on their way, and on the same channel the
+   * next calls would take them for their own: an existing file reported missing, for one.
+   */
+  @Test
+  void aTransferThatFailsHalfwayLeavesTheClientUsable() throws Exception {
+    SftpClient client = connectToSftpServer();
+    byte[] content = new byte[5 * 1024 * 1024];
+    new Random(7).nextBytes(content);
+    Files.write(serverRoot.resolve("big.bin"), content);
+    Files.writeString(serverRoot.resolve("a.txt"), "12345");
+
+    assertThrows(DataCraftException.class, () -> client.download("big.bin", fullAfter(200_000)));
+
+    for (int call = 0; call < 8; call++) {
+      assertTrue(client.exists("a.txt"), "call " + call);
+      assertEquals(5L, client.size("a.txt"), "call " + call);
+      assertFalse(client.exists("missing.txt"), "call " + call);
+    }
+    ByteArrayOutputStream complete = new ByteArrayOutputStream();
+    client.download("big.bin", complete);
+    assertArrayEquals(content, complete.toByteArray());
+
+    assertThrows(
+        DataCraftException.class, () -> client.upload(failingAfter(content, 200_000), "up.bin"));
+
+    assertEquals(5L, client.size("a.txt"));
+    assertFalse(client.exists("missing.txt"));
+    client.upload(new ByteArrayInputStream(content), "up.bin");
+    assertArrayEquals(content, Files.readAllBytes(serverRoot.resolve("up.bin")));
+  }
+
+  /**
+   * The timeout is also the longest the connection may stay silent: JSch then sends a keepalive,
+   * and when a second interval brings no data either it closes the session, which fails the call in
+   * progress instead of leaving it waiting for ever.
+   */
+  @Test
+  void aConnectionThatGoesSilentFailsTheCallInProgress() throws Exception {
+    int port = startServer(true);
+    Files.writeString(serverRoot.resolve("a.txt"), "12345");
+    try (SilencedRelay relay = SilencedRelay.to(port)) {
+      SftpConfig config =
+          new SftpConfig(HOST, relay.port(), USER, PASSWORD, null, true, Duration.ofSeconds(2));
+      SftpClient client = SftpClient.connect(config, knownHosts(relay.port(), HOST_KEY));
+      clients.add(client);
+      assertEquals(5L, client.size("a.txt"));
+
+      relay.silence();
+
+      assertTimeoutPreemptively(
+          Duration.ofSeconds(30),
+          () -> assertThrows(DataCraftException.class, () -> client.size("a.txt")));
+    }
+  }
+
   @Test
   void listsRegularFilesSortedByName() throws Exception {
     SftpClient client = connectToSftpServer();
@@ -291,6 +350,55 @@ class SftpClientTest {
 
     assertEquals(List.of("a.csv", "b.csv"), client.list("inbox"));
     assertEquals(List.of("a.csv", "b.csv"), client.list("/inbox/"));
+  }
+
+  @Test
+  void listRefusesAPathThatIsNotADirectory() throws Exception {
+    SftpClient client = connectToSftpServer();
+    Path inbox = Files.createDirectory(serverRoot.resolve("inbox"));
+    Files.writeString(inbox.resolve("a.csv"), "a");
+
+    DataCraftException notADirectory =
+        assertThrows(DataCraftException.class, () -> client.list("inbox/a.csv"));
+
+    assertEquals("SFTP path is not a directory: inbox/a.csv", notADirectory.getMessage());
+    assertThrows(DataCraftException.class, () -> client.list("inbox/missing"));
+    assertEquals(List.of("a.csv"), client.list("inbox"));
+  }
+
+  @Test
+  void anEmptyDirectoryNameListsTheLoginDirectory() throws Exception {
+    SftpClient client = connectToSftpServer();
+    Files.writeString(serverRoot.resolve("home.csv"), "h");
+    Files.createDirectory(serverRoot.resolve("sub"));
+
+    assertEquals(List.of("home.csv"), client.list(""));
+  }
+
+  /** A name is joined to a directory by the caller, so it must be one path segment. */
+  @Test
+  void acceptsOnlySingleSegmentEntryNamesFromTheServer() {
+    assertTrue(SftpClient.isEntryName("a.csv"));
+    assertTrue(SftpClient.isEntryName("a b\\c*.csv"));
+    assertTrue(SftpClient.isEntryName("..."));
+    assertFalse(SftpClient.isEntryName(""));
+    assertFalse(SftpClient.isEntryName("../a.csv"));
+    assertFalse(SftpClient.isEntryName("sub/a.csv"));
+    assertFalse(SftpClient.isEntryName("/etc/passwd"));
+    assertFalse(SftpClient.isEntryName("a\0.csv"));
+  }
+
+  @Test
+  void makeDirectoriesRefusesAPathOccupiedByAFile() throws Exception {
+    SftpClient client = connectToSftpServer();
+    Files.writeString(serverRoot.resolve("a.txt"), "a");
+
+    DataCraftException occupied =
+        assertThrows(DataCraftException.class, () -> client.makeDirectories("/a.txt"));
+
+    assertEquals("SFTP path exists and is not a directory: /a.txt", occupied.getMessage());
+    assertThrows(DataCraftException.class, () -> client.makeDirectories("a.txt/sub"));
+    assertEquals("a", Files.readString(serverRoot.resolve("a.txt")));
   }
 
   @Test
@@ -500,6 +608,118 @@ class SftpClientTest {
       text.append(current).append(" <- ");
     }
     return text.toString();
+  }
+
+  /** Accepts {@code limit} bytes, then fails every write as a full disk would. */
+  private static OutputStream fullAfter(int limit) {
+    return new OutputStream() {
+      private int written;
+
+      @Override
+      public void write(int value) throws IOException {
+        write(new byte[] {(byte) value}, 0, 1);
+      }
+
+      @Override
+      public void write(byte[] buffer, int offset, int length) throws IOException {
+        written += length;
+        if (written > limit) {
+          throw new IOException("No space left on device");
+        }
+      }
+    };
+  }
+
+  /** Delivers the first {@code limit} bytes of {@code content}, then fails every read. */
+  private static InputStream failingAfter(byte[] content, int limit) {
+    return new InputStream() {
+      private int position;
+
+      @Override
+      public int read() throws IOException {
+        byte[] one = new byte[1];
+        return read(one, 0, 1) == 1 ? one[0] & 0xFF : -1;
+      }
+
+      @Override
+      public int read(byte[] buffer, int offset, int length) throws IOException {
+        if (position >= limit) {
+          throw new IOException("Input/output error");
+        }
+        int count = Math.min(length, limit - position);
+        System.arraycopy(content, position, buffer, offset, count);
+        position += count;
+        return count;
+      }
+    };
+  }
+
+  /**
+   * Forwards one TCP connection to the server until it is silenced; from then on it swallows what
+   * either side sends and keeps both connections open, as a network that drops packets would.
+   */
+  private static final class SilencedRelay implements AutoCloseable {
+    private final ServerSocket listener;
+    private final int serverPort;
+    private final List<Socket> sockets = new CopyOnWriteArrayList<>();
+    private volatile boolean silenced;
+
+    private SilencedRelay(ServerSocket listener, int serverPort) {
+      this.listener = listener;
+      this.serverPort = serverPort;
+    }
+
+    static SilencedRelay to(int serverPort) throws IOException {
+      SilencedRelay relay =
+          new SilencedRelay(new ServerSocket(0, 1, InetAddress.getByName(HOST)), serverPort);
+      Thread.ofPlatform().daemon().name("relay-accept").start(relay::accept);
+      return relay;
+    }
+
+    int port() {
+      return listener.getLocalPort();
+    }
+
+    void silence() {
+      silenced = true;
+    }
+
+    private void accept() {
+      try {
+        Socket client = listener.accept();
+        sockets.add(client);
+        Socket upstream = new Socket(HOST, serverPort);
+        sockets.add(upstream);
+        Thread.ofPlatform().daemon().name("relay-up").start(() -> forward(client, upstream));
+        Thread.ofPlatform().daemon().name("relay-down").start(() -> forward(upstream, client));
+      } catch (IOException closed) {
+        // The test is over before a client connected, or the server is gone.
+      }
+    }
+
+    private void forward(Socket from, Socket to) {
+      byte[] buffer = new byte[8192];
+      try {
+        InputStream source = from.getInputStream();
+        OutputStream target = to.getOutputStream();
+        for (int read = source.read(buffer); read != -1; read = source.read(buffer)) {
+          if (!silenced) {
+            target.write(buffer, 0, read);
+            target.flush();
+          }
+        }
+      } catch (IOException closed) {
+        // Either end closed its socket: nothing is left to forward.
+      }
+    }
+
+    @Override
+    public void close() throws IOException {
+      listener.close();
+      for (Socket socket : sockets) {
+        socket.close();
+      }
+    }
   }
 
   private static final class TrackingInputStream extends ByteArrayInputStream {

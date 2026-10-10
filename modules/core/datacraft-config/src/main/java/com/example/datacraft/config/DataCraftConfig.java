@@ -20,8 +20,9 @@ import java.util.TreeMap;
  * write Windows paths with {@code /} or doubled backslashes ({@code D:/out/x.parquet} or {@code
  * D:\\out\\x.parquet}).
  *
- * <p>Keys are trimmed and must not be blank. Values are kept verbatim, exactly as {@code
- * Properties} unescapes them, so an escaped tab or space survives; the typed readers {@link
+ * <p>Keys are trimmed and must not be blank; two keys that trimming makes equal are rejected,
+ * because which value survived would depend on their spelling. Values are kept verbatim, exactly as
+ * {@code Properties} unescapes them, so an escaped tab or space survives; the typed readers {@link
  * #getInt} and {@link #getBoolean} ignore surrounding whitespace.
  */
 public final class DataCraftConfig {
@@ -42,7 +43,8 @@ public final class DataCraftConfig {
    * Builds a configuration from programmatic entries. Keys are trimmed, values are stored verbatim,
    * and entries with a null value are skipped.
    *
-   * @throws IllegalArgumentException if a key is null or blank
+   * @throws IllegalArgumentException if a key is null or blank, or if two keys with a value are
+   *     equal once trimmed
    */
   public static DataCraftConfig fromMap(Map<String, String> values) {
     if (values == null) {
@@ -55,8 +57,9 @@ public final class DataCraftConfig {
           if (key == null || key.isBlank()) {
             throw new IllegalArgumentException("Configuration key must not be blank.");
           }
-          if (value != null) {
-            normalized.put(key.trim(), value);
+          if (value != null && normalized.put(key.trim(), value) != null) {
+            throw new IllegalArgumentException(
+                "Configuration key is defined more than once: " + key.trim());
           }
         });
     return new DataCraftConfig(normalized);
@@ -65,8 +68,9 @@ public final class DataCraftConfig {
   /**
    * Loads a UTF-8 {@code .properties} file, as described in the class documentation.
    *
-   * @throws DataCraftException if the file cannot be read, or if it holds a malformed escape or a
-   *     blank key; the message names the file but never a property value
+   * @throws DataCraftException if the file cannot be read, or if it holds a malformed escape, a
+   *     blank key or two keys that are equal once trimmed; the message names the file but never a
+   *     property value
    */
   public static DataCraftConfig load(Path file) {
     Properties properties = new Properties();
@@ -114,7 +118,8 @@ public final class DataCraftConfig {
     try {
       return Integer.parseInt(value);
     } catch (NumberFormatException exception) {
-      throw new DataCraftException("Configuration key must be an integer: " + key, exception);
+      // Not chained: the JDK's message quotes the value, which this class never reports.
+      throw new DataCraftException("Configuration key must be an integer: " + key);
     }
   }
 

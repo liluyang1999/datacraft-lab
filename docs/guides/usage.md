@@ -76,7 +76,9 @@ metrics and messages are specified in
 is a failed job, not a
 usage error: it exits `1` and still prints its FAILED result. Usage errors are reported on stderr,
 for example `Unknown command or job: <name>`. Every option except `--param` may be given once; a
-repeated one is a usage error, which the parser reports as an unknown option.
+repeated one is a usage error, which the parser reports as an unknown option. There is no `--help`
+or `--version` option: a parse error, an unknown option such as `--help` included, prints the
+error lines and then the list of options on stderr and exits `2`.
 
 ### Parameters and `--config`
 
@@ -86,8 +88,10 @@ repeated one is a usage error, which the parser reports as an unknown option.
   one of their parameters only by case, for example "Unknown parameter expectedrows; did you mean
   expectedRows?". Other unknown keys are ignored, so one `--config` file can serve several jobs.
 - `--config <file>` merges a `java.util.Properties` file into the job parameters. The file is read
-  as UTF-8 and one leading byte order mark is ignored. Keys are trimmed and must not be blank;
-  values are kept verbatim, as `Properties` unescapes them.
+  as UTF-8 and one leading byte order mark is ignored. Keys are trimmed and must not be blank, and
+  two keys that are equal once trimmed (one written with an escaped space, say) are rejected;
+  values are kept verbatim, as `Properties` unescapes them. A key that is simply written twice is
+  not an error: as in every Properties file, its last value wins.
 - Backslash is an escape character in a Properties file and a trailing backslash continues the
   line, so write Windows paths as `C:/data/in.csv` or `C:\\data\\in.csv`.
 - A `--config` file that cannot be read or parsed stops the command before the job runs: one stderr
@@ -249,8 +253,9 @@ The complete rules are in
 | `POST /jobs/{name}/runs?lifecycle=dev&key=value` | The job result JSON: 200 when the job SUCCEEDED, 500 when it FAILED |
 
 - Query parameters other than `lifecycle` become job parameters, and `lifecycle` defaults to `dev`.
-  Keys and values must be percent-encoded UTF-8; `+` decodes to a space. The request body is not
-  read.
+  Keys and values must be percent-encoded UTF-8; `+` decodes to a space. A key given more than once
+  keeps its last value, a pair with a blank key is ignored, and a key without `=` gets the empty
+  string. A job parameter named `lifecycle` cannot be sent this way. The request body is not read.
 - A run answers with the same result JSON as the CLI's `--json`. A parameter rejection is a FAILED
   run, so it answers 500 with the result body.
 - Errors are `{"error":"<code>"}`: 401 `unauthorized` for a `/jobs` request without the configured

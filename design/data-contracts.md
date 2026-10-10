@@ -78,7 +78,17 @@ over `--config`) > `spark-submit --conf spark.sql.shuffle.partitions` > 8. `spar
 `spark.appName` and `spark.warehouseDir` are trimmed, and a blank `spark.master` parameter falls
 back to the launcher or `local[*]`. Without an explicit master a job therefore runs on whatever
 master `spark-submit` names. The application name is never taken from `spark-submit --name`: it
-defaults to `datacraft-lab-<job name>`; set it with `--param spark.appName`.
+defaults to `datacraft-lab-<job name>`; set it with `--param spark.appName`. `spark.enableHive`
+defaults to `false`. `spark.warehouseDir` has no default; when given, it becomes
+`spark.sql.warehouse.dir`.
+
+A Spark job that succeeds reports these metrics, besides `durationMillis`, and this message:
+
+| Job | Metrics | Message |
+| --- | --- | --- |
+| `csv-to-parquet` | `rows`, `input`, `output`, `skipped` (`true` only when `mode=ignore` found the destination) | "Wrote <rows> rows to <output>", or "Skipped: <output> already exists (mode=ignore)" |
+| `row-count` | `rows`, `input`, `inputFormat` | "<rows> rows in <input>" |
+| `spark-version` | `sparkVersion` | "Spark <version>" |
 
 ## CSV and numeric precision
 
@@ -285,10 +295,17 @@ bytes) and `durationMillis`. The success message is "<rows> rows, <columns> colu
   rows and the header's field count as columns.
 - A file above `maxBytes` fails before it is read: "Input <input> is <size> bytes, above
   maxBytes=<n>; csv-profile loads the whole file into memory, so use the Spark row-count job
-  (inputFormat=csv) for larger files". The job also fails when a conservative heap estimate exceeds
+  (inputFormat=csv) for larger files". The size is checked again after the read, so a file that
+  grew in between is still refused, but only once it has been loaded: the limit does not bound
+  the memory a file takes that is replaced by a larger one during the run. The job also fails when
+  a conservative heap estimate exceeds
   a quarter of the JVM's maximum heap: before reading when three times the file size does, and
   before parsing when the estimate for the parsed records does. Parsed records take about six times
-  the file size for typical data and far more for very short fields or blank lines. The message is
+  the file size for typical data and far more for very short fields or blank lines. The estimate
+  counts a record for every LF, CR or CRLF and a field for every delimiter, inside quotes too, so
+  the same data is costed alike whichever line ending it uses. It bounds what the loaded text and
+  its parsed records hold, not every transient copy made while decoding and parsing; the quarter
+  of the heap leaves room for those. The message is
   "Input <input> needs up to <n> MiB of heap to profile, above the csv-profile budget of <m> MiB (a
   quarter of the maximum heap); use the Spark row-count job (inputFormat=csv) or give the JVM more
   heap".
@@ -312,7 +329,10 @@ quoting. It loads the entire file in memory; use Spark for larger inputs. SHA-25
 - The reader accepts CRLF, LF or CR record terminators and skips a leading BOM. It preserves quoted
   empty records, delimiters, doubled quotes and embedded line breaks, and rejects malformed quoting
   ("Unexpected quote at CSV offset <n>", "Unexpected character after closing CSV quote at offset
-  <n>", "Unterminated quoted CSV field.") rather than silently changing data.
+  <n>", "Unterminated quoted CSV field.") rather than silently changing data. A CSV offset counts
+  UTF-16 code units from the start of the decoded text, a leading BOM included, starting at 0. It
+  is not a byte offset: the "not valid UTF-8 at byte offset <n>" message of `csv-profile` counts
+  bytes of the file.
 - The writer ends every record with LF on every OS, not the RFC 4180 CRLF. It quotes a field that
   contains the delimiter, a quote, CR or LF or that starts with U+FEFF; writes a record made of one
   empty or `null` field as `""`, so it is not a blank line that Spark or Python readers drop; and
@@ -355,16 +375,35 @@ SFTP:
   content, and a symbolic link at the target is replaced rather than written through. A target that
   is an existing directory is rejected.
 - `upload(Path, remote)` streams the local file to a remote file path; uploading onto an existing
-  remote directory fails.
+  remote directory fails. Unlike a download, an upload writes in place: one that fails leaves a
+  truncated or partial file under the remote name, also where a complete file was before. Upload
+  under another name and `rename` it when readers must never see a partial file.
 - `list(dir)` returns the sorted names of regular files. Links are followed: links to files are
   included, links to directories and dangling links are not. FIFOs, sockets and devices are
-  excluded; entries whose type the server does not report are kept.
+  excluded; entries whose type the server does not report are kept. An empty `dir` is the
+  directory the session starts in. A path that is not a directory fails with "SFTP path is not a
+  directory: <dir>" instead of answering with that one file. Each name is one path segment as the
+  server spells it; a listing with an empty name or one containing `/` or NUL fails. A name may
+  contain a backslash, which is an ordinary character on a POSIX server and a separator on
+  Windows: check names before resolving them against a local directory there.
+- `makeDirectories(dir)` creates the missing directories of the path and accepts the ones that
+  exist; a component that exists as something else fails with "SFTP path exists and is not a
+  directory: <path>".
+- A client serves one call at a time and is not safe for use by several threads. After a transfer
+  that failed, the next call opens a new channel on the same session: JSch requests the blocks of
+  a transfer ahead of reading the answers, and on the old channel the answers still under way
+  would be taken for the answers to later calls.
 - `SftpClient.connect(config)` uses `~/.ssh/known_hosts`; the overload accepting a `Path` uses an
   explicit trusted-host file. Strict host-key checking stays on unless the `SftpConfig` disables it
-  (`strictHostKeyChecking=false` for `fromProperties`). Connect and read timeouts are bounded to
-  1..2147483647 milliseconds. Failed channel setup closes its session; config string
-  representations redact passwords. `SftpConfig.fromProperties` trims `host` and `username` and
-  keeps `password` verbatim. Configure host trust before use.
+  (`strictHostKeyChecking=false` for `fromProperties`). The timeout is 1..2147483647 milliseconds.
+  It bounds the TCP connect, each step of the SSH handshake and the opening of the channel.
+  Afterwards it is the longest the connection may stay silent: JSch then sends a keepalive, and
+  when a second interval brings no data either it closes the session, which fails the call in
+  progress. A server that keeps answering keepalives without ever answering the request is not
+  detected, so bound such a call from outside, as the Airflow task timeout does. Failed channel
+  setup closes its session; config string representations redact passwords.
+  `SftpConfig.fromProperties` trims `host` and `username` and keeps `password` verbatim. Configure
+  host trust before use.
 - The Airflow SFTP connection uses its own provider-managed credentials and trust settings. The
   `datacraft_sftp_ingest` download fails without retry unless the `datacraft_sftp` connection
   verifies the server key: a `host_key` extra, or `"no_host_key_check": false` with a known_hosts
@@ -403,7 +442,9 @@ with "Invalid DATACRAFT_API_TOKEN: API token must be 32 to 512 characters from A
   header of the form `Bearer <token>`. The scheme is matched without regard to case and may be
   followed by several spaces. A missing header, another scheme, a wrong token and a repeated header
   all get the same 401, before anything else about the request is examined, so a caller without
-  the token learns nothing about jobs, methods or parameters.
+  the token learns nothing about jobs, methods or parameters. The server routes by string prefix,
+  so a path that merely begins with `/jobs`, such as `/jobsx`, is treated the same way: 401
+  without the token, 404 `not_found` with it.
 - `/health` and unknown routes outside `/jobs` need no token: health checks carry none.
 - The server compares SHA-256 digests of the presented and the configured token, so the comparison
   takes the same time whatever was presented, and it keeps the digest rather than the token.
@@ -425,9 +466,14 @@ Query keys and values must be percent-encoded UTF-8; `+` in the query decodes to
 example, against the port that Compose publishes on loopback:
 
 ```bash
-curl -X POST -G --data-urlencode 'input=/opt/datacraft/data/résumé.csv' \
+curl -X POST -G -H "Authorization: Bearer $DATACRAFT_API_TOKEN" \
+  --data-urlencode 'input=/opt/datacraft/data/résumé.csv' \
   http://127.0.0.1:8088/jobs/csv-profile/runs
 ```
+
+A key given more than once keeps its last value, a pair with a blank key is ignored, and a key
+without `=` gets the empty string. `lifecycle` is the request's own parameter, so a job parameter
+of that name cannot be sent over HTTP.
 
 Path segments are decoded once and keep `+`. JSON escaping is shared with the CLI. The JDK server
 itself refuses request targets that `java.net.URI` cannot parse, such as a malformed percent-escape

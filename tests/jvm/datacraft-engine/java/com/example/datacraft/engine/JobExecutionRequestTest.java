@@ -39,6 +39,27 @@ class JobExecutionRequestTest {
     assertTrue(JobExecutionRequest.of("job", Lifecycle.DEV, null).parameters().isEmpty());
   }
 
+  /** A job reads a parameter as a string; a null would surface as a JVM message in its result. */
+  @Test
+  void rejectsNullParameterNamesAndValues() {
+    Map<String, String> nullValue = new HashMap<>();
+    nullValue.put("delimiter", null);
+    Map<String, String> nullName = new HashMap<>();
+    nullName.put(null, "value");
+
+    IllegalArgumentException value =
+        assertThrows(
+            IllegalArgumentException.class,
+            () -> JobExecutionRequest.of("job", Lifecycle.DEV, nullValue));
+    IllegalArgumentException name =
+        assertThrows(
+            IllegalArgumentException.class,
+            () -> JobExecutionRequest.of("job", Lifecycle.DEV, nullName));
+
+    assertEquals("Parameter delimiter must not be null.", value.getMessage());
+    assertEquals("Parameter names must not be null.", name.getMessage());
+  }
+
   @Test
   void copiesParametersDefensivelyAndExposesThemReadOnly() {
     Map<String, String> source = new HashMap<>(Map.of("message", "hello"));

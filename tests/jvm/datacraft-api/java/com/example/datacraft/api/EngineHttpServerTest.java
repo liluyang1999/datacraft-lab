@@ -153,6 +153,33 @@ class EngineHttpServerTest {
   }
 
   @Test
+  void aRepeatedQueryKeyKeepsItsLastValueAndLifecycleIsNotAJobParameter() throws Exception {
+    JobRegistry registry = new JobRegistry();
+    registry.register(
+        new FunctionJob(
+            "parameters",
+            request ->
+                JobExecutionResult.success(
+                    request.jobName(),
+                    request.lifecycle().name() + " " + request.parameters(),
+                    request.startedAt(),
+                    request.startedAt())));
+    try (HttpClient client = HttpClient.newHttpClient();
+        EngineHttpServer server =
+            EngineHttpServer.start(EngineHttpServerConfig.localEphemeral(), registry)) {
+      // A key without "=" gets the empty string, and a pair with a blank key is ignored.
+      HttpResponse<String> response =
+          send(
+              client,
+              post(server, "/jobs/parameters/runs?a=first&flag&=orphan&a=second&lifecycle=prod"));
+
+      assertEquals(200, response.statusCode());
+      assertTrue(
+          response.body().contains("\"message\":\"PROD {a=second, flag=}\""), response.body());
+    }
+  }
+
+  @Test
   void checksMethodThenOriginThenRequestSyntaxThenJobName() throws Exception {
     JobRegistry registry = new JobRegistry();
     registry.register(new EchoJob());
@@ -620,7 +647,9 @@ class EngineHttpServerTest {
               post(server, "/jobs/count/runs"),
               request(server, "/jobs/count/runs").GET(),
               post(server, "/jobs/missing/runs?lifecycle=bogus").header("Origin", "null"),
-              request(server, "/jobs/no/such/route").DELETE());
+              request(server, "/jobs/no/such/route").DELETE(),
+              // The JDK server routes by string prefix, so this reaches the same handler.
+              request(server, "/jobsx").GET());
       for (HttpRequest.Builder request : anonymous) {
         HttpResponse<String> response = send(client, request);
         String sent = response.request().method() + " " + response.request().uri().getPath();
@@ -707,6 +736,13 @@ class EngineHttpServerTest {
       assertEquals(405, wrongMethod.statusCode());
       assertEquals(403, crossOrigin.statusCode());
       assertEquals(400, malformed.statusCode());
+      for (String path : new String[] {"/jobs/", "/jobs/no/such/route", "/jobsx"}) {
+        HttpResponse<String> unknown =
+            send(client, request(server, path).header("Authorization", bearer).GET());
+
+        assertEquals(404, unknown.statusCode(), path);
+        assertEquals("{\"error\":\"not_found\"}", unknown.body(), path);
+      }
     }
   }
 

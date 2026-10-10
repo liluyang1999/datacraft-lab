@@ -14,15 +14,19 @@ import com.example.datacraft.engine.JobRegistry;
 import com.example.datacraft.engine.JobStatus;
 import java.io.IOException;
 import java.io.RandomAccessFile;
+import java.nio.ByteBuffer;
+import java.nio.channels.SeekableByteChannel;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.StandardOpenOption;
 import java.security.MessageDigest;
 import java.util.HashMap;
 import java.util.HexFormat;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
@@ -262,6 +266,26 @@ class CsvProfileJobTest {
 
     assertEquals(64L * 1024 * 1024, CsvProfileJob.DEFAULT_MAX_BYTES);
     assertTrue(error.getMessage().contains("above maxBytes=67108864"), error.getMessage());
+
+    // 2^31 bytes do not fit one array: reading them at all ends in an OutOfMemoryError, before
+    // anything is allocated. Naming the limit instead shows the size is checked before the read.
+    Path unreadable = tempDir.resolve("too-large-for-an-array.csv");
+    try (SeekableByteChannel sparse =
+        Files.newByteChannel(
+            unreadable,
+            Set.of(
+                StandardOpenOption.CREATE_NEW,
+                StandardOpenOption.WRITE,
+                StandardOpenOption.SPARSE))) {
+      sparse.position(Integer.MAX_VALUE);
+      sparse.write(ByteBuffer.wrap(new byte[] {'\n'}));
+    }
+
+    IllegalArgumentException unread =
+        assertThrows(
+            IllegalArgumentException.class, () -> run(Map.of("input", unreadable.toString())));
+
+    assertTrue(unread.getMessage().contains("is 2147483648 bytes"), unread.getMessage());
   }
 
   @ParameterizedTest
@@ -414,6 +438,11 @@ class CsvProfileJobTest {
     assertEquals(2 * 96 + 3 * 56 + 6 * 4L, CsvProfileJob.estimateHeapBytes("\"é,中\"\n", ','));
     // Empty unquoted fields share one String, so they cost only a list slot.
     assertEquals(2 * 96 + 56 + 3 * 8 + 3 * 2L, CsvProfileJob.estimateHeapBytes(",,\n", ','));
+    // CRLF ends one record, as it does for CsvFiles.parse: the same counts for two more chars.
+    assertEquals(584L + 2 * 2, CsvProfileJob.estimateHeapBytes("a,b\r\nc,d\r\n", ','));
+    assertEquals(584L, CsvProfileJob.estimateHeapBytes("a,b\rc,d\r", ','));
+    // LF then CR are two terminators, with an empty record between them.
+    assertEquals(3 * 96 + 2 * 56 + 8 + 3 * 2L, CsvProfileJob.estimateHeapBytes("a\n\r", ','));
   }
 
   @Test

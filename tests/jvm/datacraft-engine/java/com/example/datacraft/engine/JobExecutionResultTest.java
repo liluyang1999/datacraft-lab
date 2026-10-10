@@ -52,6 +52,17 @@ class JobExecutionResultTest {
     assertEquals("0", result.metrics().get("durationMillis"));
   }
 
+  /** The engine builds its failure result in a catch block, so this must not throw. */
+  @Test
+  void aDurationTooLongForMillisecondsIsCappedInsteadOfThrown() {
+    JobExecutionResult endless = JobExecutionResult.failure("noop", "boom", Instant.MIN, FINISHED);
+    JobExecutionResult reversed =
+        JobExecutionResult.succeeded("noop", "ok", Map.of(), Instant.MAX, Instant.MIN);
+
+    assertEquals(Long.toString(Long.MAX_VALUE), endless.metrics().get("durationMillis"));
+    assertEquals("0", reversed.metrics().get("durationMillis"));
+  }
+
   @Test
   void blankJobNameIsRejected() {
     assertThrows(

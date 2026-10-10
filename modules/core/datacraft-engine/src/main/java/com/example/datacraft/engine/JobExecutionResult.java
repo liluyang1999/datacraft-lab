@@ -89,7 +89,12 @@ public record JobExecutionResult(
     return merged;
   }
 
+  /** Never negative and never an exception: the engine builds failure results in a catch block. */
   private static long durationMillis(Instant startedAt, Instant finishedAt) {
-    return Math.max(0L, Duration.between(startedAt, finishedAt).toMillis());
+    try {
+      return Math.max(0L, Duration.between(startedAt, finishedAt).toMillis());
+    } catch (ArithmeticException tooLongForMilliseconds) {
+      return startedAt.isBefore(finishedAt) ? Long.MAX_VALUE : 0L;
+    }
   }
 }

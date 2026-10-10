@@ -339,12 +339,12 @@ pom's `<modules>`.
 | Module | Linux floor (CI) | Windows floor |
 | --- | --- | --- |
 | `datacraft-common` | 7 | 7 |
-| `datacraft-config` | 13 | 13 |
-| `datacraft-io` | 57 | 59 |
-| `datacraft-engine` | 32 | 32 |
+| `datacraft-config` | 14 | 14 |
+| `datacraft-io` | 63 | 65 |
+| `datacraft-engine` | 34 | 34 |
 | `datacraft-jobs` | 70 | 68 |
-| `datacraft-spark` | 56 | 47 |
-| `datacraft-api` | 27 | 27 |
+| `datacraft-spark` | 59 | 49 |
+| `datacraft-api` | 29 | 29 |
 | `datacraft-cli` | 31 | 31 |
 
 ## Zero-warning policy

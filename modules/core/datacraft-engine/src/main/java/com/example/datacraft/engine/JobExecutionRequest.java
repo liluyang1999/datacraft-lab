@@ -19,8 +19,21 @@ public record JobExecutionRequest(
     if (startedAt == null) {
       throw new IllegalArgumentException("Started time must not be null.");
     }
-    parameters =
-        Collections.unmodifiableMap(new TreeMap<>(parameters == null ? Map.of() : parameters));
+    // Jobs read every parameter as a string; a null would reach their result as a JVM message.
+    TreeMap<String, String> copy = new TreeMap<>();
+    if (parameters != null) {
+      parameters.forEach(
+          (name, value) -> {
+            if (name == null) {
+              throw new IllegalArgumentException("Parameter names must not be null.");
+            }
+            if (value == null) {
+              throw new IllegalArgumentException("Parameter " + name + " must not be null.");
+            }
+            copy.put(name, value);
+          });
+    }
+    parameters = Collections.unmodifiableMap(copy);
   }
 
   public static JobExecutionRequest of(

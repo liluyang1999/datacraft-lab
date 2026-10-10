@@ -21,15 +21,20 @@ import java.util.Vector;
 
 /**
  * SFTP-backed {@link RemoteFileTransfer} built on the mwiede JSch fork. Remote paths are escaped
- * before they reach JSch, so they are always literal.
+ * before they reach JSch, so they are always literal. One call at a time: a client is not safe for
+ * use by several threads.
  */
 public final class SftpClient implements RemoteFileTransfer {
 
   private static final int S_IFMT = 0170000;
   private static final int S_IFREG = 0100000;
+  private static final char NUL = 0;
 
   private final Session session;
-  private final ChannelSftp channel;
+  private ChannelSftp channel;
+
+  /** Set when a transfer failed: its channel may still deliver answers nobody waits for. */
+  private boolean channelSuspect;
 
   private SftpClient(Session session, ChannelSftp channel) {
     this.session = session;
@@ -88,9 +93,11 @@ public final class SftpClient implements RemoteFileTransfer {
 
   @Override
   public void download(String remotePath, OutputStream target) {
+    ChannelSftp sftp = channel();
     try {
-      channel.get(literal(remotePath), target);
+      sftp.get(literal(remotePath), target);
     } catch (SftpException exception) {
+      channelSuspect = true;
       throw new DataCraftException("Failed to download SFTP file: " + remotePath, exception);
     }
   }
@@ -99,7 +106,7 @@ public final class SftpClient implements RemoteFileTransfer {
   public void upload(Path localPath, String remotePath) {
     // Streaming also bypasses the wildcard expansion JSch applies to a local path argument.
     try (InputStream source = Files.newInputStream(localPath)) {
-      channel.put(source, literal(remotePath));
+      put(source, remotePath);
     } catch (SftpException | IOException exception) {
       throw new DataCraftException("Failed to upload SFTP file: " + localPath, exception);
     }
@@ -108,16 +115,26 @@ public final class SftpClient implements RemoteFileTransfer {
   @Override
   public void upload(InputStream source, String remotePath) {
     try {
-      channel.put(source, literal(remotePath));
+      put(source, remotePath);
     } catch (SftpException exception) {
       throw new DataCraftException("Failed to upload SFTP file to: " + remotePath, exception);
+    }
+  }
+
+  private void put(InputStream source, String remotePath) throws SftpException {
+    ChannelSftp sftp = channel();
+    try {
+      sftp.put(source, literal(remotePath));
+    } catch (SftpException exception) {
+      channelSuspect = true;
+      throw exception;
     }
   }
 
   @Override
   public boolean exists(String remotePath) {
     try {
-      channel.stat(literal(remotePath));
+      channel().stat(literal(remotePath));
       return true;
     } catch (SftpException exception) {
       if (exception.id == ChannelSftp.SSH_FX_NO_SUCH_FILE) {
@@ -130,7 +147,7 @@ public final class SftpClient implements RemoteFileTransfer {
   @Override
   public long size(String remotePath) {
     try {
-      return channel.stat(literal(remotePath)).getSize();
+      return channel().stat(literal(remotePath)).getSize();
     } catch (SftpException exception) {
       throw new DataCraftException("Failed to read size of SFTP path: " + remotePath, exception);
     }
@@ -138,9 +155,16 @@ public final class SftpClient implements RemoteFileTransfer {
 
   @Override
   public List<String> list(String remoteDirectory) {
+    // An empty name is the directory the session starts in, which JSch cannot address as "".
+    String directory = remoteDirectory.isEmpty() ? "." : remoteDirectory;
+    ChannelSftp sftp = channel();
     Vector<ChannelSftp.LsEntry> entries;
     try {
-      entries = channel.ls(literal(remoteDirectory));
+      // Asked to list a file, JSch answers with that one file as if it were a directory entry.
+      if (isKnownNotToBeADirectory(sftp.stat(literal(directory)))) {
+        throw new DataCraftException("SFTP path is not a directory: " + remoteDirectory);
+      }
+      entries = sftp.ls(literal(directory));
     } catch (SftpException exception) {
       throw new DataCraftException("Failed to list SFTP directory: " + remoteDirectory, exception);
     }
@@ -150,15 +174,17 @@ public final class SftpClient implements RemoteFileTransfer {
       if (name.equals(".") || name.equals("..")) {
         continue;
       }
+      if (!isEntryName(name)) {
+        throw new DataCraftException(
+            "SFTP server listed an entry whose name is not one path segment in: "
+                + remoteDirectory);
+      }
       SftpATTRS attributes = entry.getAttrs();
       if (attributes.isLink()) {
         // Directory listings report the link itself; follow it to classify its target.
-        String link =
-            remoteDirectory.isEmpty() || remoteDirectory.endsWith("/")
-                ? remoteDirectory + name
-                : remoteDirectory + "/" + name;
+        String link = directory.endsWith("/") ? directory + name : directory + "/" + name;
         try {
-          attributes = channel.stat(literal(link));
+          attributes = sftp.stat(literal(link));
         } catch (SftpException exception) {
           if (exception.id == ChannelSftp.SSH_FX_NO_SUCH_FILE) {
             continue; // dangling link
@@ -186,10 +212,10 @@ public final class SftpClient implements RemoteFileTransfer {
       }
       current.append(segment);
       String path = current.toString();
-      if (!exists(path)) {
+      if (!directoryExists(path)) {
         try {
           // JSch sends mkdir paths verbatim (no wildcard or escape handling), so no literal().
-          channel.mkdir(path);
+          channel().mkdir(path);
         } catch (SftpException exception) {
           throw new DataCraftException("Failed to create SFTP directory: " + path, exception);
         }
@@ -197,10 +223,27 @@ public final class SftpClient implements RemoteFileTransfer {
     }
   }
 
+  /** False when nothing is at {@code path}; an entry that is not a directory is an error. */
+  private boolean directoryExists(String path) {
+    SftpATTRS attributes;
+    try {
+      attributes = channel().stat(literal(path));
+    } catch (SftpException exception) {
+      if (exception.id == ChannelSftp.SSH_FX_NO_SUCH_FILE) {
+        return false;
+      }
+      throw new DataCraftException("Failed to stat SFTP path: " + path, exception);
+    }
+    if (isKnownNotToBeADirectory(attributes)) {
+      throw new DataCraftException("SFTP path exists and is not a directory: " + path);
+    }
+    return true;
+  }
+
   @Override
   public void delete(String remotePath) {
     try {
-      channel.rm(literal(remotePath));
+      channel().rm(literal(remotePath));
     } catch (SftpException exception) {
       throw new DataCraftException("Failed to delete SFTP file: " + remotePath, exception);
     }
@@ -209,7 +252,7 @@ public final class SftpClient implements RemoteFileTransfer {
   @Override
   public void rename(String from, String to) {
     try {
-      channel.rename(literal(from), literal(to));
+      channel().rename(literal(from), literal(to));
     } catch (SftpException exception) {
       throw new DataCraftException(
           "Failed to rename SFTP path from " + from + " to " + to, exception);
@@ -224,6 +267,32 @@ public final class SftpClient implements RemoteFileTransfer {
     if (session.isConnected()) {
       session.disconnect();
     }
+  }
+
+  /**
+   * The channel for the next request. JSch sends the requests of a transfer ahead of reading their
+   * answers, so the channel of a transfer that failed may still deliver answers to requests nobody
+   * waits for, and the next calls would take them for their own. A new channel on the same session
+   * starts clean; the client never changes directory, so it addresses the same paths.
+   */
+  private ChannelSftp channel() {
+    if (channelSuspect) {
+      channel.disconnect();
+      ChannelSftp fresh = null;
+      try {
+        fresh = (ChannelSftp) session.openChannel("sftp");
+        fresh.connect(session.getTimeout());
+      } catch (JSchException exception) {
+        if (fresh != null) {
+          fresh.disconnect();
+        }
+        throw new DataCraftException(
+            "Failed to reopen the SFTP channel to host: " + session.getHost(), exception);
+      }
+      channel = fresh;
+      channelSuspect = false;
+    }
+    return channel;
   }
 
   /**
@@ -251,6 +320,21 @@ public final class SftpClient implements RemoteFileTransfer {
       return true;
     }
     return (permissions & S_IFMT) == S_IFREG;
+  }
+
+  /** Whether the server reported the entry's type and it is something other than a directory. */
+  private static boolean isKnownNotToBeADirectory(SftpATTRS attributes) {
+    return (attributes.getFlags() & SftpATTRS.SSH_FILEXFER_ATTR_PERMISSIONS) != 0
+        && !attributes.isDir();
+  }
+
+  /**
+   * Whether a listed name is one path segment. A caller joins it to a directory, remote and often
+   * local too, so a name with a separator in it would address something else. A backslash is an
+   * ordinary character in a POSIX file name and is kept, although it separates paths on Windows.
+   */
+  static boolean isEntryName(String name) {
+    return !name.isEmpty() && name.indexOf('/') < 0 && name.indexOf(NUL) < 0;
   }
 
   private static Properties sessionConfig(SftpConfig config) {
