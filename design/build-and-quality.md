@@ -85,7 +85,7 @@ Consequences elsewhere in the build:
 | Scala | `scala.version` (`scala.binary.version` 2.13) | 2.13.18 |
 | Spark (`provided` by default) | `spark.version`, `spark.scope` | 4.2.0 |
 | Jackson BOM | `jackson.version` | 2.22.3 |
-| JSch (mwiede fork) | `jsch.version` | 2.28.7 |
+| JSch (mwiede fork) | `jsch.version` | 2.28.8 |
 | scopt | `scopt.version` | 4.2.0 |
 | JUnit Jupiter (test) | `junit.jupiter.version` | 6.1.3 |
 | ScalaTest (test) | `scalatest.version` | 3.2.20 |
@@ -294,7 +294,7 @@ tests bind to `slf4j-nop`.
 
 ### Test inventory and floors
 
-The JVM suites have 304 test cases.
+The JVM suites have 314 test cases.
 [`cicd/build/check_test_counts.py`](../cicd/build/check_test_counts.py) reads each module's
 `target/surefire-reports/TEST-*.xml`, counts executed tests (skipped, aborted and canceled ones do
 not count) and fails when a module is below its floor. Floors are minimums: adding tests needs no
@@ -304,14 +304,14 @@ the script's module map matches the POM's `<modules>`.
 | Module | Linux executes (CI floor) | Windows executes (Windows floor) | Tagged for the other OS |
 | --- | --- | --- | --- |
 | `datacraft-common` | 7 | 7 | none |
-| `datacraft-config` | 13 | 13 | none |
-| `datacraft-io` | 57 | 59 | 7 `windows-only`, 5 `posix-only` |
-| `datacraft-engine` | 32 | 32 | none |
+| `datacraft-config` | 14 | 14 | none |
+| `datacraft-io` | 63 | 65 | 7 `windows-only`, 5 `posix-only` |
+| `datacraft-engine` | 34 | 34 | none |
 | `datacraft-jobs` | 70 | 68 | 2 `posix-only` |
 | `datacraft-spark` | 59 | 49 | 10 `posix-only` |
-| `datacraft-api` | 28 | 28 | none |
+| `datacraft-api` | 29 | 29 | none |
 | `datacraft-cli` | 31 | 31 | none |
-| Total | 297 | 287 | |
+| Total | 307 | 297 | |
 
 The script keeps a set of floors per platform, because each platform excludes the other's tagged
 tests: `--platform` names the platform that ran the tests and defaults to the one the script runs
@@ -486,8 +486,8 @@ compose]`, so it does not start while a cheaper gate is failing.
 | `build`: Build & verify (JDK 25) | Temurin 25; `cicd/build/check-maven-wrapper.sh`: the wrapper must refuse a Maven download with a wrong SHA-256 (a copy with a zeroed `distributionSha256Sum` and an empty `MAVEN_USER_HOME`), and no `maven-wrapper.jar` may be committed; `./mvnw -B -ntp verify`; the test floors (`cicd/build/check_test_counts.py`); `cicd/build/check-spark-suite.sh`: the Spark suite must have run `SparkPipelineSpec` with `canceled 0`; the jar and exit-code checks and the build-context check below. |
 | `dags`: Airflow contracts and real pipelines (3.3.2) | Python 3.13, the version the `apache/airflow:3.3.2` image runs; `cicd/airflow/install-airflow.sh`: `apache-airflow==3.3.2` and the providers under the official `constraints-3.3.2` file for the running Python (the script derives the version, as `Dockerfile.airflow` does, and a test in `tests/docs` keeps it from being fixed), `pip check`, then pyspark 4.2.0; `cicd/airflow/check_security_floor.py`: apache-airflow 3.3.2 and FAB provider 3.9.0 at least; `tests/orchestration`; `tests/smoke/airflow_runtime_smoke.py` against the jar built by `build`, with pyspark 4.2.0's `spark-submit`. |
 | `scripts`: Script, documentation and type checks | `cicd/lint/check-actions-pinned.sh`; Python 3.13 and Node 24; `cicd/lint/install-shellcheck.sh`: ShellCheck 0.11.0 from the PyPI package `shellcheck-py`, so the result does not depend on the runner image; `cicd/lint/check-shell-scripts.sh`: `bash -n` and ShellCheck on every `*.sh` git knows (tracked or not yet ignored), with sourced files followed and every finding fatal; `tests/deploy`, `tests/ci` and `tests/docs`; `node --test tests/docs/cloud-costs.test.cjs`; pyright 1.1.414 with `--warnings`. |
-| `compose`: Compose / Swarm file validation | `cicd/stacks/check-stack-files.sh`: `docker compose config` and `docker stack config` with test-only secrets; for each required secret, the API token and for the stack the Redis password included, interpolation must fail when it is missing. Nothing is built or deployed; the script refuses to run while `deploy/compose/.env` exists, because it writes that file from `.env.example`. |
-| `containers`: Build and smoke-test runtime images | Runs after `build`, `scripts` and `compose`. `cicd/images/smoke-images.sh`: builds the images; the build context must exclude `.env` and `backups/`; both runtime images carry the freshly pulled Temurin JRE, at least 25.0.4.1; the API image refuses to start without `DATACRAFT_API_TOKEN`, and with one it answers 401 to a `/jobs` request without or with a wrong token; it runs as non-root, cannot modify its jar and answers `spark-version` with HTTP 500 FAILED; `pip check` and `cicd/airflow/check_security_floor.py` inside the Airflow image; a fresh data volume is writable by an Airflow task and read-only for the API; the real pipelines inside the image, a GBK file converted with `encoding=GBK` among them. `cicd/images/smoke-compose.sh`: the full Compose stack with generated secrets, the generated API token opening `datacraft-api` on its loopback port, all three image-baked DAGs registered, a triggered `datacraft_engine_jobs` run through the scheduler and LocalExecutor, and a `pg_dump` backup restored into a separate database that must contain the successful run; a failure reports the service logs, the task logs and the container states before the stack is removed. `cicd/images/smoke-swarm.sh`: the Swarm stack on a swarm of one node, deployed from a loopback registry by `swarm-deploy.sh` and `airflow-init.sh`; every long-running service running its current tasks (healthy where it has a health check); `datacraft-api` without a published port, answering its token only on the overlay network; the generated admin signing in through the routing mesh; the data volume writable for a worker and read-only for the API; a `datacraft_engine_jobs` run through Redis and a Celery worker; then an upgrade to a second tag, which must run the initializer again, replace every Airflow task, keep the earlier run and run the DAG again. It does not cover more than one node. |
+| `compose`: Compose / Swarm file validation | `cicd/stacks/check-stack-files.sh`: `docker compose config` and `docker stack config` with test-only secrets; for each required secret, the API token and for the stack the Redis password included, interpolation must fail when it is missing (for the Compose file's database password, whose placeholder the copied `.env` carries, from a copy of that file without the line). Nothing is built or deployed; the script refuses to run while `deploy/compose/.env` exists, because it writes that file from `.env.example`. |
+| `containers`: Build and smoke-test runtime images | Runs after `build`, `scripts` and `compose`. `cicd/images/smoke-images.sh`: builds the images, the optional `datacraft/spark` among them; the build context must exclude `.env` and `backups/`; the three runtime images carry the freshly pulled Temurin JRE, at least 25.0.4.1; the Spark image converts and counts a file inside its data directory as its non-root user and refuses an output outside it; the API image refuses to start without `DATACRAFT_API_TOKEN`, and with one it answers 401 to a `/jobs` request without or with a wrong token; it runs as non-root, cannot modify its jar and answers `spark-version` with HTTP 500 FAILED; `pip check` and `cicd/airflow/check_security_floor.py` inside the Airflow image; a fresh data volume is writable by an Airflow task and read-only for the API; the one-shot initializer, started as both stacks start it, migrates a database and creates the admin under `AIRFLOW_UID=1000`; the real pipelines inside the image, a GBK file converted with `encoding=GBK` among them, and the SFTP pipeline refused through a connection that verifies no host key. `cicd/images/smoke-compose.sh`: the full Compose stack with generated secrets, the generated API token opening `datacraft-api` on its loopback port, all three image-baked DAGs registered, a triggered `datacraft_engine_jobs` run through the scheduler and LocalExecutor, and a `pg_dump` backup restored into a separate database that must contain the successful run; a failure reports the service logs, the task logs and the container states before the stack is removed. `cicd/images/smoke-swarm.sh`: the Swarm stack on a swarm of one node, deployed from a loopback registry by `swarm-deploy.sh` and `airflow-init.sh`; every long-running service running its current tasks (healthy where it has a health check); `datacraft-api` without a published port, answering its token only on the overlay network; the generated admin signing in through the routing mesh; the data volume writable for a worker and read-only for the API; a `datacraft_engine_jobs` run through Redis and a Celery worker; then an upgrade to a second tag, which must run the initializer again, replace every Airflow task, keep the earlier run and run the DAG again. It does not cover more than one node. |
 
 Checks of the shaded jar in the `build` job:
 

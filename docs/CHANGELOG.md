@@ -6,6 +6,172 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Local container runs, a review of every module and what both found (2026-10-10)
+
+Docker became available on the development machine, so the container stage of the pipeline, which
+had only ever run in CI, was run locally for the first time: the stack file check, the image build
+and its smoke test, the Compose stack and the Swarm rehearsal. Alongside it three independent
+reviews read the current state of the repository: the core, IO and job modules, the Airflow and
+deployment code, and every document against the code. They reported 33 findings; each was checked
+against the code or reproduced before anything was changed. Defects were fixed behind a test that
+failed first, behaviour the documents did not describe was written down, and what was left as it
+is says so below. Each fix was then undone on purpose, 40 times, and a test had to notice every
+one. The local runs found two defects of their own. One failed on a package mirror that answered
+502, which exercised the error annotations of the pipeline against a real failure for the first
+time. And when the Compose and Swarm steps were made to fail on purpose, to see their diagnostics
+on a real engine, the Swarm rehearsal turned out to leave its volumes behind. Items marked
+**BREAKING** need action from operators.
+
+#### Security
+- **BREAKING for Swarm deployments:** `swarm-deploy.sh` reads `deploy/compose/.env` with the
+  shell's `source`, and a line of that file with shell syntax in it ran as a command: a value of
+  `$(...)`, or anything after a `;`. The same file reaches the containers through Docker's
+  `env_file` parser and the checks through Compose, and the three read quotes, spaces, `$`, `#` and
+  backslashes differently, so the admin password that was checked could differ from the one the
+  services received. The script now refuses the file before it reads it unless every line is
+  blank, a comment, or `KEY=value` with a value made of letters, digits and
+  `_ @ % + = : , . / [ ] * ~ ^ -` (`~` not at the start and not after a colon). The message names
+  the line and the key, never the value. `python3 deploy/scripts/deployment_env.py plain FILE` is
+  the same check; the file `init` generates passes it. A value written in quotes must lose them.
+- `compose-up.sh` checked the configuration of `docker-compose.yml` alone and then started whatever
+  Compose resolved in `deploy/compose`: a `docker-compose.override.yml` there, or `COMPOSE_FILE`,
+  took effect unchecked, so an override that published `datacraft-api` beyond loopback started
+  after "Deployment secrets validated." The check, the start and `compose-down.sh` now make the
+  same Compose call, in that directory and without `-f`, and such an override is refused.
+- `deployment_env.py check` accepted a database password of 32 characters that began with
+  `change-me`, which it refuses for every other secret.
+- JSch 2.28.7 to 2.28.8, released on 2026-10-10 with bounds checks in its SFTP packet handling.
+  OSV lists no advisory for any of the 26 pinned versions.
+
+#### Fixed
+- The one-shot initializer of both stacks replaced the entrypoint of the Airflow image, which is
+  what gives a UID the image does not know a user name. With `AIRFLOW_UID` set to anything but
+  50000, Airflow refused to run (`No username set in the environment`), the initializer failed and
+  no Airflow service started, although the deployment guide described other UIDs as supported.
+  The initializer now runs through the image's entrypoint
+  (`command: ["bash", "/opt/datacraft/airflow-bootstrap.sh"]`); `smoke-images.sh` runs it under
+  UID 1000 in every pipeline run.
+- `SftpClient` (no shipped job uses it yet):
+  - After a download or an upload that failed halfway, the same client answered later calls with
+    the leftover answers of the failed transfer: an existing file was reported missing, `size`
+    failed. JSch requests the blocks of a transfer ahead of reading the answers. The next call
+    after a failed transfer now opens a new channel on the same session.
+  - `list` of a path that is a file returned that file's name; it now fails with "SFTP path is not
+    a directory: <path>". `list("")` ended in a `StringIndexOutOfBoundsException` inside JSch; it
+    lists the directory the session starts in. A listing in which the server reports an empty
+    name or one with `/` or NUL in it fails instead of handing the name to the caller.
+  - `makeDirectories` returned normally when the path, or a parent of it, was a regular file; it
+    fails with "SFTP path exists and is not a directory: <path>".
+- `csv-profile` estimated the heap a file needs by counting a record for every CR and every LF,
+  so the same data cost about a third more with CRLF line endings and was refused at a smaller
+  size than with LF. CRLF counts once, as it does for the parser.
+- `JobExecutionEngine.execute` could throw instead of returning a FAILED result: for a request
+  whose start time lay more than 292 million years from now, the duration of the failure result
+  overflowed inside the catch block. The duration is capped. A request with a null parameter
+  value, which no interface of the project can send, reached a job and came back as the JVM's
+  message (`Cannot invoke "String.length()" because ...`); the request now refuses null names and
+  values with a message of its own.
+- `DataCraftConfig`: two keys of a `--config` file that are equal once trimmed (`mode\ ` and
+  `mode`) overwrote each other, and which value survived depended on their spelling, not on their
+  order. The file is refused: "Configuration key is defined more than once: mode". `getInt`
+  chained the JDK's `NumberFormatException`, whose message quotes the value the class otherwise
+  never reports.
+- The Swarm stack fell back to `local[*]` when `.env` had no `DATACRAFT_SPARK_MASTER` line, the
+  Compose stack to `local[2]`, which is also what the guide names. Both fall back to `local[2]`.
+- `Dockerfile.jvm`: one failed download from the package mirror failed the image build (a 502 on
+  2026-10-11). `apt-get` retries five times.
+- `Dockerfile.spark` did not set `DATACRAFT_DATA_ROOT`, so a conversion in that image could write
+  anywhere its user could; it is `/opt/datacraft/data`, as in the other images. The image ran the
+  Java of its base image, 25.0.3 where the build requires 25.0.4.1; it now carries the freshly
+  pulled Temurin JRE the other images run, with the old runtime removed first.
+- `smoke-swarm.sh` left the named volumes of its stack behind without a word, on the passing
+  path too. It waited for the running containers of the removed stack only, and the stopped ones,
+  which the engine deletes a moment later, still held the volumes; the failed removal was
+  ignored. A CI runner is thrown away, so nothing showed. On a machine that is kept, the next
+  rehearsal started from the database of the last one. The script now waits until every container
+  of the stack is deleted, retries the removal and fails when a volume remains.
+- `check-stack-files.sh` did not show that the Compose file refuses a missing
+  `POSTGRES_PASSWORD`: the `.env` it copies carries a placeholder for it. It now interpolates
+  from a copy without that line.
+- Documentation that was wrong: the `curl` example of the HTTP contract sent no token and got 401;
+  the test floors in the development guide were those of two rounds ago; the deployment guide
+  pointed to a section 8 that does not exist; the Airflow guide said the runtime smoke test runs
+  the ETL twice (it runs three times, once on a GBK file); the layout tree of the architecture
+  document missed `advisories.yml`, `cicd/security/`, `cicd/step.py`, `cicd/lib.sh` and
+  `.mvn/maven.config`.
+
+#### Added
+- `smoke-images.sh` builds the optional `datacraft/spark` image, which no pipeline run had ever
+  built, requires it to run the same Java as the other images, and runs a conversion and a count
+  in it as its non-root user, plus a conversion whose output lies outside the data directory,
+  which must fail.
+- The Airflow runtime smoke test runs `datacraft_sftp_ingest` a second time through a connection
+  that verifies no host key and requires the run to fail before anything is downloaded. The guard
+  is a hook the task runner calls; until now only a unit test called it, directly, so a runner
+  that stopped calling it would have gone unnoticed.
+- `deployment_env.py plain FILE` (see Security).
+- Tests. JVM: 10 new test cases, 314 in all (Linux runs 307, Windows 297): a transfer that fails
+  halfway and the client's next calls, a connection that goes silent (it fails the call after two
+  timeout intervals), `list` and `makeDirectories` on a file, the login directory, entry names,
+  colliding configuration keys, null parameters, the capped duration, the HTTP query rules and a
+  path that merely begins with `/jobs`. `csv-profile`'s test of the default size limit now uses a
+  file of 2^31 bytes, which cannot be read into one array at all, so it proves the limit is
+  checked before the read; with 64 MiB + 1 it passed whichever came first. Python: `tests/deploy`
+  64 (was 54): the Compose scripts against a recording Docker stub, the plain-file rule, a line of
+  `.env` that must never run, the initializer's command in both stacks, the Spark fallback, the
+  layer order, retries and Java runtime of the images; `tests/ci` 101 (was 99): the volumes of the
+  rehearsed stack; `tests/docs` 15 (was 14): the floors table of two documents against the script.
+- Forty deliberate breakages of the fixes above, 18 in the JVM modules, 18 in the deployment code
+  and 4 in the rehearsal's teardown, each noticed by a test.
+
+- A swarm of two nodes, tried once by hand (it is not part of the pipeline): two nested Docker
+  engines on the development machine, a manager and a worker as the data node, the stack deployed
+  from the manager with `swarm-deploy.sh` and `airflow-init.sh`. Every task ran on the data node
+  and none on the manager; the generated admin signed in through the manager's port, which the
+  routing mesh forwards to the other node; a container on the manager attached to the overlay
+  network reached the API on the data node with its token and got 401 without it; the kernel's
+  security associations between the two nodes carried those calls (0 packets before, 78 one way
+  and 52 the other after), so the traffic between nodes was ESP; and a DAG ran through Redis and
+  the Celery worker. Docker keeps that IPsec state only while both nodes have a container on the
+  network, which is why a first look, taken after the probe had exited, found none. Firewalls
+  between real hosts, a node that fails and shared storage remain untried.
+
+#### Changed
+- `Dockerfile.airflow` installs the Python packages before it copies the jar, the bootstrap script
+  and the DAGs. Docker rebuilds every layer after the first one whose input changed, so a rebuild
+  after a code change used to download the packages again, pyspark's 450 MB among them; it now
+  reuses that layer.
+- `compose-up.sh` and `compose-down.sh` call Compose in `deploy/compose` without `-f` (see
+  Security). An override file in that directory, which used to apply to the start but not to the
+  check, now applies to both.
+- Documented behaviour that was not written down: the metrics and messages of the Spark jobs and
+  the defaults of `spark.enableHive` and `spark.warehouseDir`; the query rules of the HTTP API (a
+  repeated key keeps its last value, a blank key is ignored, `lifecycle` is not a job parameter);
+  that the CLI has no `--help` and prints its options with every usage error; `AIRFLOW_WEB_PORT`;
+  that `datacraft/spark` is built only on request; that neither stack sets memory or CPU limits;
+  that the Compose project is named `compose` after its directory, so a second checkout on the
+  same host shares its containers and volumes; that re-running `compose-up.sh` after any edit of
+  `.env` recreates every Airflow container and gives running tasks ten seconds; that an upload
+  writes in place and a failed one leaves a partial remote file; what the SFTP timeout does and
+  does not bound; the units of the CSV and UTF-8 offsets; and what `csv-profile`'s size limit and
+  heap estimate do not cover.
+- The upgrade steps of the deployment guide gained the step they were missing for the first
+  versions of the project, whose database volume was mounted at `/var/lib/postgresql/data`:
+  `postgres:18` refuses to start on such a volume, and the guide now says how to restore the dump
+  of step 1 into a new one. Both halves were tried with `postgres:18` on this machine; an upgrade
+  from a real PostgreSQL 16 deployment was not.
+
+#### Not changed
+- `SftpClient` has no timeout that covers a server which keeps the SSH connection alive but never
+  answers a request; the contract no longer says it has one. A failed upload still leaves a
+  partial remote file. Neither has a caller yet.
+- `csv-profile` reads a file that is replaced by a larger one between the size check and the read
+  in full before it refuses it.
+- The Compose project keeps its name: giving it one of its own would detach an existing
+  deployment from its volumes.
+- `file-checksum` streams, but no test would notice if it stopped: a file larger than the heap is
+  too expensive for the unit suite.
+
 ### API token, CSV encoding, diagnosable CI, an advisory check and a Swarm rehearsal (2026-10-09)
 
 This round works through what the 2026-10-07 round left open and the residual risks its report

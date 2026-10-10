@@ -15,18 +15,22 @@ documentation in `design/`; the root keeps only build entry points and tool conf
 
 ```text
 datacraft-lab/
-├── pom.xml  mvnw  mvnw.cmd  .mvn/     build entry points (.mvn: wrapper settings, jvm.config)
+├── pom.xml  mvnw  mvnw.cmd  .mvn/     build entry points (.mvn: wrapper settings, jvm.config,
+│                                      maven.config)
 ├── Makefile                           convenience targets over the wrapper and deploy/ scripts
 ├── .editorconfig  .gitattributes  .gitignore  .dockerignore  .scalafmt.conf
 ├── pyrightconfig.json                 Python type checking
 ├── config/checkstyle/checkstyle.xml   Checkstyle rules
-├── .github/workflows/ci.yml           CI workflow: triggers, runners and job order only
+├── .github/workflows/                 ci.yml and advisories.yml: triggers, runners and job order only
 ├── cicd/                              the scripts the CI jobs run
+│   ├── step.py       the shell of every workflow step: failure and group annotations
+│   ├── lib.sh        helpers shared by the scripts
 │   ├── build/        Maven Wrapper checksum, test-count floors, Spark suite, CLI jar checks,
 │   │                 the builder image's Maven command in the Docker build context
 │   ├── airflow/      constrained Airflow install and security floor
 │   ├── lint/         pinned ShellCheck, shell syntax and ShellCheck, pinned actions
 │   ├── stacks/       Compose and Swarm definitions
+│   ├── security/     advisory check of the pinned versions
 │   └── images/       image build and smoke test, Compose stack smoke test, Swarm rehearsal
 ├── modules/                           JVM source modules, grouped by responsibility
 │   ├── core/         datacraft-common, datacraft-config, datacraft-engine
@@ -184,7 +188,9 @@ runtime images:
 - `datacraft/airflow`: Airflow 3.3.2 with a Java 25 JRE, pyspark 4.2.0 (which provides
   `spark-submit`), the jar and the DAGs.
 - `datacraft/spark` (optional, built only with `BUILD_SPARK_IMAGE=true`): the official Spark 4.2.0
-  Java 25 image plus the jar. No stack, DAG or CI job uses it.
+  Java 25 image with its Java replaced by the same freshly pulled Temurin JRE, plus the jar, with
+  job paths confined to `/opt/datacraft/data`. No stack or DAG uses it; CI builds it and runs a
+  conversion in it.
 
 ## Online engine model
 

@@ -142,6 +142,7 @@ python -B tests/smoke/airflow_runtime_smoke.py \
 Build the JAR with `./mvnw verify` first (it writes
 `modules/interfaces/datacraft-cli/target/datacraft-cli.jar`) with JDK 25.0.4.1 or newer, which the
 build requires, and run it with a Java 25 runtime. The runtime smoke initializes an isolated metadata database twice, runs all three
-DAGs (ETL twice) with `DATACRAFT_DATA_ROOT` set to its temporary data directory, verifies SFTP bytes
-and the row count and exact `note` values of both Parquet outputs, and cleans its temporary
-credentials, files and logs. It does not contact a real SFTP account or deploy a stack.
+DAGs (the ETL three times: twice on the same UTF-8 file, to show a retry does not duplicate rows,
+and once on a GBK copy with `encoding=GBK`) with `DATACRAFT_DATA_ROOT` set to its temporary data
+directory, verifies SFTP bytes and the row count and exact `note` values of the three Parquet
+outputs, and cleans its temporary credentials, files and logs. It does not contact a real SFTP account or deploy a stack.

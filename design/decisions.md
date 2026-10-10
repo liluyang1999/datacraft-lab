@@ -64,7 +64,9 @@ and the CLI the same `--master`, and the Airflow image ships pyspark 4.2.0 for i
 
 ## 3. Plain-JVM small-file jobs in datacraft-jobs, confined by DATACRAFT_DATA_ROOT
 
-**Status:** Accepted (added in the 2026-09-25 round).
+**Status:** Accepted (added in the 2026-09-25 round). The API it mentions has required a bearer
+token since decision 11 (2026-10-09); the confinement stays, because a token holder is still not
+meant to read every file the process can.
 
 **Context.** Profiling or checksumming a small file does not justify a Spark session, and the API
 image has no Spark at all. The API is unauthenticated, so a file job reachable over HTTP could read
@@ -323,7 +325,10 @@ suite, CLI jar checks and the JSch probe, the builder image's Maven command in t
 context), `airflow/` (the constrained Airflow install and the security floor), `lint/` (the pinned
 ShellCheck, shell syntax and ShellCheck, pinned actions), `stacks/` (Compose and Swarm validation)
 and `images/` (image build and smoke test, Compose stack smoke test), with shared helpers in
-`cicd/lib.sh`. The tests of these scripts stay in `tests/ci`.
+`cicd/lib.sh`. The tests of these scripts stay in `tests/ci`. Later rounds added to this layout
+without changing the rule: `cicd/step.py`, the shell every step runs through (decision 12),
+`cicd/security/` and a second workflow, `advisories.yml` (decision 13), and the Swarm rehearsal in
+`images/` (decision 14).
 
 The rule for what goes where: `cicd/` holds what a pipeline job runs; `tests/` holds the suites a
 test runner or a developer runs; `deploy/scripts` holds what an operator runs on the host. A
@@ -492,7 +497,12 @@ nodes is out of reach. A GitHub runner, however, can be a swarm of one node.
   one (`docker stack rm datacraft` keeps the volumes).
 - One node proves nothing about placement, failover or traffic between nodes. Encryption between
   nodes needs ESP (IP protocol 50) to pass, which only a second node can show; while every service
-  is pinned to `DATACRAFT_DATA_NODE`, no service traffic crosses nodes at all.
+  is pinned to `DATACRAFT_DATA_NODE`, no service traffic crosses nodes at all. A second node was
+  tried once by hand on 2026-10-11, with two nested Docker engines on one machine: deployed from a
+  manager, every task ran on the other node, the routing mesh answered on the node without tasks,
+  and calls from a container on the manager to the API on the data node travelled in ESP (the
+  kernel's counters of the security associations rose from 0). That is not part of the pipeline,
+  and says nothing about firewalls between real hosts or about a node that fails.
 - The Redis password is part of the service specification and of the Redis command line, as the
   other secrets are environment values of their services: whoever may inspect the services on a
   manager can read it. Docker secrets remain future work.

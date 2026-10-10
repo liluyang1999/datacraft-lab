@@ -574,6 +574,22 @@ class DocsConsistencyTests(unittest.TestCase):
                     for version in listed}
         self.assertEqual(1, len(versions), f"Airflow pins disagree: {found}")
 
+    def test_documented_test_floors_are_the_ones_the_check_enforces(self):
+        # Two documents print the floors of cicd/build/check_test_counts.py as a table of
+        # | `module` | Linux | Windows | ...; a floor raised in the script must be raised in both.
+        script = read("cicd/build/check_test_counts.py")
+        linux = dict(re.findall(r'^    "(datacraft-[a-z]+)": (\d+),$', script, re.MULTILINE))
+        overrides = re.search(r"^WINDOWS_FLOORS = \{\*\*FLOORS, (.*)\}$", script, re.MULTILINE)
+        self.assertEqual(8, len(linux), "FLOORS of check_test_counts.py: one entry per module")
+        self.assertIsNotNone(overrides, "WINDOWS_FLOORS of check_test_counts.py")
+        assert overrides is not None
+        windows = {**linux, **dict(re.findall(r'"(datacraft-[a-z]+)": (\d+)', overrides.group(1)))}
+        expected = {module: (linux[module], windows[module]) for module in linux}
+        for name in ("docs/guides/development.md", "design/build-and-quality.md"):
+            with self.subTest(file=name):
+                rows = re.findall(r"^\| `(datacraft-[a-z]+)` \| (\d+) \| (\d+) \|", read(name), re.MULTILINE)
+                self.assertEqual(expected, {module: (first, second) for module, first, second in rows})
+
     def test_dags_job_constraints_follow_its_python(self):
         job = "\n".join(workflow_job(read(CI_WORKFLOW), "dags"))
         self.assertTrue(job, f"{CI_WORKFLOW} has no dags job")
