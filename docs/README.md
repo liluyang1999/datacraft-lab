@@ -13,9 +13,9 @@ whether it is started from the command line, through the JSON HTTP API, or by an
   are not valid in it.
 - **One artifact**: the shaded `datacraft-cli.jar` runs jobs and also serves the HTTP API
   (`serve-api`), which requires a bearer token wherever it listens off loopback.
-- **Deployment**: Docker Compose for a single host (Airflow LocalExecutor) and a Docker Swarm stack
-  template (CeleryExecutor) that pins every service to one node, `DATACRAFT_DATA_NODE`, because its
-  volumes are node-local.
+- **Deployment**: Docker Compose when there is one host (Airflow LocalExecutor), and a Docker Swarm
+  stack for two or more hosts (CeleryExecutor and Redis) that pins every service to one node,
+  `DATACRAFT_DATA_NODE`, because its volumes are node-local.
 - **Build**: Java 25 bytecode, a pinned Maven Wrapper, and one `verify` gate covering formatting,
   Checkstyle, dependency rules, tests and packaging; any javac or scalac warning fails the build.
 

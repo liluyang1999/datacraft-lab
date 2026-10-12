@@ -224,8 +224,8 @@ timeout. Runs still going after that, such as long Spark jobs, are cut off.
 
 ## Deployment topology
 
-Single host (Compose, LocalExecutor) first; multi-host (Swarm, CeleryExecutor + Redis) when one host
-is no longer enough. The Compose stack runs PostgreSQL 18, the Airflow 3.3.2 components (API
+One host runs the Compose stack (LocalExecutor); two or more hosts run the Swarm stack
+(CeleryExecutor + Redis). The Compose stack runs PostgreSQL 18, the Airflow 3.3.2 components (API
 server, scheduler, DAG processor, triggerer and a one-shot initializer) and `datacraft-api`; Spark
 jobs run in local mode through `spark-submit` inside the Airflow containers. The supplied Swarm
 stack pins every service to one explicit data node (`DATACRAFT_DATA_NODE`) because its volumes are

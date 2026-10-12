@@ -9,6 +9,11 @@
 
 ## 1. 起步方案
 
+**按主机数量选择部署方式：**只有一台主机，用 Docker Compose（第 2 至 5 节）；有两台或更多主机，用
+Docker Swarm（第 6 节）。两种方式使用同一份 `.env`、同样的两个运行镜像和同样的 DAG，区别在执行器
+（LocalExecutor 对 CeleryExecutor 加 Redis）以及镜像要先推送到各节点都能拉取的 registry。一台主机不需要
+Swarm：CI 在单节点上运行 Swarm 只是为了演练部署步骤。
+
 单台 Linux 主机运行 PostgreSQL 18、Airflow 3.3.2（LocalExecutor、API、调度器、DAG 处理器、触发器）
 与 JVM API；Spark 4.2.0 在 Airflow 容器内本地执行。Airflow 3.3.2 的约束文件把 FAB provider 从 3.8.0
 升到 3.9.0，修复多项安全公告（编号见 [CHANGELOG](../CHANGELOG.md)）。规划起点为 8 GB 内存、
@@ -36,6 +41,34 @@ Spark 和 Airflow；不要求在云主机上额外安装 Maven、JDK 或 Airflow
 它的 Java 也换成与其他镜像相同的、构建时新拉取的 Temurin JRE（官方 Spark 镜像自带的是 25.0.3，低于
 构建要求的 25.0.4.1）。CI 的 `smoke-images.sh` 会构建它，并以它的非 root 用户在数据目录内完成一次转换和
 计数、拒绝一次目录外的输出。
+
+构建或演练之后，`docker images` 里会出现下面这些名字。真正被部署使用的只有 Airflow 一类（官方镜像、
+在它之上构建的 `datacraft/airflow`，以及配套的 PostgreSQL 与 Redis）和 JVM API；其余是构建或演练的中间产物：
+
+| 镜像 | 来源 | 用途 | 用完之后 |
+| --- | --- | --- | --- |
+| `apache/airflow:3.3.2` | 官方 | `datacraft/airflow` 的基础镜像，自带 Python 3.13 | 保留，下次构建复用 |
+| `postgres:18` | 官方 | 两种部署的 Airflow 元数据库 | 保留 |
+| `redis:8` | 官方 | 只有 Swarm 部署使用（Celery broker） | 只用 Compose 时可删除 |
+| `apache/spark:4.2.0-scala2.13-java25-python3-ubuntu` | 官方 | 可选的 `datacraft/spark` 的基础镜像，自带 Python 3 | 不构建 Spark 镜像时可删除 |
+| `maven:3.10.0-eclipse-temurin-25`、`eclipse-temurin:25-jre` | 官方 | 只在构建时使用：编译 jar，提供复制进各镜像的 JRE | 构建完成即可删除 |
+| `datacraft/jar-builder` | 本机构建 | 只在构建时使用：其余镜像从它复制 jar | 构建完成即可删除 |
+| `datacraft/airflow`、`datacraft/jvm` | 本机构建 | 两种部署实际运行的镜像：Airflow 各服务，JVM API | 部署期间保留 |
+| `datacraft/spark` | 本机构建，可选 | 独立的 spark-submit 镜像，没有部署使用它 | 不用即可删除 |
+| `registry:3` | 官方 | 只有 Swarm 演练脚本使用 | 演练完成即可删除 |
+
+对照官方 Airflow Helm chart 的镜像清单：本项目用到的是 Airflow 本体、PostgreSQL 与 Redis；chart 里的
+statsd、pgbouncer 与 git-sync 没有使用，仓库也没有 Helm 或 Kubernetes 部署。不运行部署的机器（例如只做
+本机验证的开发机）只需保留四个官方镜像，其余连同构建缓存一并清掉，需要时再用 `build-images.sh` 重建：
+
+```bash
+docker image rm datacraft/airflow:latest datacraft/jvm:latest datacraft/spark:latest \
+  datacraft/jar-builder:latest maven:3.10.0-eclipse-temurin-25 eclipse-temurin:25-jre registry:3
+docker builder prune --all --force
+```
+
+列表里不存在的镜像会让第一条命令报错，其余镜像照常删除。正在运行部署的主机不要删除 `datacraft/airflow`
+与 `datacraft/jvm`。
 
 8 GB 小主机构建时也会占用较多内存和磁盘，可在相同架构的构建机完成镜像。Compose 只使用本机名为
 `datacraft/airflow:latest` 与 `datacraft/jvm:latest` 的镜像，因此要以这两个名称导入目标主机
@@ -311,8 +344,9 @@ bash deploy/scripts/compose-down.sh
 
 ## 6. 多机 Swarm 与真实 Spark 集群
 
-仓库保留 Swarm/Celery 模板，但小规模优先使用 Compose。默认本地卷要求把所有服务（数据库、Redis、
-Airflow 各组件、worker 与 JVM API）固定在 `DATACRAFT_DATA_NODE`，并非多机高可用。要跨节点扩展，
+有两台或更多主机时使用本节的 Swarm 部署（CeleryExecutor 与 Redis）；只有一台主机时用前面的 Compose 部署。
+默认本地卷要求把所有服务（数据库、Redis、Airflow 各组件、worker 与 JVM API）固定在
+`DATACRAFT_DATA_NODE` 这一台数据节点上，其余节点担任 manager 并经路由网格转发入口流量，并非多机高可用。要跨节点扩展，
 必须先解决共享输入输出、任务日志、数据库高可用、密钥管理和网络认证；不能仅增加 worker 数就宣称完成扩展。
 CI 的 `containers` 作业在一个单节点 Swarm 上按本节的步骤演练部署与升级
 （`cicd/images/smoke-swarm.sh`，见第 7 节）。两个节点的情形在 2026-10-11 手工验证过一次，不属于 CI：在一台

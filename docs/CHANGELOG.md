@@ -6,6 +6,21 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Which image is for what, and which deployment for how many hosts (2026-10-12)
+
+#### Changed
+- The deployment guide states the rule the two stacks were built for: one host runs the Compose
+  stack, two or more hosts run the Swarm stack. The README and the architecture document use the
+  same wording.
+- The deployment guide lists every image a build or a rehearsal leaves on a Docker engine, with
+  what it is for and whether it may be removed afterwards: four official images are worth keeping
+  (`apache/airflow`, `postgres`, `redis`, `apache/spark`), `datacraft/airflow` and `datacraft/jvm`
+  are what a deployment runs, and the Maven and JRE images, `datacraft/jar-builder`, the optional
+  `datacraft/spark` and `registry` are leftovers of building and rehearsing. It gives the two
+  commands that remove them and the build cache. Against the image list of the official Airflow
+  Helm chart the project uses Airflow, PostgreSQL and Redis; it has no Helm or Kubernetes
+  deployment.
+
 ### Local container runs, a review of every module and what both found (2026-10-10)
 
 Docker became available on the development machine, so the container stage of the pipeline, which
