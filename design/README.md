@@ -25,7 +25,7 @@ fixing. How to install, run and operate the project is in [`docs/`](../docs/READ
 4. **Spark is provided.** `spark-submit` or a cluster supplies Spark at runtime, so the CLI jar
    stays small, and a missing Spark runtime is a FAILED result that says how to launch the job, not
    a crash.
-5. **Fail visibly.** Invalid values, case variants of parameter names, malformed CSV and
+5. **Fail visibly.** Invalid values, near misses of parameter names, malformed CSV and
    quality-gate mismatches fail the job with a message instead of falling back to a default. The
    build does the same: vanished tests, a canceled Spark suite or an unpinned CI action fail it.
 6. **Confine file access.** `DATACRAFT_DATA_ROOT`, the root-bound `LocalStorageService`, the

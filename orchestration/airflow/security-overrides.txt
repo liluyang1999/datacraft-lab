@@ -1,0 +1,19 @@
+# Fixed releases installed over the Airflow 3.3.2 constraints, by deploy/docker/Dockerfile.airflow
+# and cicd/airflow/install-airflow.sh, after the constrained install and before `pip check`.
+#
+# The constraints of Airflow 3.3.2 (2026-09-17), which the official apache/airflow:3.3.2 image is
+# built with, pin releases that advisories published later affect. Listed here are only those
+# that this deployment can reach on Linux, with a fix in a compatible release:
+#   certifi  2026.7.22 trusts emSign roots whose intermediate CA keys are compromised
+#            (GHSA-6q48-6c7w-9gw2, critical): every outbound TLS connection through requests or
+#            httpx. Fixed in 2026.10.19; 2026.10.23 is the newest bundle.
+#   urllib3  2.7.0 may ignore the TLS settings of an HTTPS proxy (GHSA-8988-9cw3-xx77) and buffers
+#            an unbounded chunk-size line (GHSA-vxq7-64xx-v4gw), both high. Fixed in 2.8.0.
+# The other advisories against the image's packages need Windows, a provider or tool this
+# deployment does not run, or a configuration it does not use; docs/guides/airflow.md lists them.
+#
+# Exact pins, like the constraints. cicd/airflow/check_security_floor.py requires each release as a
+# floor and cicd/security/check_advisories.py asks OSV about each. Remove a line once the
+# constraints of the Airflow version in use pin that release or a newer one.
+certifi==2026.10.23
+urllib3==2.8.0

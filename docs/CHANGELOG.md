@@ -6,6 +6,109 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Version defects, the October Java update and a third review of every module (2026-10-26)
+
+The workstation moved to Oracle JDK 25.0.5.0.3 and Docker Desktop 4.96.3 (Engine 29.9.2, Compose
+v5.6.1). This round follows up the version defects that the readiness review of 2026-10-21 left
+open, checks every pin against upstream again, and has three independent reviews read the JVM
+modules, the Airflow, deployment and CI code, and every document against the code. The reviews
+reported 16 findings; each was checked against the code or reproduced before anything changed,
+and every defect was fixed behind a test that failed first. Two findings are recorded instead of
+changed, with the reason below. Items marked **BREAKING** need action from operators.
+
+#### Security
+- Jackson 2.22.3 -> 2.22.4. jackson-databind 2.22.4 fixes CVE-2026-110879 (#6287 in its release
+  notes: type parameters of polymorphic type ids bypassed the `PolymorphicTypeValidator`). The API
+  only serializes, so the flaw could not be reached. The Enforcer now bans jackson-databind older
+  than 2.22.4; jackson-core keeps its floor of 2.22.3. On 2026-10-26 neither GitHub nor OSV had an
+  advisory for this CVE, so the weekly advisory check could not have reported it; it was found in
+  Jackson's own release notes.
+- The Airflow image installs certifi 2026.10.23 and urllib3 2.8.0 over the Airflow 3.3.2
+  constraints. Advisories published after the constraints (2026-09-17) affect 18 of the 440 Python
+  packages of `apache/airflow:3.3.2`. Two of them can be reached here and have a compatible fix:
+  - certifi 2026.7.22 trusts `emSign ECC Root CA - G3`, below which eight intermediate CAs have
+    compromised keys (GHSA-6q48-6c7w-9gw2, critical);
+  - urllib3 2.7.0 can ignore the TLS settings of an HTTPS proxy and buffers an unbounded
+    chunk-size line (GHSA-8988-9cw3-xx77, GHSA-vxq7-64xx-v4gw, high).
+  `orchestration/airflow/security-overrides.txt` holds the two pins. `Dockerfile.airflow` and
+  `cicd/airflow/install-airflow.sh` install them after the constrained install and run
+  `pip check`; `check_security_floor.py` requires them in the dags job and inside the image; the
+  advisory check asks OSV about them, and a change to the file runs it. The Airflow guide lists
+  the other 16 and why this deployment does not reach them.
+- The Swarm rehearsal (`smoke-swarm.sh`) refuses an engine that holds volumes of a `datacraft`
+  stack. An engine that once ran the real stack keeps its volumes after `docker stack rm`; the
+  rehearsal deployed onto that database and data, and its teardown then deleted them.
+- A job parameter whose name differs from a known one only by surrounding whitespace was ignored:
+  `--param 'expectedRows =3'` (and `?expectedRows+=3` over HTTP) let a two-row file pass a
+  three-row gate, because the guard caught case variants only. The plain-JVM and the Spark jobs now
+  reject it with "Unknown parameter expectedRows ; did you mean expectedRows?".
+
+#### Fixed
+- `airflow-init.sh` reported success for a Swarm redeploy that changed only `.env` (a new
+  password, the same tag): it recognised the current task by its image, and the previous task,
+  complete and with the same image, was still the newest one for a moment. It now compares each
+  task's container spec (image, environment, mounts) with the service's, which also needs Python 3
+  on the manager. The service's spec carries the stop grace period and empty fields that the
+  task's copy leaves out, so both are ignored on both sides. The first comparison ignored only the
+  stop grace period; a service created with `docker service create` showed nothing else, but the
+  local Swarm rehearsal of the real stack timed out on an empty `DNSConfig`, before anything was
+  pushed. On a throwaway stack the deployed task matches, the previous task stops matching after an
+  env-only update, and the new task matches again.
+- The checks that the API's data mount is read-only could not fail. The API runs as uid 10001 and
+  the volume's directory belongs to airflow:0 with mode 0775, so `touch` fails on a writable mount
+  too; on the local engine `! touch` passed for a writable mount. `smoke-images.sh` and
+  `smoke-swarm.sh` now read the mount options from `/proc/self/mountinfo`, as `smoke-compose.sh`
+  already did.
+- `RemoteFileTransfer.download` could not store a file whose name is longer than 212 characters:
+  the partial file added 43 characters to the whole name and broke the 255-character limit of ext4
+  and NTFS. It keeps at most 32 characters of the name.
+- Documentation that was wrong: decision 8 still gave the test counts of 2026-10-09; the report
+  gave engine, API and Swarm stub counts of an older round; the deployment guide said all four
+  local container scripts need `CI=true` (two do, the other two refuse when their files exist) and
+  that the Compose smoke test prints the task logs first (it prints the service logs, the task logs
+  and the container states); the development guide's advisory section and test tree missed the new
+  files.
+
+#### Changed
+- `actions/setup-java` v6.0.1 -> v6.1.0, `actions/setup-python` v7.0.0 -> v7.1.0,
+  maven-surefire-plugin 3.6.0 -> 3.6.1.
+- `build-images.sh` tries each explicit base image pull three times, 10 and 20 seconds apart: a
+  dropped token request ("failed to fetch anonymous token ... EOF") once ended a local build that a
+  plain rerun then finished. The builder's `docker build --pull` is not retried, because a retry
+  there would also repeat a failed compilation.
+- The advisory check reads an indented override line too, as pip and the floor check do.
+- Test floors: `datacraft-io` 64 on Linux and 66 on Windows, `datacraft-jobs` 72 and 70.
+
+#### Added
+- Tests. JVM: 3 new test cases, 317 in all (Linux runs 310, Windows 300), and two more parameter
+  variants in an existing Spark suite. Python: the pull retry (2), the overrides in the image and
+  the dags job (1), the init wait after an `.env`-only redeploy (1), the security floor
+  (`tests/orchestration/test_security_floor.py`, 4), the push paths of the advisory workflow and an
+  indented override (2), the rehearsal and earlier volumes (1), the read-only probes
+  (`tests/ci/test_image_probes.py`, 1) and one Spark version for every pin (1).
+
+#### Not changed
+- The JDK floor stays 25.0.4.1. Oracle's Critical Patch Update of 2026-10-20 fixes 39
+  vulnerabilities that list 25.0.4.1 as affected, among them CVE-2026-91453 in the JDK's HTTP
+  server (5.3), which the API uses. Temurin 25.0.5+8 followed on 2026-10-22; its trust store also
+  drops `emSign ECC Root CA - G3`, which Temurin 25.0.4.1 still trusts. CI's `setup-java` and the
+  workstation build on 25.0.5, but the official `eclipse-temurin:25-jre` and
+  `maven:3.10.0-eclipse-temurin-25` images still carry 25.0.4.1+1: their update
+  (adoptium/containers#1092) waits for other architectures. Decision 4 raises the floor once the
+  workstation, CI and the builder image all resolve to the new release. Until then a rebuild picks
+  up 25.0.5 as soon as the official images carry it, without a code change. The project's own JVM
+  code opens no outbound TLS connection.
+- The JDK HTTP server behind the API has no limit on how long a request may take to arrive: a
+  request whose headers never end held its connection for as long as the client wanted (measured:
+  still open after 20 s; with `sun.net.httpserver.maxReqTime=2` closed after 3 s). Setting that
+  limit is not enough on its own: for a request with a body the handler does not read, the JDK
+  keeps the timer running until the response is written, so a long job run would be cut off. Only
+  loopback, the Swarm overlay network or a tunnel reach the port. Recorded as a residual risk.
+- google-java-format 1.37.0 still fails under Spotless 3.10.4, the newest release (checked again).
+- The Airflow providers newer than the constraints of 3.3.2 (FAB 3.10.2, SFTP 7.0.0, SSH 7.0.1,
+  standard 1.21.0) are not installed: the constraints pin the tested set, and OSV has no advisory
+  for the pinned versions. Spark 4.2.1 and a newer Airflow 3.3 release do not exist yet.
+
 ### Which image is for what, and which deployment for how many hosts (2026-10-12)
 
 #### Changed

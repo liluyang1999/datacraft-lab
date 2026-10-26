@@ -84,7 +84,7 @@
              -Dsurefire.failIfNoSpecifiedTests=false) for modules without a matching test. -->
         <surefire.failIfNoTests>true</surefire.failIfNoTests>
 
-        <jackson.version>2.22.3</jackson.version>
+        <jackson.version>2.22.4</jackson.version>
         <jsch.version>2.28.8</jsch.version>
         <junit.jupiter.version>6.1.3</junit.jupiter.version>
         <scala.maven.plugin.version>4.10.0</scala.maven.plugin.version>
@@ -95,8 +95,8 @@
         <sshd.version>2.20.0</sshd.version>
         <slf4j.version>2.0.20</slf4j.version>
         <!-- Not 1.37.0 yet: under Spotless 3.10.4, the newest release, its formatter step fails on
-             the first Java file (checked 2026-10-09). Raise it together with a Spotless that runs
-             it. -->
+             the first Java file (checked 2026-10-09 and again 2026-10-26). Raise it together with a
+             Spotless that runs it. -->
         <google.java.format.version>1.36.1</google.java.format.version>
         <!-- Checkstyle engine run by maven-checkstyle-plugin. The plugin's default engine (9.3)
              cannot parse Java 21/25 syntax such as record patterns, guarded switch labels and
@@ -113,7 +113,7 @@
         <maven.resources.plugin.version>3.5.0</maven.resources.plugin.version>
         <maven.shade.plugin.version>3.6.2</maven.shade.plugin.version>
         <maven.site.plugin.version>3.22.0</maven.site.plugin.version>
-        <maven.surefire.plugin.version>3.6.0</maven.surefire.plugin.version>
+        <maven.surefire.plugin.version>3.6.1</maven.surefire.plugin.version>
     </properties>
 
     <dependencyManagement>
@@ -370,13 +370,15 @@
                                 <banDuplicatePomDependencyVersions />
                                 <requireNoRepositories />
                                 <!-- Named explicitly: jackson-annotations is versioned 2.22 (no patch
-                                     number), which sorts below 2.22.3, so a group wildcard would ban it. -->
+                                     number), which sorts below 2.22.3, so a group wildcard would ban it.
+                                     CVE-2026-110879 is named in jackson-databind's 2.22.4 release notes
+                                     (#6287) and had no GitHub or OSV advisory yet on 2026-10-26. -->
                                 <bannedDependencies>
                                     <excludes>
                                         <exclude>com.fasterxml.jackson.core:jackson-core:[,2.22.3)</exclude>
-                                        <exclude>com.fasterxml.jackson.core:jackson-databind:[,2.22.3)</exclude>
+                                        <exclude>com.fasterxml.jackson.core:jackson-databind:[,2.22.4)</exclude>
                                     </excludes>
-                                    <message>jackson-core and jackson-databind older than 2.22.3 are affected by GHSA-wv8q-qhhj-9h54 (CVE-2026-91776), GHSA-cxp5-3px4-pw24 (CVE-2026-91777), GHSA-p6pp-m3f8-5c89 (CVE-2026-89407) and GHSA-7hhh-6rmp-j9qf (CVE-2026-89425).</message>
+                                    <message>jackson-core older than 2.22.3 is affected by GHSA-p6pp-m3f8-5c89 (CVE-2026-89407) and GHSA-7hhh-6rmp-j9qf (CVE-2026-89425); jackson-databind older than 2.22.4 by GHSA-wv8q-qhhj-9h54 (CVE-2026-91776), GHSA-cxp5-3px4-pw24 (CVE-2026-91777) and CVE-2026-110879.</message>
                                 </bannedDependencies>
                             </rules>
                         </configuration>

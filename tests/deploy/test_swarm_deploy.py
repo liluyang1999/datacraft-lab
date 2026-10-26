@@ -12,8 +12,10 @@ import unittest
 
 DEPLOY = Path(__file__).resolve().parents[2] / "deploy"
 
-# Records argv. `compose ... config` renders what validate() needs from the exported .env values;
-# `service inspect` / `service ps` answer from SERVICE_IMAGE and the SERVICE_PS_* files, one per poll.
+# Records argv. `compose ... config` renders what validate() needs from the exported .env values.
+# `service inspect` answers from SERVICE_SPEC (the service's container spec as JSON, or its image),
+# `service ps` renders the `id|image|state` lines of the SERVICE_PS files, one file per poll, in the
+# format asked for, and `inspect --type task` answers the container spec of a task from TASK_SPECS.
 DOCKER_STUB = r"""#!/usr/bin/env python3
 import json, os, sys
 args = sys.argv[1:]
@@ -28,13 +30,20 @@ if args[:1] == ['compose'] and 'config' in args:
                                    'airflow-scheduler': {'environment': env},
                                    'airflow-init': {'environment': env}}}))
 elif args[:2] == ['service', 'inspect']:
-    if not os.environ.get('SERVICE_IMAGE'):
+    if not os.environ.get('SERVICE_SPEC'):
         sys.exit('Error: no such service: datacraft_airflow-init')
-    print(os.environ['SERVICE_IMAGE'])
+    spec = os.environ['SERVICE_SPEC']
+    print(json.loads(spec)['Image'] if 'ContainerSpec.Image' in args[3] else spec)
 elif args[:2] == ['service', 'ps']:
     polls = sum(1 for line in open(os.environ['CALLS']) if json.loads(line)[:2] == ['service', 'ps'])
     responses = sorted(os.environ['SERVICE_PS'].split(os.pathsep))
-    with open(responses[min(polls, len(responses)) - 1]) as source: sys.stdout.write(source.read())
+    with open(responses[min(polls, len(responses)) - 1]) as source:
+        for line in source.read().splitlines():
+            task, image, state = line.split('|')
+            print(args[4].replace('{{.ID}}', task).replace('{{.Image}}', image)
+                  .replace('{{.CurrentState}}', state))
+elif args[:3] == ['inspect', '--type', 'task']:
+    print(json.dumps(json.loads(os.environ['TASK_SPECS'])[args[-1]]))
 """
 
 
@@ -156,29 +165,53 @@ class SwarmScriptTests(unittest.TestCase):
             paths.append(str(path))
         return os.pathsep.join(paths)
 
-    def test_init_waits_for_the_current_specs_task_to_complete(self):
-        new, old = "reg/datacraft-airflow:2@sha256:new", "reg/datacraft-airflow:1@sha256:old"
-        responses = self.ps_responses(
-            f"{old}|Complete 5 minutes ago\n",  # the redeploy has not created the new task yet
-            f"{new}|Running 2 seconds ago\n{old}|Complete 5 minutes ago\n",
-            f"{new}|Complete 1 second ago\n{old}|Complete 5 minutes ago\n")
-        result, calls = self.run_script("airflow-init.sh", SERVICE_IMAGE=new, SERVICE_PS=responses)
+    def run_init(self, service, tasks, *responses, **env):
+        """airflow-init.sh against a service spec, the specs of its tasks and one poll per response."""
+        return self.run_script("airflow-init.sh", SERVICE_SPEC=json.dumps(service), TASK_SPECS=json.dumps(tasks),
+                               SERVICE_PS=self.ps_responses(*responses), **env)
+
+    # Right after a redeploy the previous, complete task is still the newest one for a moment.
+    REDEPLOY = ("old|{old}|Complete 5 minutes ago\n",
+                "new|{new}|Running 2 seconds ago\nold|{old}|Complete 5 minutes ago\n",
+                "new|{new}|Complete 1 second ago\nold|{old}|Complete 5 minutes ago\n")
+
+    def assert_waited_for_the_new_task(self, result, calls):
         self.assertEqual(0, result.returncode, result.stderr)
         polls = [call for call in calls if call[:2] == ["service", "ps"]]
         self.assertEqual(3, len(polls))
         self.assertIn("datacraft_airflow-init", polls[0])
         self.assertFalse(any(call[:1] == ["exec"] for call in calls))
 
+    def test_init_waits_for_the_current_specs_task_to_complete(self):
+        new, old = "reg/datacraft-airflow:2@sha256:new", "reg/datacraft-airflow:1@sha256:old"
+        # As a stack deploy on a real engine leaves them (2026-10-26): the service spec carries the
+        # stop grace period and an empty DNS configuration, which the tasks' copies leave out.
+        service = {"Image": new, "Env": ["A=1"], "StopGracePeriod": 10000000000, "DNSConfig": {}, "Init": False}
+        tasks = {"old": {"Image": old, "Env": ["A=1"]}, "new": {"Image": new, "Env": ["A=1"]}}
+        result, calls = self.run_init(service, tasks, *(r.format(old=old, new=new) for r in self.REDEPLOY))
+        self.assert_waited_for_the_new_task(result, calls)
+
+    def test_init_waits_for_the_task_of_a_redeploy_that_changed_only_env(self):
+        # A new POSTGRES_PASSWORD in .env, redeployed under the same tag: the old complete task has
+        # the same image, so an image comparison took it for the current one.
+        image = "reg/datacraft-airflow:2@sha256:same"
+        service = {"Image": image, "Env": ["POSTGRES_PASSWORD=rotated"], "StopGracePeriod": 10000000000}
+        tasks = {"old": {"Image": image, "Env": ["POSTGRES_PASSWORD=before"]},
+                 "new": {"Image": image, "Env": ["POSTGRES_PASSWORD=rotated"]}}
+        result, calls = self.run_init(service, tasks, *(r.format(old=image, new=image) for r in self.REDEPLOY))
+        self.assert_waited_for_the_new_task(result, calls)
+        self.assertNotIn("rotated", " ".join(" ".join(call) for call in calls))
+
     def test_init_times_out_with_diagnostics(self):
         image = "reg/datacraft-airflow:2"
-        result, _ = self.run_script("airflow-init.sh", SERVICE_IMAGE=image, DATACRAFT_INIT_TIMEOUT="0",
-                                    SERVICE_PS=self.ps_responses(f"{image}|Failed 3 seconds ago\n"))
+        result, _ = self.run_init({"Image": image}, {"t1": {"Image": image}}, f"t1|{image}|Failed 3 seconds ago\n",
+                                  DATACRAFT_INIT_TIMEOUT="0")
         self.assertNotEqual(0, result.returncode)
         self.assertIn("docker service logs datacraft_airflow-init", result.stderr)
         self.assertIn("Failed", result.stderr)
 
     def test_init_requires_a_deployed_stack(self):
-        result, calls = self.run_script("airflow-init.sh", SERVICE_IMAGE="", SERVICE_PS="")
+        result, calls = self.run_script("airflow-init.sh", SERVICE_SPEC="", SERVICE_PS="")
         self.assertNotEqual(0, result.returncode)
         self.assertIn("swarm-deploy.sh", result.stderr)
         self.assertFalse(any(call[:2] == ["service", "ps"] for call in calls))

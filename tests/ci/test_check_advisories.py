@@ -5,6 +5,7 @@ No test here reaches the network: OSV's answers are stubbed with the shapes it r
 
 import contextlib
 from email.message import Message
+import fnmatch
 import importlib.util
 import io
 from pathlib import Path
@@ -68,6 +69,8 @@ class PinnedVersionsTests(unittest.TestCase):
             "cicd/airflow/check_security_floor.py": 'FLOORS = {"apache-airflow": "3.3.2", '
                                                     '"apache-airflow-providers-fab": "3.9.0"}\n',
             "cicd/lint/install-shellcheck.sh": "package_version=0.11.0.1\n",
+            "orchestration/airflow/security-overrides.txt": "# Fixed releases.\n\n"
+                                                            "certifi==2026.10.23\nurllib3==2.8.0\n",
             "Makefile": "PYRIGHT ?= npx --yes pyright@1.1.414 --warnings\n",
             ".github/workflows/ci.yml": f"steps:\n  - uses: actions/checkout@{SHA} # v7.0.1\n"
                                         f"  - name: x\n    uses: actions/setup-java@{SHA} # v6.0.1\n"
@@ -90,8 +93,11 @@ class PinnedVersionsTests(unittest.TestCase):
             # the same version.
             ("PyPI", "apache-airflow-core", "3.3.2", "cicd/airflow/install-airflow.sh"),
             ("PyPI", "apache-airflow-providers-fab", "3.9.0", "cicd/airflow/check_security_floor.py"),
+            # Installed over the Airflow constraints, so no constraints file covers them.
+            ("PyPI", "certifi", "2026.10.23", "orchestration/airflow/security-overrides.txt"),
             ("PyPI", "pyspark", "4.2.0", "cicd/airflow/install-airflow.sh"),
             ("PyPI", "shellcheck-py", "0.11.0.1", "cicd/lint/install-shellcheck.sh"),
+            ("PyPI", "urllib3", "2.8.0", "orchestration/airflow/security-overrides.txt"),
             ("npm", "pyright", "1.1.414", "Makefile"),
         ], advisories.pinned(self.tree()))
 
@@ -105,7 +111,8 @@ class PinnedVersionsTests(unittest.TestCase):
             with self.subTest(message=message), self.assertRaisesRegex(ValueError, message):
                 advisories.pinned(self.tree(pom))
         for name in ("cicd/airflow/install-airflow.sh", "cicd/airflow/check_security_floor.py",
-                     "cicd/lint/install-shellcheck.sh", "Makefile", ".github/workflows/ci.yml"):
+                     "cicd/lint/install-shellcheck.sh", "orchestration/airflow/security-overrides.txt",
+                     "Makefile", ".github/workflows/ci.yml"):
             root = self.tree()
             (root / name).write_text("# reworded\n", encoding="utf-8")
             with self.subTest(file=name), self.assertRaisesRegex(ValueError, "no pinned"):
@@ -131,11 +138,31 @@ class PinnedVersionsTests(unittest.TestCase):
         self.assertTrue(used)
         self.assertEqual(used, {name for ecosystem, name in names if ecosystem == "GitHub Actions"})
         for expected in (("PyPI", "apache-airflow"), ("PyPI", "apache-airflow-core"), ("PyPI", "pyspark"),
-                         ("PyPI", "shellcheck-py"),
+                         ("PyPI", "shellcheck-py"), ("PyPI", "certifi"), ("PyPI", "urllib3"),
                          ("PyPI", "apache-airflow-providers-fab"), ("npm", "pyright")):
             self.assertIn(expected, names)
         for _, name, version, _ in found:
             self.assertRegex(version, r"^\d+(\.\d+)*$", name)
+
+    def test_an_indented_override_is_still_asked_about(self):
+        # pip installs an indented requirement line and the security floor reads it; skipping it
+        # here would leave a pin that is installed but never checked.
+        root = self.tree()
+        (root / "orchestration/airflow/security-overrides.txt").write_text(
+            "certifi==2026.10.23\n  urllib3==2.8.0  # proxy TLS\n", encoding="utf-8")
+        self.assertIn(("PyPI", "urllib3", "2.8.0", "orchestration/airflow/security-overrides.txt"),
+                      advisories.pinned(root))
+
+    def test_a_change_to_any_file_that_pins_runs_the_check(self):
+        # A pin changed in a file outside the push filter would wait for the weekly run.
+        workflow = (REPOSITORY / ".github" / "workflows" / "advisories.yml").read_text(encoding="utf-8")
+        push = workflow[workflow.index("\n  push:\n"):workflow.index("\n  workflow_dispatch:")]
+        patterns = re.findall(r"(?m)^      - (\S+)$", push)
+        self.assertTrue(patterns)
+        for source in sorted({source for *_, source in advisories.pinned(REPOSITORY)}):
+            with self.subTest(source=source):
+                self.assertTrue(any(fnmatch.fnmatchcase(source, pattern.replace("**", "*"))
+                                    for pattern in patterns), f"{source} is not in the push paths")
 
     def test_an_action_is_asked_about_by_its_repository_in_lower_case(self):
         # OSV files advisories under owner/repo in lower case and matches the name exactly, so an
@@ -165,7 +192,9 @@ class PinnedVersionsTests(unittest.TestCase):
             status, output = run_main("--list", str(self.tree()))
         self.assertEqual(0, status)
         self.assertIn("Maven: com.github.scopt:scopt_2.13 4.2.0 (pom.xml)", output.splitlines())
-        self.assertEqual(11, len(output.splitlines()))
+        self.assertIn("PyPI: certifi 2026.10.23 (orchestration/airflow/security-overrides.txt)",
+                      output.splitlines())
+        self.assertEqual(13, len(output.splitlines()))
 
 
 class AdvisoryMatchingTests(unittest.TestCase):

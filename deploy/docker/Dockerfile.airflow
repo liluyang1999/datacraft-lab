@@ -31,12 +31,15 @@ ENV PATH="${JAVA_HOME}/bin:${PATH}"
 # --- Python deps: providers + pyspark (spark-submit lives under the pyspark package) ---
 # Before everything that changes with the code (the jar, the bootstrap script, the DAGs), so that
 # a rebuild after a code change reuses this layer instead of downloading the packages again.
-# The base image refuses to run pip as root.
+# The base image refuses to run pip as root. The security overrides come last: the constrained
+# install would otherwise put back the releases they replace (see the file).
 USER airflow
 COPY orchestration/airflow/requirements.txt /tmp/requirements.txt
+COPY orchestration/airflow/security-overrides.txt /tmp/security-overrides.txt
 RUN pip install --no-cache-dir "apache-airflow==${AIRFLOW_VERSION}" -r /tmp/requirements.txt \
       --constraint "https://raw.githubusercontent.com/apache/airflow/constraints-${AIRFLOW_VERSION}/constraints-$(python -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")').txt" \
     && pip install --no-cache-dir "apache-airflow==${AIRFLOW_VERSION}" "pyspark==${SPARK_VERSION}" \
+    && pip install --no-cache-dir "apache-airflow==${AIRFLOW_VERSION}" -r /tmp/security-overrides.txt \
     && pip check
 
 # pyspark ships spark-submit under its package bin/. Resolve that path instead of hardcoding a

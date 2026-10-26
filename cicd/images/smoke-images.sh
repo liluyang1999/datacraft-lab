@@ -135,7 +135,8 @@ spark-submit --version'
 
 # Fresh named volume, mounted in the order Compose may use: API (read-only) first, then an Airflow
 # task under a non-default AIRFLOW_UID through the real entrypoint. The task must be able to write,
-# and the non-root API must read the result but never write.
+# and the non-root API must read the result through a read-only mount. Its user cannot write the
+# directory anyway (airflow:0, mode 0775), so only the mount options show that it is read-only.
 docker volume create "$probe_volume" >/dev/null
 docker run --rm --entrypoint sh -v "$probe_volume:/opt/datacraft/data:ro" datacraft/jvm:latest -c \
   'test -d /opt/datacraft/data'
@@ -143,8 +144,9 @@ docker run --rm --user 1000:0 -v "$probe_volume:/opt/datacraft/data" datacraft/a
   'mkdir -p /opt/datacraft/data/ingest && echo probe > /opt/datacraft/data/ingest/probe && touch /opt/datacraft/data/probe' ||
   fail "An Airflow task with AIRFLOW_UID=1000 cannot write the fresh datacraft-data volume."
 docker run --rm --entrypoint sh -v "$probe_volume:/opt/datacraft/data:ro" datacraft/jvm:latest -c \
-  'test "$(cat /opt/datacraft/data/ingest/probe)" = probe && ! touch /opt/datacraft/data/api-write 2>/dev/null' ||
-  fail "datacraft/jvm cannot read Airflow output, or can write the read-only data volume."
+  'test "$(cat /opt/datacraft/data/ingest/probe)" = probe &&
+  awk '\''$5 == "/opt/datacraft/data" { split($6, options, ","); ro = options[1] == "ro" } END { exit !ro }'\'' /proc/self/mountinfo' ||
+  fail "datacraft/jvm cannot read Airflow output, or its data mount is not read-only."
 
 # The optional spark-submit image, through its entry point and as its non-root user: a conversion
 # and a count inside the data directory, and no output outside it. The last line a job prints is

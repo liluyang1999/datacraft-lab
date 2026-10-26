@@ -46,8 +46,9 @@ below without it have none.
 Spark jobs check their parameters before a SparkSession starts, in this order:
 
 1. Parameter names are case-sensitive. A key that differs from a Spark job parameter only by case
-   fails with "Unknown parameter <key>; did you mean <name>?", for example for `inferschema`,
-   `Schema`, `expectedrows`, `Mode` or `SPARK.MASTER`. Correctly spelled unknown keys are still
+   or by surrounding whitespace fails with "Unknown parameter <key>; did you mean <name>?", for
+   example for `inferschema`, `Schema`, `expectedrows`, `Mode`, `SPARK.MASTER` or `"expectedRows "`
+   (a `--param 'expectedRows =3'` or an HTTP query key `expectedRows+`). Correctly spelled unknown keys are still
    ignored, so one `--config` file can serve several jobs.
 2. The runtime settings. `spark.shufflePartitions` must be a 32-bit integer >= 1
    ("spark.shufflePartitions must be a 32-bit integer >= 1"); without that parameter, a malformed
@@ -248,7 +249,8 @@ Rules for both jobs:
   A value the platform cannot parse as a path fails with "input is not a valid path: <reason>": a
   NUL character anywhere, and on Windows also characters such as `<`, `>`, `"`, `|`, `?` and `*`.
 - Parameter names are case-sensitive: a case variant of a documented name fails, for example
-  "Unknown parameter expectedrows; did you mean expectedRows?". Other unknown keys are ignored.
+  "Unknown parameter expectedrows; did you mean expectedRows?", and so does the name with
+  whitespace around it. Other unknown keys are ignored.
   Messages for malformed or out-of-range `header`, `delimiter`, `expectedRows`, `maxBytes` and
   `expectedSha256` values name the key but never echo the rejected value.
 - A quality-gate mismatch (`expectedRows`, `expectedSha256`) returns FAILED and keeps the metrics.
@@ -367,8 +369,9 @@ SFTP:
 - Remote paths of `RemoteFileTransfer` and `SftpClient` are literal. `*`, `?` and `\` are escaped
   before they reach JSch, so every operation addresses exactly the named entry, never a pattern
   match.
-- `download(remote, Path)` streams into a dot-prefixed sibling `.<name>.<uuid>.part` (hidden on
-  POSIX, an ordinary visible file on Windows while the transfer runs) and atomically moves it onto
+- `download(remote, Path)` streams into a dot-prefixed sibling `.<name>.<uuid>.part`, with at most
+  the first 32 characters of the name so that every name the file system accepts for the target
+  also fits the partial file (hidden on POSIX, an ordinary visible file on Windows while the transfer runs) and atomically moves it onto
   the target only after the transfer completes, creating parent directories as needed. A failure
   leaves an existing target unchanged and no partial file behind. Because the target is replaced by
   a new file, it gets default permissions and ownership, hard links to the old file keep the old

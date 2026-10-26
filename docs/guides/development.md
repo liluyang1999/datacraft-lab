@@ -93,7 +93,8 @@ tests/
 ├── jvm/<artifactId>/scala/       ScalaTest suites (datacraft-spark, datacraft-cli)
 ├── jvm/<artifactId>/resources/   optional test resources of one module
 ├── jvm/resources/                shared: logging.properties, log4j2-test.properties
-├── orchestration/                Airflow DAG contract tests (test_dags.py)
+├── orchestration/                Airflow DAG contract tests (test_dags.py) and the security floor
+│                                 (test_security_floor.py)
 ├── smoke/                        the Airflow runtime smoke test (airflow_runtime_smoke.py)
 ├── deploy/                       deployment script and template tests
 ├── ci/                           tests of the cicd/ scripts and of the workflow structure
@@ -203,7 +204,8 @@ node --test tests/docs/cloud-costs.test.cjs          # the evaluation report's c
 
 `tests/orchestration` imports Airflow. It needs an Airflow 3.3.2 environment with the providers in
 `orchestration/airflow/requirements.txt`, installed under Airflow's constraints file for your
-Python version; [airflow.md](airflow.md) shows the setup, and `cicd/airflow/install-airflow.sh`
+Python version, and the fixed releases of `orchestration/airflow/security-overrides.txt` over
+them; [airflow.md](airflow.md) shows the setup, and `cicd/airflow/install-airflow.sh`
 does the same inside an activated virtual environment (CI runs it on Python 3.13). Then run
 `python -B -m unittest discover -s tests/orchestration -v`, or `make dags`.
 
@@ -214,7 +216,7 @@ steps of the `containers` job and live with the pipeline scripts in `cicd/images
 | --- | --- | --- | --- |
 | `tests/smoke/airflow_runtime_smoke.py --jar <jar>` | The Airflow environment plus `pyspark==4.2.0`, Java 25, Bash | Runs the three DAGs for real against the packaged CLI, local Spark and a temporary local SFTP server, including a GBK file converted with `encoding=GBK`, and then requires a run of the SFTP DAG through a connection that verifies no host key to fail before it downloads anything; all state lives in a temporary directory | `dags`, and inside the Airflow image in `smoke-images.sh` |
 | `cicd/images/smoke-images.sh` | Docker | Builds the images, the optional `datacraft/spark` among them; checks that the JRE is at least 25.0.4.1 and the same in all three runtime images, the API image (no start without a token, health, 401 without the token, non-root user, read-only jar, a Spark job answering 500 FAILED), the Airflow image's dependency and security floors (`cicd/airflow/check_security_floor.py`, run inside the image), the shared data volume's permissions, a conversion and a count inside the Spark image's data directory and the refusal of an output outside it, and the stacks' one-shot initializer under UID 1000; then runs the Airflow smoke test inside the Airflow image | `containers` |
-| `cicd/images/smoke-compose.sh` | Docker, the images, `CI=true` | Starts the Compose stack with fresh secrets, checks the admin login and that the generated API token opens `datacraft-api`, waits for all three image-baked DAGs to be registered, runs the engine DAG through the scheduler, and restores a metadata backup into a separate database; then removes the stack and its volumes. When it fails it prints the task logs first | `containers` |
+| `cicd/images/smoke-compose.sh` | Docker, the images, `CI=true` | Starts the Compose stack with fresh secrets, checks the admin login and that the generated API token opens `datacraft-api`, waits for all three image-baked DAGs to be registered, runs the engine DAG through the scheduler, and restores a metadata backup into a separate database; then removes the stack and its volumes. When it fails it prints the service logs, the task logs and the container states before it removes the stack | `containers` |
 | `cicd/images/smoke-swarm.sh` | Docker outside any swarm, the images, `CI=true` | Rehearses the documented Swarm deployment on a swarm of one node: a loopback registry, both images under an exact tag, `swarm-deploy.sh` and `airflow-init.sh`; requires every service to run (healthy where it has a health check), the engine API to answer its token only and only on the overlay network, the generated admin to sign in through the routing mesh, and the engine DAG to run through Redis and a Celery worker; then deploys a second tag and requires the initializer to run again, the idle worker to stop, the earlier run to survive and the DAG to run again. Leaves the swarm and removes the stack, its volumes, the registry and the names it gave the images, and fails when a volume stays. One node says nothing about placement or failover | `containers` |
 
 The `cicd/images` scripts are meant for disposable CI runners: the first creates and removes the
@@ -301,7 +303,7 @@ cicd/
 | Job | What it runs |
 | --- | --- |
 | `build` | `cicd/build/check-maven-wrapper.sh` (the wrapper refuses a Maven download with the wrong checksum); `./mvnw -B -ntp verify` on JDK 25; `cicd/build/check_test_counts.py` (test-count floors); `cicd/build/check-spark-suite.sh` (`SparkPipelineSpec` ran with no canceled tests); `cicd/build/smoke-cli-jar.sh` (`list-jobs`, `echo`, `noop`, `csv-profile`, `file-checksum`, and a failing row gate that must exit `1`); `cicd/build/check-jar-contents.sh` (Multi-Release manifest, no `module-info.class`, JSch's modern algorithms through `cicd/build/JschAlgorithmsProbe.java`, the Jackson version in `jackson.version`); `cicd/build/check-cli-exit-codes.sh` (exit codes `1` and `2`); `cicd/build/check-image-build.sh` (the Maven command of `Dockerfile.build`, run in a copy of the Docker build context that `cicd/build/docker_context.py` computes from `.dockerignore`). It then shares the verified jar with `dags` |
-| `dags` | After `build`: Python 3.13 and JDK 25; `cicd/airflow/install-airflow.sh` (Airflow 3.3.2 and its providers under the official constraints for the running Python, then `pyspark==4.2.0`); `cicd/airflow/check_security_floor.py` (Airflow 3.3.2 and FAB provider 3.9.0); `tests/orchestration`; `tests/smoke/airflow_runtime_smoke.py` with the verified jar |
+| `dags` | After `build`: Python 3.13 and JDK 25; `cicd/airflow/install-airflow.sh` (Airflow 3.3.2 and its providers under the official constraints for the running Python, then `pyspark==4.2.0`, then the fixed releases of `orchestration/airflow/security-overrides.txt`); `cicd/airflow/check_security_floor.py` (Airflow 3.3.2, FAB provider 3.9.0 and each override release); `tests/orchestration`; `tests/smoke/airflow_runtime_smoke.py` with the verified jar |
 | `scripts` | `cicd/lint/check-actions-pinned.sh` (every `uses:` is `owner/repo@<full commit SHA> # vX.Y.Z` or a local action, on one line, and none appears in a comment); `cicd/lint/install-shellcheck.sh` (ShellCheck 0.11.0); `cicd/lint/check-shell-scripts.sh` (`bash -n` and ShellCheck over every shell script git knows; every finding fails, sourced files are followed); the `tests/deploy`, `tests/ci` and `tests/docs` suites on Python 3.13; `node --test tests/docs/cloud-costs.test.cjs` on Node.js 24; `npx --yes pyright@1.1.414 --warnings` |
 | `compose` | `cicd/stacks/check-stack-files.sh`: `docker compose config` and `docker stack config` with test-only secrets, and that each missing secret, the API token and for the stack the Redis password included, is rejected |
 | `containers` | After `build`, `scripts` and `compose`: `cicd/images/smoke-images.sh`, then `cicd/images/smoke-compose.sh`, then `cicd/images/smoke-swarm.sh` |
@@ -323,7 +325,8 @@ secrets.
 A second workflow, `.github/workflows/advisories.yml`, runs
 `python3 -B cicd/security/check_advisories.py` every Monday, on demand, and on a push that changes a
 file which pins a version. The script collects every pin (the dependencies the root `pom.xml`
-manages, Airflow, pyspark, the FAB provider floor, shellcheck-py, pyright and the actions of the
+manages, Airflow, pyspark, the FAB provider floor, the fixed releases of
+`orchestration/airflow/security-overrides.txt`, shellcheck-py, pyright and the actions of the
 workflows) and asks [OSV](https://osv.dev) about each. It exits `1` and prints one `::error::` line
 per affected pin when a pinned version has an advisory, and `2` when OSV could not be asked, so a
 dead check never looks like a pass. `--list` prints the pins without asking anything. Transitive
@@ -346,9 +349,9 @@ pom's `<modules>`.
 | --- | --- | --- |
 | `datacraft-common` | 7 | 7 |
 | `datacraft-config` | 14 | 14 |
-| `datacraft-io` | 63 | 65 |
+| `datacraft-io` | 64 | 66 |
 | `datacraft-engine` | 34 | 34 |
-| `datacraft-jobs` | 70 | 68 |
+| `datacraft-jobs` | 72 | 70 |
 | `datacraft-spark` | 59 | 49 |
 | `datacraft-api` | 29 | 29 |
 | `datacraft-cli` | 31 | 31 |

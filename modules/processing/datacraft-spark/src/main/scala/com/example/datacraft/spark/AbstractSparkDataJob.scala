@@ -112,13 +112,13 @@ private object AbstractSparkDataJob {
   private val SparkEntryClass = "org.apache.spark.sql.SparkSession"
 
   /**
-   * Fails on a key that matches a known name only when case is ignored, such as `inferschema`,
-   * which would otherwise fall back to the default silently. Other unknown keys still pass, so one
-   * `--config` file can serve several jobs.
+   * Fails on a key that matches a known name only when case and surrounding whitespace are ignored,
+   * such as `inferschema` or `"expectedRows "`, which would otherwise fall back to the default
+   * silently. Other unknown keys still pass, so one `--config` file can serve several jobs.
    */
   private def rejectCaseVariantKeys(parameters: Map[String, String]): Unit =
     parameters.keys.toSeq.sorted.foreach { key =>
-      KnownKeys.find(known => known != key && known.equalsIgnoreCase(key)).foreach { known =>
+      KnownKeys.find(known => known != key && known.equalsIgnoreCase(key.strip)).foreach { known =>
         throw new IllegalArgumentException(s"Unknown parameter $key; did you mean $known?")
       }
     }

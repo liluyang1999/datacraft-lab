@@ -99,14 +99,21 @@ elif args[:2] == ['stack', 'deploy']:
 elif args[:2] == ['service', 'inspect']:
     if 'ContainerSpec.Image' in args[3]:
         print(image(service_of(args[4])))
+    elif args[3] == '{{json .Spec.TaskTemplate.ContainerSpec}}':
+        # As the engine answers: the service carries the stop grace period, its tasks do not.
+        print(json.dumps({'Image': image(service_of(args[4])), 'StopGracePeriod': 10000000000}))
     elif 'PublishedPort' in args[3]:
         print(os.environ['AIRFLOW_PORT'])
     else:
         print(os.environ.get('PUBLISHED_API_PORTS', '0'))
+elif args[:3] == ['inspect', '--type', 'task']:
+    print(json.dumps({'Image': image(args[-1].split('@', 1)[0])}))
 elif args[:2] == ['service', 'ps']:
     service = service_of(args[-1])
     if service == 'airflow-init':
-        print(image(service) + '|Complete 1 second ago')
+        # airflow-init.sh asks for the task ID and reads that task's spec.
+        print(f'{service}@task|Complete 1 second ago' if '{{.ID}}' in ' '.join(args)
+              else image(service) + '|Complete 1 second ago')
     else:
         current = 'Starting' if service == os.environ.get('NEVER_SETTLES') else 'Running'
         print(f'{image(service)}|{current} 5 seconds ago')
@@ -298,6 +305,18 @@ class SwarmRehearsalRunTests(unittest.TestCase):
         result, calls, _ = self.rehearse(CI="true", SWARM_STATE="active")
         self.assert_refused(result, calls, "This Docker engine is already part of a swarm; refusing the rehearsal.")
         self.assertEqual([["info", "--format", "{{.Swarm.LocalNodeState}}"]], calls)
+
+    def test_it_leaves_the_volumes_of_an_earlier_stack_alone(self):
+        # An engine that once ran the real stack keeps its volumes after `docker stack rm`, as the
+        # upgrade steps advise. The rehearsal would deploy onto them and then delete them.
+        (self.root / "stub-state.json").write_text(json.dumps(
+            {"runs": [], "first_tag": None, "volumes": ["datacraft_postgres-db", "datacraft_datacraft-data"]}))
+        result, calls, _ = self.rehearse(CI="true")
+        self.assert_refused(result, calls, "This Docker engine holds volumes of a datacraft stack "
+                                           "(datacraft_postgres-db datacraft_datacraft-data); refusing the rehearsal.")
+        self.assertNotIn(["volume", "rm"], [call[:2] for call in calls])
+        self.assertEqual(2, len(self.volumes_left()))
+        self.assertFalse(self.env_file.exists())
 
     def test_it_needs_the_images_before_it_changes_anything(self):
         result, calls, _ = self.rehearse(CI="true", MISSING_IMAGE="datacraft/jvm:latest")

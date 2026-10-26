@@ -238,6 +238,22 @@ class CsvProfileJobTest {
   }
 
   @Test
+  void rejectsAKnownParameterWithSurroundingWhitespace() throws Exception {
+    // `--param 'expectedRows =3'` and `?expectedRows+=3` arrive with the space kept; ignoring the
+    // key would let a two-row file pass a three-row gate.
+    Path input = write("in.csv", "id\n1\n2\n");
+
+    for (String key : new String[] {"expectedRows ", " expectedRows", "\texpectedrows"}) {
+      IllegalArgumentException error =
+          assertThrows(
+              IllegalArgumentException.class,
+              () -> run(Map.of("input", input.toString(), key, "3")));
+      assertEquals(
+          "Unknown parameter " + key + "; did you mean expectedRows?", error.getMessage(), key);
+    }
+  }
+
+  @Test
   void refusesAFileAboveMaxBytesAndPointsToTheSparkRowCountJob() throws Exception {
     Path input = write("in.csv", "id\n1\n2\n");
     long size = Files.size(input);

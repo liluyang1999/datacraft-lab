@@ -23,12 +23,13 @@ public interface RemoteFileTransfer extends AutoCloseable {
 
   /**
    * Downloads a remote file to a local file path, creating parent directories as needed. The data
-   * is streamed into a dot-prefixed sibling file ({@code .<name>.<uuid>.part}, hidden on POSIX)
-   * that is atomically moved onto the target only after the transfer completes, so a failure leaves
-   * an existing target unchanged and no partial file behind. Because the target is replaced by a
-   * new file, it gets default permissions and ownership rather than keeping those of the file it
-   * replaces, and hard links to the old file keep the old content. A target that is an existing
-   * directory is rejected.
+   * is streamed into a dot-prefixed sibling file ({@code .<name>.<uuid>.part}, hidden on POSIX,
+   * with at most the first 32 characters of the name, so that any name the file system accepts for
+   * the target also fits the partial file) that is atomically moved onto the target only after the
+   * transfer completes, so a failure leaves an existing target unchanged and no partial file
+   * behind. Because the target is replaced by a new file, it gets default permissions and ownership
+   * rather than keeping those of the file it replaces, and hard links to the old file keep the old
+   * content. A target that is an existing directory is rejected.
    */
   default void download(String remotePath, Path localPath) {
     Path target = localPath.toAbsolutePath();
@@ -36,8 +37,15 @@ public interface RemoteFileTransfer extends AutoCloseable {
       throw new DataCraftException("Download target is a directory: " + target);
     }
     LocalFiles.ensureDirectory(target.getParent());
-    Path partial =
-        target.resolveSibling("." + target.getFileName() + "." + UUID.randomUUID() + ".part");
+    String name = target.getFileName().toString();
+    // Code points, not chars: a cut must not split a surrogate pair. 32 of them take at most 128
+    // UTF-8 bytes; with the 43 characters around them the name stays below ext4's and NTFS's 255.
+    String prefix =
+        name.codePoints()
+            .limit(32)
+            .collect(StringBuilder::new, StringBuilder::appendCodePoint, StringBuilder::append)
+            .toString();
+    Path partial = target.resolveSibling("." + prefix + "." + UUID.randomUUID() + ".part");
     try {
       // CREATE_NEW keeps the default (umask) permissions a plain new file would get.
       try (OutputStream output =

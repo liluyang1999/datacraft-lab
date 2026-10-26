@@ -90,6 +90,16 @@ AIRFLOW_PIN_FILES = {
     "deploy/docker/Dockerfile.airflow": ("apache/airflow:",),
     "docs/guides/airflow.md": (),
 }
+# The jar compiles against spark.version, the Airflow image's spark-submit comes from pyspark at
+# SPARK_VERSION, the dags job tests the pyspark of the CI install, and the optional image starts from
+# the apache/spark base that the script and the Dockerfile name.
+SPARK_PINS = {
+    "pom.xml": re.compile(r"<spark\.version>(\d+(?:\.\d+)+)</spark\.version>"),
+    "deploy/docker/Dockerfile.airflow": re.compile(r"^ARG SPARK_VERSION=(\d+(?:\.\d+)+)$", re.M),
+    CI_AIRFLOW_INSTALL: re.compile(r"'pyspark==(\d+(?:\.\d+)+)'"),
+    "deploy/docker/Dockerfile.spark": re.compile(r"^ARG SPARK_IMAGE=apache/spark:(\d+(?:\.\d+)+)-", re.M),
+    "deploy/scripts/build-images.sh": re.compile(r"apache/spark:(\d+(?:\.\d+)+)-"),
+}
 SETUP_PYTHON = re.compile(
     r"^\s*python-version:\s*['\"]?(\d+\.\d+)(?:\.\d+)?['\"]?\s*(?:#.*)?$", re.M)
 CONSTRAINTS_PYTHON = re.compile(r"\bconstraints-\d+(?:\.\d+)+/constraints-(\d+\.\d+)\.txt\b")
@@ -573,6 +583,16 @@ class DocsConsistencyTests(unittest.TestCase):
         versions = {version for pins in found.values() for listed in pins.values()
                     for version in listed}
         self.assertEqual(1, len(versions), f"Airflow pins disagree: {found}")
+
+    def test_spark_pins_agree(self):
+        # A Spark upgrade that missed one of them would build the jar against one Spark and run it
+        # on another, while the dags job and the advisory check looked at a third.
+        found = {}
+        for name, pattern in SPARK_PINS.items():
+            with self.subTest(file=name):
+                found[name] = set(pattern.findall(read(name)))
+                self.assertTrue(found[name], f"{name} pins no Spark version")
+        self.assertEqual(1, len(set().union(*found.values())), f"Spark pins disagree: {found}")
 
     def test_documented_test_floors_are_the_ones_the_check_enforces(self):
         # Two documents print the floors of cicd/build/check_test_counts.py as a table of

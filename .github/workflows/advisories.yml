@@ -18,6 +18,7 @@ on:
       - cicd/lint/install-shellcheck.sh
       - cicd/security/**
       - cicd/step.py
+      - orchestration/airflow/security-overrides.txt
   workflow_dispatch:
 
 permissions:

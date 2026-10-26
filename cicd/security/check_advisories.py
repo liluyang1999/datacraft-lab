@@ -7,9 +7,10 @@ reports when a pinned version turns out to be vulnerable either. This check asks
 - the dependencies the root pom.xml manages (Jackson's BOM stands for jackson-core and
   jackson-databind, the two artifacts the Enforcer already bans by version);
 - apache-airflow and pyspark as cicd/airflow/install-airflow.sh installs them, the FAB provider at
-  the floor of cicd/airflow/check_security_floor.py, and shellcheck-py. apache-airflow is a
-  meta-package that installs apache-airflow-core at its own version, and advisories are filed
-  against either, so the core is asked about as well;
+  the floor of cicd/airflow/check_security_floor.py, the fixed releases that
+  orchestration/airflow/security-overrides.txt installs over the Airflow constraints, and
+  shellcheck-py. apache-airflow is a meta-package that installs apache-airflow-core at its own
+  version, and advisories are filed against either, so the core is asked about as well;
 - pyright, as the Makefile pins it;
 - the GitHub Actions the workflows use, by the release named after each pinned commit and by
   their repository in lower case, which is how OSV files them.
@@ -133,6 +134,9 @@ def pinned(root):
     packages += pins(root, "cicd/airflow/install-airflow.sh", r"'(apache-airflow|pyspark)==([0-9][^']*)'", "PyPI")
     packages += pins(root, "cicd/airflow/check_security_floor.py",
                      r'"(apache-airflow-providers-[a-z-]+)": "([0-9][^"]*)"', "PyPI")
+    # Indented lines too: pip installs them, and check_security_floor.py reads them.
+    packages += pins(root, "orchestration/airflow/security-overrides.txt",
+                     r"^[ \t]*([A-Za-z0-9][A-Za-z0-9._-]*)==([0-9][^\s#]*)", "PyPI")
     packages += pins(root, "cicd/lint/install-shellcheck.sh", r"^package_version=([0-9][0-9.]*)$", "PyPI",
                      name="shellcheck-py")
     packages += pins(root, "Makefile", r"\b(pyright)@([0-9][0-9.]*)", "npm")

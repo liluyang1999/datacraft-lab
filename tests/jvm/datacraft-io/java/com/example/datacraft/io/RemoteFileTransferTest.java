@@ -61,6 +61,18 @@ class RemoteFileTransferTest {
   }
 
   @Test
+  void downloadToANameNearTheFileNameLimitSucceeds() throws IOException {
+    // 220 characters fit the 255 that ext4 (bytes) and NTFS (UTF-16 units) allow for one name.
+    // The partial file added 43 characters to the whole name and could not be created at all.
+    Path target = directory.resolve("d".repeat(216) + ".csv");
+
+    new FakeTransfer("new\n".getBytes(StandardCharsets.UTF_8), false).download("/r/d.csv", target);
+
+    assertEquals("new\n", Files.readString(target));
+    assertEquals(List.of(target.getFileName().toString()), entries());
+  }
+
+  @Test
   void directoryTargetIsRejected() throws IOException {
     Path target = Files.createDirectory(directory.resolve("daily.csv"));
 

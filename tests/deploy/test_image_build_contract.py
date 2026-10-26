@@ -13,11 +13,20 @@ DEPLOY = Path(__file__).resolve().parents[2] / "deploy"
 DOCKERFILES = DEPLOY / "docker"
 RUNTIME_DOCKERFILES = ("Dockerfile.jvm", "Dockerfile.airflow", "Dockerfile.spark")
 
-# Records every docker invocation; `compose version` must succeed for require_docker.
+# Records every docker invocation; `compose version` must succeed for require_docker. With
+# FAILING_PULL set, the first PULL_FAILURES pulls of that image fail, as a registry that drops the
+# connection does.
 DOCKER_STUB = """#!/usr/bin/env python3
 import json, os, sys
 with open(os.environ['CALLS'], 'a') as out: out.write(json.dumps(sys.argv[1:]) + '\\n')
+failing = ['pull', os.environ.get('FAILING_PULL', '')]
+if sys.argv[1:] == failing:
+    with open(os.environ['CALLS']) as calls:
+        pulls = sum(1 for line in calls if json.loads(line) == failing)
+    sys.exit(1 if pulls <= int(os.environ['PULL_FAILURES']) else 0)
 """
+# The retry waits are real sleeps in the script; the tests do not wait for them.
+SLEEP_STUB = "#!/bin/sh\nexit 0\n"
 
 
 def arg_defaults(name):
@@ -34,7 +43,7 @@ def dockerfile(call):
 
 
 class ImageBuildContractTests(unittest.TestCase):
-    def run_build(self, **env):
+    def run_build(self, status=0, **env):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             shutil.copytree(DEPLOY / "scripts", root / "deploy" / "scripts")
@@ -42,6 +51,9 @@ class ImageBuildContractTests(unittest.TestCase):
             stub.parent.mkdir()
             stub.write_text(DOCKER_STUB)
             stub.chmod(0o755)
+            sleep = stub.parent / "sleep"
+            sleep.write_text(SLEEP_STUB)
+            sleep.chmod(0o755)
             calls = root / "calls.jsonl"
             environment = {key: value for key, value in os.environ.items()
                            if key not in ("MAVEN_IMAGE", "JRE_IMAGE", "AIRFLOW_IMAGE", "SPARK_IMAGE",
@@ -49,7 +61,8 @@ class ImageBuildContractTests(unittest.TestCase):
             environment.update(PATH=f"{stub.parent}{os.pathsep}{os.environ['PATH']}", CALLS=str(calls), **env)
             result = subprocess.run(["bash", str(root / "deploy/scripts/build-images.sh")], env=environment,
                                     stdin=subprocess.DEVNULL, capture_output=True, text=True, timeout=60)
-            self.assertEqual(0, result.returncode, result.stderr)
+            self.assertEqual(status, result.returncode, result.stderr)
+            self.stderr = result.stderr
             return [json.loads(line) for line in calls.read_text().splitlines()]
 
     def test_runtime_dockerfiles_have_no_registry_resolvable_builder_default(self):
@@ -92,6 +105,22 @@ class ImageBuildContractTests(unittest.TestCase):
                          {builds["Dockerfile.airflow"]["JRE_IMAGE"], builds["Dockerfile.airflow"]["AIRFLOW_IMAGE"]})
         self.assertNotIn("Dockerfile.spark", builds)
         self.assertIn(["pull", "airflow:test"], calls)
+
+    def test_a_failed_pull_is_retried_before_the_build_goes_on(self):
+        # Docker Hub drops a token request now and then ("failed to fetch anonymous token ... EOF"),
+        # which once stopped a local build that a plain rerun then finished.
+        calls = self.run_build(FAILING_PULL="apache/airflow:3.3.2", PULL_FAILURES="2")
+        self.assertEqual(3, calls.count(["pull", "apache/airflow:3.3.2"]))
+        built = [dockerfile(call) for call in calls if call[:1] == ["build"]]
+        self.assertEqual(["Dockerfile.build", "Dockerfile.jvm", "Dockerfile.airflow"], built)
+        self.assertIn("apache/airflow:3.3.2", self.stderr)
+
+    def test_a_pull_that_keeps_failing_stops_the_build(self):
+        calls = self.run_build(status=1, FAILING_PULL="apache/airflow:3.3.2", PULL_FAILURES="99")
+        self.assertEqual(3, calls.count(["pull", "apache/airflow:3.3.2"]))
+        built = [dockerfile(call) for call in calls if call[:1] == ["build"]]
+        self.assertEqual(["Dockerfile.build", "Dockerfile.jvm"], built)
+        self.assertIn("apache/airflow:3.3.2", self.stderr)
 
     def test_airflow_base_carries_the_fab_security_fixes(self):
         tag = arg_defaults("Dockerfile.airflow")["AIRFLOW_IMAGE"].rsplit(":", 1)[1]
@@ -150,6 +179,27 @@ class ImageBuildContractTests(unittest.TestCase):
                     self.assertRegex(call, r"^apt-get -o Acquire::Retries=[3-9] ")
         jvm = (DOCKERFILES / "Dockerfile.jvm").read_text(encoding="utf-8")
         self.assertEqual(2, len(re.findall(r"apt-get -o Acquire::Retries=", jvm)))
+
+    def test_the_image_and_the_dag_tests_install_the_security_overrides_last(self):
+        # The Airflow 3.3.2 constraints pin certifi and urllib3 releases that advisories published
+        # later affect. The fixed releases go on top of the constrained install, which would
+        # otherwise put the old ones back, and pip check then proves the result is consistent.
+        dockerfile = (DOCKERFILES / "Dockerfile.airflow").read_text(encoding="utf-8")
+        self.assertIn("COPY orchestration/airflow/security-overrides.txt /tmp/security-overrides.txt",
+                      dockerfile)
+        match = re.search(r"(?m)^RUN pip install (?:.*\\\n)*.*$", dockerfile)
+        assert match is not None, "Dockerfile.airflow has no RUN pip install"
+        install = match.group(0)
+        script = (DEPLOY.parent / "cicd" / "airflow" / "install-airflow.sh").read_text(encoding="utf-8")
+        for name, text, overrides in (
+                ("Dockerfile.airflow", install, "-r /tmp/security-overrides.txt"),
+                ("install-airflow.sh", script, "-r orchestration/airflow/security-overrides.txt")):
+            with self.subTest(name):
+                self.assertIn(overrides, text)
+                position = text.index(overrides)
+                self.assertLess(text.rindex("pyspark=="), position)
+                self.assertLess(text.rindex("--constraint"), position)
+                self.assertIn("pip check", text[position:])
 
     def test_a_code_change_does_not_download_the_python_packages_again(self):
         # Docker rebuilds every layer after the first one whose input changed. The jar and the DAGs

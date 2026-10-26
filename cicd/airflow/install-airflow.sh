@@ -2,8 +2,10 @@
 # Installs Airflow, the providers in orchestration/airflow/requirements.txt and pyspark into the
 # current Python environment, pinned the way deploy/docker/Dockerfile.airflow pins the image:
 # apache-airflow==3.3.2 with the official constraints file for this interpreter's Python version,
-# then pyspark==4.2.0 to match the JVM Spark version. PYTHON selects the interpreter (default: the
-# first of python3 and python that runs). Outside a CI runner, run it inside a virtual environment.
+# then pyspark==4.2.0 to match the JVM Spark version, then the fixed releases of
+# orchestration/airflow/security-overrides.txt over the constrained ones. PYTHON selects the
+# interpreter (default: the first of python3 and python that runs). Outside a CI runner, run it
+# inside a virtual environment.
 set -euo pipefail
 # shellcheck source=cicd/lib.sh
 . "$(dirname "$0")/../lib.sh"
@@ -18,4 +20,6 @@ echo "Python $python_minor, constraints $constraints"
   --constraint "$constraints"
 "$python" -m pip check
 "$python" -m pip install 'apache-airflow==3.3.2' 'pyspark==4.2.0'
+"$python" -m pip check
+"$python" -m pip install 'apache-airflow==3.3.2' -r orchestration/airflow/security-overrides.txt
 "$python" -m pip check

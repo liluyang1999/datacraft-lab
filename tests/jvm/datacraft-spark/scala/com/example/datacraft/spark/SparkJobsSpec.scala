@@ -227,14 +227,18 @@ class SparkJobsSpec extends AnyFunSuite {
       )
   }
 
-  test("case variants of documented parameter names fail instead of falling back to defaults") {
+  test(
+    "case and whitespace variants of documented parameter names fail instead of falling back to defaults"
+  ) {
     for (
       (variant, known) <- Seq(
-        "inferschema"  -> "inferSchema",
-        "Schema"       -> "schema",
-        "Encoding"     -> "encoding",
-        "expectedrows" -> "expectedRows",
-        "SPARK.MASTER" -> "spark.master"
+        "inferschema"   -> "inferSchema",
+        "Schema"        -> "schema",
+        "Encoding"      -> "encoding",
+        "expectedrows"  -> "expectedRows",
+        "SPARK.MASTER"  -> "spark.master",
+        "expectedRows " -> "expectedRows",
+        " inferSchema"  -> "inferSchema"
       )
     )
       assertFailsWith(

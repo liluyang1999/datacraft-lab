@@ -103,8 +103,8 @@ Jackson 3 exists as a new major line with new packages, while Spark stays on Jac
 `-release`, the Enforcer requires `[25.0.4.1,)` (the July/August 2026 security fixes; Spark 4.2.0
 deprecates Java 25 releases older than 25.0.3), and every image runs a Java 25 runtime. Pin
 `spark.version` 4.2.0 and `scala.version` 2.13.18 together. Stay on Jackson 2 (`jackson.version`
-2.22.3 through the BOM), and fail the build if `jackson-core` or `jackson-databind` older than
-2.22.3, which four published advisories affect, enters it.
+2.22.4 through the BOM), and fail the build if a `jackson-core` older than 2.22.3 or a
+`jackson-databind` older than 2.22.4, the releases that fix the published advisories, enters it.
 
 **Consequences.**
 
@@ -119,7 +119,8 @@ deprecates Java 25 releases older than 25.0.3), and every image runs a Java 25 r
 - Moving the API's JSON writer to Jackson 3 would not remove Jackson 2, which Spark needs and
   which `spark-submit` loads first anyway (decision 2); it would only add a second JSON library.
   Jackson 3 waits until Spark moves.
-- The Jackson 2 line still receives fixes: 2.22.3 is the fixed release the Enforcer requires.
+- The Jackson 2 line still receives fixes: 2.22.3 (`jackson-core`) and 2.22.4 (`jackson-databind`,
+  CVE-2026-110879) are the fixed releases the Enforcer requires.
 
 ## 5. The unauthenticated API stays safe through binding, Origin check and data confinement
 
@@ -268,8 +269,8 @@ Platform-specific tests carry a `posix-only` or `windows-only` tag, and the OS-a
 
 - Modules contain only production code. The Docker build context excludes `tests/`, so the
   builder image skips test compilation.
-- No module reports skipped or canceled tests on either OS. Linux CI executes 297 of the 304 JVM
-  tests and a Windows build 287.
+- No module reports skipped or canceled tests on either OS. Linux CI executes 310 of the 317 JVM
+  tests and a Windows build 300.
 - The test-count floors exist per platform, so the floor check works on a Windows workstation as
   well as in CI on Linux.
 

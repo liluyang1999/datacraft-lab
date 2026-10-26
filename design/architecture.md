@@ -37,7 +37,8 @@ datacraft-lab/
 │   ├── io/           datacraft-io
 │   ├── processing/   datacraft-jobs (plain JVM), datacraft-spark (Spark)
 │   └── interfaces/   datacraft-api (HTTP), datacraft-cli (process entry point)
-├── orchestration/airflow/             dags/ (with .airflowignore), requirements.txt
+├── orchestration/airflow/             dags/ (with .airflowignore), requirements.txt,
+│                                      security-overrides.txt
 ├── deploy/                            docker/, compose/, swarm/, scripts/
 ├── design/                            architecture and design documents (English)
 ├── docs/                              README, CHANGELOG, guides/, reports/
@@ -146,7 +147,7 @@ same seven jobs.
   names containing `/`, because a name is one path segment of `POST /jobs/{name}/runs`, and the
   CLI refuses to start when a job is named after a control command (`list-jobs`, `serve-api`).
 - **`AbstractSparkDataJob`** (Scala) adapts a Spark computation to `DataJob`: it rejects parameter
-  keys that differ from a known name only by case, derives a `SparkRuntimeConfig` and validates the
+  keys that differ from a known name only by case or surrounding whitespace, derives a `SparkRuntimeConfig` and validates the
   job's parameters before a session starts, owns the session lifecycle (`SparkSessions.withSession`,
   deterministic close), runs the subclass's `runSpark`, and assembles the result and metrics. A
   Spark job is therefore invoked identically from the CLI, the API and Airflow, with no per-caller
@@ -186,7 +187,8 @@ runtime images:
 - `datacraft/jvm`: a Java 25 JRE and the jar; serves the API as uid 10001, with the jar
   root-owned.
 - `datacraft/airflow`: Airflow 3.3.2 with a Java 25 JRE, pyspark 4.2.0 (which provides
-  `spark-submit`), the jar and the DAGs.
+  `spark-submit`), the jar and the DAGs; its Python packages follow the Airflow constraints except
+  for the fixed releases in `orchestration/airflow/security-overrides.txt`.
 - `datacraft/spark` (optional, built only with `BUILD_SPARK_IMAGE=true`): the official Spark 4.2.0
   Java 25 image with its Java replaced by the same freshly pulled Temurin JRE, plus the jar, with
   job paths confined to `/opt/datacraft/data`. No stack or DAG uses it; CI builds it and runs a

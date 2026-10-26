@@ -39,7 +39,8 @@ datacraft-lab/
 │   ├── io/            datacraft-io
 │   ├── processing/    datacraft-jobs (plain JVM), datacraft-spark (Spark)
 │   └── interfaces/    datacraft-api (HTTP), datacraft-cli (process entry point)
-├── orchestration/airflow/           dags/ (with .airflowignore), requirements.txt
+├── orchestration/airflow/           dags/ (with .airflowignore), requirements.txt,
+│                                    security-overrides.txt
 ├── deploy/                          docker/, compose/, swarm/, scripts/
 ├── design/                          architecture and design documents (English)
 ├── docs/                            this page, guides/, reports/, CHANGELOG.md

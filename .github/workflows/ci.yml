@@ -38,7 +38,7 @@ jobs:
       # check-latest: the build enforces a JDK patch floor (pom.xml requireJavaVersion), and the
       # runner's preinstalled Temurin 25 may be older than the newest release.
       - name: Set up JDK 25
-        uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
+        uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0
         with:
           distribution: temurin
           java-version: "25"
@@ -105,12 +105,12 @@ jobs:
       # apache/airflow:3.3.2 runs Python 3.13, so the DAGs are tested on the same version;
       # cicd/airflow/install-airflow.sh picks the official constraints file for it.
       - name: Set up Python
-        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
           python-version: "3.13"
 
       - name: Set up the packaged job runtime
-        uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
+        uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0
         with:
           distribution: temurin
           java-version: "25"
@@ -120,8 +120,9 @@ jobs:
           name: verified-cli
           path: target/runtime
 
-      # Airflow 3.3.2 with the official constraints for this Python, its providers, then pyspark.
-      - name: Install constrained Airflow, providers and the matching Spark runtime
+      # Airflow 3.3.2 with the official constraints for this Python, its providers, then pyspark,
+      # then the fixed releases of orchestration/airflow/security-overrides.txt.
+      - name: Install constrained Airflow, providers, the Spark runtime and the security overrides
         run: bash cicd/airflow/install-airflow.sh
 
       - name: Enforce the Airflow security floor
@@ -148,7 +149,7 @@ jobs:
         run: bash cicd/lint/check-actions-pinned.sh
 
       - name: Set up Python
-        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
           python-version: "3.13"
 

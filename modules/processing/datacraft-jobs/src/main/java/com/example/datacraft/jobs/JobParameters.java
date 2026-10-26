@@ -15,8 +15,9 @@ final class JobParameters {
   private JobParameters() {}
 
   /**
-   * Rejects a key that differs from a known key only by case, so a misspelled quality gate such as
-   * {@code expectedrows} cannot be ignored silently. Other unknown keys (for example {@code
+   * Rejects a key that differs from a known key only by case or by surrounding whitespace, so a
+   * misspelled quality gate such as {@code expectedrows} or {@code "expectedRows "} (from {@code
+   * --param 'expectedRows =3'}) cannot be ignored silently. Other unknown keys (for example {@code
    * spark.master}, which the CLI passes when a Spark master is set explicitly) are allowed.
    */
   static void rejectCaseVariants(Map<String, String> parameters, Set<String> knownKeys) {
@@ -25,7 +26,7 @@ final class JobParameters {
         continue;
       }
       for (String known : knownKeys) {
-        if (known.equalsIgnoreCase(key)) {
+        if (known.equalsIgnoreCase(key.strip())) {
           throw new IllegalArgumentException(
               "Unknown parameter " + key + "; did you mean " + known + "?");
         }

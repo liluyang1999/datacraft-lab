@@ -16,7 +16,9 @@ under `tests/`. Paths below are relative to the repository root.
 | `orchestration/airflow/dags/datacraft_spark_etl.py` | `csv-to-parquet` then `row-count` via `spark-submit`; parameterised paths. |
 | `orchestration/airflow/dags/datacraft_sftp_ingest.py` | SFTP download → `csv-to-parquet` → `row-count`. |
 | `orchestration/airflow/requirements.txt` | Extra providers layered on the Airflow image. |
+| `orchestration/airflow/security-overrides.txt` | Fixed releases installed over the Airflow constraints (see [below](#security-fixes-over-the-constraints)). |
 | `tests/orchestration/test_dags.py` | DAG contract tests: real parsing, template rendering and Bash execution (needs Airflow). |
+| `tests/orchestration/test_security_floor.py` | The security floor covers every override and fails below one. |
 | `tests/smoke/airflow_runtime_smoke.py` | Real DAG runs with the packaged CLI jar, Spark and a temporary local SFTP server. |
 
 Each DAG declares its task order with `chain(...)` from `airflow.sdk`, for example
@@ -117,13 +119,45 @@ The local CSV/Parquet handoff requires shared storage across task instances. The
 configuration pins workers to `DATACRAFT_DATA_NODE` while using local volumes. Configure and verify
 networked storage before removing that placement constraint.
 
+## Security fixes over the constraints
+
+The constraints of Airflow 3.3.2 fix every Python dependency at its release of 2026-09-17, and the
+official `apache/airflow:3.3.2` image is built with them. Advisories published since then affect
+18 of the image's 440 Python packages (OSV, 2026-10-26). Two of them can be reached by this
+deployment and have a fix in a compatible release, so `orchestration/airflow/security-overrides.txt`
+installs the fixed release over the constrained one, in the image (`deploy/docker/Dockerfile.airflow`)
+and in CI (`cicd/airflow/install-airflow.sh`), followed by `pip check`:
+
+| Package | Constrained | Installed | Advisory |
+| --- | --- | --- | --- |
+| certifi | 2026.7.22 | 2026.10.23 | GHSA-6q48-6c7w-9gw2 (critical): the bundle trusts `emSign ECC Root CA - G3`, below which eight intermediate CAs have compromised keys; every outbound TLS connection through requests or httpx trusts them. 2026.10.23 no longer carries that root. |
+| urllib3 | 2.7.0 | 2.8.0 | GHSA-8988-9cw3-xx77 and GHSA-vxq7-64xx-v4gw (high): the TLS settings of an HTTPS proxy can be ignored, and an unbounded chunk-size line is buffered. |
+
+`cicd/airflow/check_security_floor.py` requires each of these releases, in the dags job and inside
+the image, and the weekly advisory check asks OSV about them. Remove a line once the constraints of
+the Airflow version in use pin that release or a newer one. The other advisories wait for the next
+Airflow release, because this deployment does not reach them:
+
+- Windows only: Werkzeug 3.1.8, Mako 1.4.1, setuptools 84.0.0, two of the three filelock
+  advisories and uv's wheel path traversal.
+- Code the deployment does not run: the Google and Snowflake providers, litellm, GitPython (Git DAG
+  bundles), virtualenv and uv (virtual-environment operators, uv's own CA store), tornado (no
+  Airflow module imports it; Flower is not deployed), oauthlib (FAB is configured for password
+  login), opentelemetry-api (tracing is off) and the third filelock advisory (`ReadWriteLock`).
+- aiohttp 3.14.3 and multidict 6.8.0: most advisories concern aiohttp's server, and nothing here
+  runs one (the API server and the worker log server run on uvicorn); the client-side ones need
+  HTTP hooks or triggers, which no DAG uses.
+- PyJWT 2.14.0: both advisories need a remote JWKS client or OKP (EdDSA) keys. Airflow uses those
+  only with `jwt_private_key_path` or `trusted_jwks_url`; the stacks sign task tokens with
+  `AIRFLOW__API_AUTH__JWT_SECRET` instead.
+
 ## Tests (Linux / WSL)
 
 Run these commands from the repository root. Install Airflow with the constraints file for your
 environment's own Python minor version; the commands below derive it the same way
 `deploy/docker/Dockerfile.airflow` does. CI does the same with `cicd/airflow/install-airflow.sh`
 on Python 3.13, the Python of the `apache/airflow:3.3.2` base image; inside an activated virtual
-environment the script installs the providers and pyspark in one step.
+environment the script installs the providers, pyspark and the security overrides in one step.
 
 ```bash
 python -m venv .venv
@@ -131,6 +165,8 @@ source .venv/bin/activate
 python_minor=$(python -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")')
 pip install 'apache-airflow==3.3.2' -r orchestration/airflow/requirements.txt \
   --constraint "https://raw.githubusercontent.com/apache/airflow/constraints-3.3.2/constraints-${python_minor}.txt"
+pip install 'apache-airflow==3.3.2' -r orchestration/airflow/security-overrides.txt
+python -B cicd/airflow/check_security_floor.py
 PYTHONDONTWRITEBYTECODE=1 python -B -m unittest discover -s tests/orchestration -v
 
 # Real DAG execution, packaged CLI, Spark, and a temporary local SFTP server:

@@ -84,7 +84,7 @@ Consequences elsewhere in the build:
 | Java release | `java.version`, used as `maven.compiler.release` | 25 |
 | Scala | `scala.version` (`scala.binary.version` 2.13) | 2.13.18 |
 | Spark (`provided` by default) | `spark.version`, `spark.scope` | 4.2.0 |
-| Jackson BOM | `jackson.version` | 2.22.3 |
+| Jackson BOM | `jackson.version` | 2.22.4 |
 | JSch (mwiede fork) | `jsch.version` | 2.28.8 |
 | scopt | `scopt.version` | 4.2.0 |
 | JUnit Jupiter (test) | `junit.jupiter.version` | 6.1.3 |
@@ -103,7 +103,7 @@ Consequences elsewhere in the build:
 | maven-resources-plugin | 3.5.0 |
 | maven-compiler-plugin | 3.16.0 |
 | scala-maven-plugin | 4.10.0 |
-| maven-surefire-plugin | 3.6.0 |
+| maven-surefire-plugin | 3.6.1 |
 | scalatest-maven-plugin | 2.2.0 |
 | maven-jar-plugin | 3.5.1 |
 | maven-shade-plugin | 3.6.2 |
@@ -121,8 +121,8 @@ The install, deploy and site plugins are pinned because the Enforcer checks plug
 Spark 4.2.0 is built with (2.13.18), and Jackson stays on the 2.x line that Spark uses (decision 4
 in [decisions.md](decisions.md)). One component is deliberately one release behind:
 google-java-format 1.37.0 does not run under Spotless 3.10.4, the newest release, whose formatter
-step fails on the first Java file (checked on 2026-10-09), so it stays at 1.36.1 until a Spotless
-release runs it.
+step fails on the first Java file (checked on 2026-10-09 and again on 2026-10-26), so it stays at
+1.36.1 until a Spotless release runs it.
 
 ## Compiler settings
 
@@ -196,11 +196,15 @@ maven-enforcer-plugin runs two executions, both at `validate`:
      `LATEST`, `RELEASE` and SNAPSHOT versions banned.
    - `banDuplicatePomDependencyVersions` and `requireNoRepositories` (no POM may declare its own
      repositories).
-   - `bannedDependencies`: `jackson-core` and `jackson-databind` older than 2.22.3, which are
-     affected by GHSA-wv8q-qhhj-9h54 (CVE-2026-91776), GHSA-cxp5-3px4-pw24 (CVE-2026-91777),
-     GHSA-p6pp-m3f8-5c89 (CVE-2026-89407) and GHSA-7hhh-6rmp-j9qf (CVE-2026-89425). The two
-     artifacts are named explicitly because `jackson-annotations` is versioned 2.22, without a
-     patch number, which sorts below 2.22.3 and would fall under a group-wide ban.
+   - `bannedDependencies`: `jackson-core` older than 2.22.3, which GHSA-p6pp-m3f8-5c89
+     (CVE-2026-89407) and GHSA-7hhh-6rmp-j9qf (CVE-2026-89425) affect, and `jackson-databind`
+     older than 2.22.4, which GHSA-wv8q-qhhj-9h54 (CVE-2026-91776), GHSA-cxp5-3px4-pw24
+     (CVE-2026-91777) and CVE-2026-110879 affect. The last one is named in jackson-databind's
+     2.22.4 release notes (#6287, type parameters of polymorphic type ids bypassed the
+     `PolymorphicTypeValidator`) and had no GitHub or OSV advisory yet on 2026-10-26, so the
+     advisory check could not have reported it. The two artifacts are named explicitly because
+     `jackson-annotations` is versioned 2.22, without a patch number, which sorts below 2.22.3
+     and would fall under a group-wide ban.
 2. **`enforce-module-boundaries`** (each module POM except `datacraft-cli`): the allow-list of
    project modules and the Spark ban described in
    [Module responsibilities](architecture.md#module-responsibilities).
@@ -211,7 +215,7 @@ maven-enforcer-plugin runs two executions, both at `validate`:
 
 | Modules | Framework | Runner |
 | --- | --- | --- |
-| common, config, io, engine, jobs, api | JUnit Jupiter 6.1.3 | maven-surefire-plugin 3.6.0 |
+| common, config, io, engine, jobs, api | JUnit Jupiter 6.1.3 | maven-surefire-plugin 3.6.1 |
 | spark, cli | ScalaTest 3.2.20 | scalatest-maven-plugin 2.2.0; Surefire skipped in the module POM |
 
 - **Surefire** uses `argLine ${test.jvm.args}`, `excludedGroups ${test.excluded.tags}`,
@@ -294,7 +298,7 @@ tests bind to `slf4j-nop`.
 
 ### Test inventory and floors
 
-The JVM suites have 314 test cases.
+The JVM suites have 317 test cases.
 [`cicd/build/check_test_counts.py`](../cicd/build/check_test_counts.py) reads each module's
 `target/surefire-reports/TEST-*.xml`, counts executed tests (skipped, aborted and canceled ones do
 not count) and fails when a module is below its floor. Floors are minimums: adding tests needs no
@@ -305,13 +309,13 @@ the script's module map matches the POM's `<modules>`.
 | --- | --- | --- | --- |
 | `datacraft-common` | 7 | 7 | none |
 | `datacraft-config` | 14 | 14 | none |
-| `datacraft-io` | 63 | 65 | 7 `windows-only`, 5 `posix-only` |
+| `datacraft-io` | 64 | 66 | 7 `windows-only`, 5 `posix-only` |
 | `datacraft-engine` | 34 | 34 | none |
-| `datacraft-jobs` | 70 | 68 | 2 `posix-only` |
+| `datacraft-jobs` | 72 | 70 | 2 `posix-only` |
 | `datacraft-spark` | 59 | 49 | 10 `posix-only` |
 | `datacraft-api` | 29 | 29 | none |
 | `datacraft-cli` | 31 | 31 | none |
-| Total | 307 | 297 | |
+| Total | 310 | 300 | |
 
 The script keeps a set of floors per platform, because each platform excludes the other's tagged
 tests: `--platform` names the platform that ran the tests and defaults to the one the script runs
@@ -468,7 +472,7 @@ the operator's `build-images.sh`, and nothing under `deploy/` depends on `cicd/`
 The workflow runs on pushes and pull requests to `main` and on demand, with read-only repository
 permissions; a newer run on the same ref cancels the older one. Every job runs on `ubuntu-24.04`,
 and every action is pinned to a full commit SHA with the release in a comment: `checkout` v7.0.1,
-`setup-java` v6.0.1, `setup-python` v7.0.0, `setup-node` v7.1.0, `upload-artifact` v7.0.2 and
+`setup-java` v6.1.0, `setup-python` v7.1.0, `setup-node` v7.1.0, `upload-artifact` v7.0.2 and
 `download-artifact` v8.0.2. The `scripts` job fails on any `uses` that is not written as
 `uses: owner/repo@<40-character SHA> # vX.Y.Z` or does not name a local `./` action
 (`cicd/lint/check-actions-pinned.sh`). The check reads lines, not YAML, so it also fails on
@@ -484,7 +488,7 @@ compose]`, so it does not start while a cheaper gate is failing.
 | Job | What it gates |
 | --- | --- |
 | `build`: Build & verify (JDK 25) | Temurin 25; `cicd/build/check-maven-wrapper.sh`: the wrapper must refuse a Maven download with a wrong SHA-256 (a copy with a zeroed `distributionSha256Sum` and an empty `MAVEN_USER_HOME`), and no `maven-wrapper.jar` may be committed; `./mvnw -B -ntp verify`; the test floors (`cicd/build/check_test_counts.py`); `cicd/build/check-spark-suite.sh`: the Spark suite must have run `SparkPipelineSpec` with `canceled 0`; the jar and exit-code checks and the build-context check below. |
-| `dags`: Airflow contracts and real pipelines (3.3.2) | Python 3.13, the version the `apache/airflow:3.3.2` image runs; `cicd/airflow/install-airflow.sh`: `apache-airflow==3.3.2` and the providers under the official `constraints-3.3.2` file for the running Python (the script derives the version, as `Dockerfile.airflow` does, and a test in `tests/docs` keeps it from being fixed), `pip check`, then pyspark 4.2.0; `cicd/airflow/check_security_floor.py`: apache-airflow 3.3.2 and FAB provider 3.9.0 at least; `tests/orchestration`; `tests/smoke/airflow_runtime_smoke.py` against the jar built by `build`, with pyspark 4.2.0's `spark-submit`. |
+| `dags`: Airflow contracts and real pipelines (3.3.2) | Python 3.13, the version the `apache/airflow:3.3.2` image runs; `cicd/airflow/install-airflow.sh`: `apache-airflow==3.3.2` and the providers under the official `constraints-3.3.2` file for the running Python (the script derives the version, as `Dockerfile.airflow` does, and a test in `tests/docs` keeps it from being fixed), `pip check`, then pyspark 4.2.0, then the fixed releases of `orchestration/airflow/security-overrides.txt` over the constrained ones and `pip check` again; `cicd/airflow/check_security_floor.py`: apache-airflow 3.3.2, FAB provider 3.9.0 and every release of the overrides file at least; `tests/orchestration`; `tests/smoke/airflow_runtime_smoke.py` against the jar built by `build`, with pyspark 4.2.0's `spark-submit`. |
 | `scripts`: Script, documentation and type checks | `cicd/lint/check-actions-pinned.sh`; Python 3.13 and Node 24; `cicd/lint/install-shellcheck.sh`: ShellCheck 0.11.0 from the PyPI package `shellcheck-py`, so the result does not depend on the runner image; `cicd/lint/check-shell-scripts.sh`: `bash -n` and ShellCheck on every `*.sh` git knows (tracked or not yet ignored), with sourced files followed and every finding fatal; `tests/deploy`, `tests/ci` and `tests/docs`; `node --test tests/docs/cloud-costs.test.cjs`; pyright 1.1.414 with `--warnings`. |
 | `compose`: Compose / Swarm file validation | `cicd/stacks/check-stack-files.sh`: `docker compose config` and `docker stack config` with test-only secrets; for each required secret, the API token and for the stack the Redis password included, interpolation must fail when it is missing (for the Compose file's database password, whose placeholder the copied `.env` carries, from a copy of that file without the line). Nothing is built or deployed; the script refuses to run while `deploy/compose/.env` exists, because it writes that file from `.env.example`. |
 | `containers`: Build and smoke-test runtime images | Runs after `build`, `scripts` and `compose`. `cicd/images/smoke-images.sh`: builds the images, the optional `datacraft/spark` among them; the build context must exclude `.env` and `backups/`; the three runtime images carry the freshly pulled Temurin JRE, at least 25.0.4.1; the Spark image converts and counts a file inside its data directory as its non-root user and refuses an output outside it; the API image refuses to start without `DATACRAFT_API_TOKEN`, and with one it answers 401 to a `/jobs` request without or with a wrong token; it runs as non-root, cannot modify its jar and answers `spark-version` with HTTP 500 FAILED; `pip check` and `cicd/airflow/check_security_floor.py` inside the Airflow image; a fresh data volume is writable by an Airflow task and read-only for the API; the one-shot initializer, started as both stacks start it, migrates a database and creates the admin under `AIRFLOW_UID=1000`; the real pipelines inside the image, a GBK file converted with `encoding=GBK` among them, and the SFTP pipeline refused through a connection that verifies no host key. `cicd/images/smoke-compose.sh`: the full Compose stack with generated secrets, the generated API token opening `datacraft-api` on its loopback port, all three image-baked DAGs registered, a triggered `datacraft_engine_jobs` run through the scheduler and LocalExecutor, and a `pg_dump` backup restored into a separate database that must contain the successful run; a failure reports the service logs, the task logs and the container states before the stack is removed. `cicd/images/smoke-swarm.sh`: the Swarm stack on a swarm of one node, deployed from a loopback registry by `swarm-deploy.sh` and `airflow-init.sh`; every long-running service running its current tasks (healthy where it has a health check); `datacraft-api` without a published port, answering its token only on the overlay network; the generated admin signing in through the routing mesh; the data volume writable for a worker and read-only for the API; a `datacraft_engine_jobs` run through Redis and a Celery worker; then an upgrade to a second tag, which must run the initializer again, replace every Airflow task, keep the earlier run and run the DAG again. When it ends it leaves the swarm and removes the stack, its volumes, the registry and the image names it created, and it fails when a volume stays behind. It does not cover more than one node; two nodes were tried once by hand (decision 14). |
@@ -534,7 +538,8 @@ and on a push that changes a file which pins a version:
 
 - It reads the pins from the files that hold them: the dependencies the root POM manages (the
   Jackson BOM stands for `jackson-core` and `jackson-databind`), `apache-airflow` and `pyspark`
-  from `install-airflow.sh`, the FAB provider floor from `check_security_floor.py`, `shellcheck-py`,
+  from `install-airflow.sh`, the FAB provider floor from `check_security_floor.py`, the fixed
+  releases of `orchestration/airflow/security-overrides.txt`, `shellcheck-py`,
   `pyright` from the Makefile, and every action at the release its pinned commit is commented
   with. `apache-airflow` is a meta-package that installs `apache-airflow-core` at its own version,
   and advisories are filed against either, so the core is asked about as well. A file in which

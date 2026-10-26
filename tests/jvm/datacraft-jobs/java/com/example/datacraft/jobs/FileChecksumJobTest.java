@@ -118,6 +118,19 @@ class FileChecksumJobTest {
   }
 
   @Test
+  void rejectsExpectedSha256WithSurroundingWhitespace() throws Exception {
+    Path input = Files.writeString(tempDir.resolve("in.txt"), "datacraft");
+
+    IllegalArgumentException error =
+        assertThrows(
+            IllegalArgumentException.class,
+            () -> run(Map.of("input", input.toString(), "expectedSha256 ", "0".repeat(64))));
+
+    assertEquals(
+        "Unknown parameter expectedSha256 ; did you mean expectedSha256?", error.getMessage());
+  }
+
+  @Test
   void requiresTheInputParameterAndAnExistingRegularFile() throws Exception {
     Path missing = tempDir.resolve("missing.bin");
 

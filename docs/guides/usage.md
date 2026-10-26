@@ -85,8 +85,9 @@ error lines and then the list of options on stderr and exits `2`.
 - `--param key=value` sets one job parameter; repeat it for more. The value is everything after the
   first `=`, may be empty, and is passed verbatim. When a key repeats, the last value wins.
 - Parameter names are case-sensitive. The Spark and plain-JVM jobs reject a key that differs from
-  one of their parameters only by case, for example "Unknown parameter expectedrows; did you mean
-  expectedRows?". Other unknown keys are ignored, so one `--config` file can serve several jobs.
+  one of their parameters only by case or by surrounding whitespace, for example "Unknown parameter
+  expectedrows; did you mean expectedRows?", or the same for `--param 'expectedRows =3'`, whose key
+  keeps its space. Other unknown keys are ignored, so one `--config` file can serve several jobs.
 - `--config <file>` merges a `java.util.Properties` file into the job parameters. The file is read
   as UTF-8 and one leading byte order mark is ignored. Keys are trimmed and must not be blank, and
   two keys that are equal once trimmed (one written with an escaped space, say) are rejected;

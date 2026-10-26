@@ -30,6 +30,11 @@ env_file="$PWD/deploy/compose/.env"
 [[ ! -e "$env_file" && ! -L "$env_file" ]] || fail "Preserving existing .env; refusing the rehearsal."
 [[ "$(docker info --format '{{.Swarm.LocalNodeState}}')" == inactive ]] ||
   fail "This Docker engine is already part of a swarm; refusing the rehearsal."
+# An engine that once ran the real stack keeps its volumes after `docker stack rm`: the rehearsal
+# would deploy onto that database and data, and its teardown would then delete them.
+leftover=$(docker volume ls --quiet --filter "label=com.docker.stack.namespace=datacraft")
+[[ -z "$leftover" ]] ||
+  fail "This Docker engine holds volumes of a datacraft stack (${leftover//$'\n'/ }); refusing the rehearsal."
 for image in airflow jvm; do
   docker image inspect "datacraft/$image:latest" >/dev/null 2>&1 ||
     fail "datacraft/$image:latest is not built; run cicd/images/smoke-images.sh first."
@@ -235,8 +240,8 @@ docker exec "$worker" python -c \
 # shellcheck disable=SC2016
 docker exec "$api" sh -c 'test "$(id -u)" != 0 &&
 test "$(cat /opt/datacraft/data/.swarm-rehearsal)" = probe &&
-! touch /opt/datacraft/data/.api-write 2>/dev/null' ||
-  fail "datacraft-api must run non-root, read what Airflow wrote and not write the data volume."
+awk '\''$5 == "/opt/datacraft/data" { split($6, options, ","); ro = options[1] == "ro" } END { exit !ro }'\'' /proc/self/mountinfo' ||
+  fail "datacraft-api must run non-root, read what Airflow wrote and have a read-only data mount."
 
 # Redis refuses a client that has not authenticated and answers the password of .env, which is the
 # one the scheduler and the worker present in their broker URL.

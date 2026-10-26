@@ -16,7 +16,10 @@ Swarm：CI 在单节点上运行 Swarm 只是为了演练部署步骤。
 
 单台 Linux 主机运行 PostgreSQL 18、Airflow 3.3.2（LocalExecutor、API、调度器、DAG 处理器、触发器）
 与 JVM API；Spark 4.2.0 在 Airflow 容器内本地执行。Airflow 3.3.2 的约束文件把 FAB provider 从 3.8.0
-升到 3.9.0，修复多项安全公告（编号见 [CHANGELOG](../CHANGELOG.md)）。规划起点为 8 GB 内存、
+升到 3.9.0，修复多项安全公告（编号见 [CHANGELOG](../CHANGELOG.md)）。约束文件发布之后又有公告影响它固定的
+certifi 与 urllib3，Airflow 镜像因此在约束安装之后另装
+`orchestration/airflow/security-overrides.txt` 列出的修复版本（certifi 2026.10.23、urllib3 2.8.0）；
+这样选择的理由和其余暂不处理的公告见 [Airflow 指南](airflow.md#security-fixes-over-the-constraints)。规划起点为 8 GB 内存、
 至少 64 GB SSD，同时只运行一个任务。这个容量尚不是用户真实数据的性能结论。
 
 常开优先评估腾讯云国际站的小型月付主机；偶尔运行可评估 OCI A1 按需。Oracle 免费额度、ARM 可用性
@@ -26,8 +29,9 @@ Swarm：CI 在单节点上运行 Swarm 只是为了演练部署步骤。
 需要 Docker Engine、Docker Compose v2（支持 `up --wait`）、Bash 和 Python 3。镜像内包含 Java 25 运行时、
 Spark 和 Airflow；不要求在云主机上额外安装 Maven、JDK 或 Airflow。构建时要能访问 Docker Hub：
 `build-images.sh` 每次先拉取基础镜像（Maven 构建镜像、`eclipse-temurin:25-jre`、`apache/airflow:3.3.2`），
-使重建的镜像带上这些标签当前的 JDK 与系统补丁；`MAVEN_IMAGE`、`JRE_IMAGE`、`AIRFLOW_IMAGE`、
-`SPARK_IMAGE` 可改用其他基础镜像。CI 的 `cicd/images/smoke-images.sh` 检查两个运行镜像的 JRE
+使重建的镜像带上这些标签当前的 JDK 与系统补丁。registry 偶尔会断开一次请求，所以显式拉取的三个基础镜像
+（JRE、Airflow、Spark）每个最多尝试三次，间隔 10 秒和 20 秒，三次都失败才退出；`MAVEN_IMAGE`、`JRE_IMAGE`、
+`AIRFLOW_IMAGE`、`SPARK_IMAGE` 可改用其他基础镜像。CI 的 `cicd/images/smoke-images.sh` 检查两个运行镜像的 JRE
 与新拉取的 `JRE_IMAGE` 一致，且版本不低于 25.0.4.1；可选的 Spark 镜像同样检查。
 
 只用 `bash deploy/scripts/build-images.sh` 构建镜像。`Dockerfile.jvm`、`Dockerfile.airflow`、
@@ -381,9 +385,10 @@ bash deploy/scripts/airflow-init.sh
 `swarm-deploy.sh` 在 `DATACRAFT_TAG` 为空或为 `latest` 时于部署前退出；它用 Compose 文件的生效配置检查
 同一份 `.env`，并以 `--with-registry-auth` 部署，把 manager 的 registry 登录转发给各节点。
 数据库迁移和管理员账号由一次性服务 `datacraft_airflow-init` 完成：失败时间隔 10 秒重试，固定在数据节点；
-它完成前其他 Airflow 服务会退出并由 Swarm 重启。更换镜像的重新部署会再次运行它，迁移可重复执行。
-`airflow-init.sh` 同样在 manager 上执行，只负责等待当前服务配置产生的最新任务变为 Complete：
-默认最长 600 秒（`DATACRAFT_INIT_TIMEOUT`），每 5 秒检查一次（`DATACRAFT_INIT_POLL_SECONDS`）；
+它完成前其他 Airflow 服务会退出并由 Swarm 重启。更换镜像或修改 `.env` 的重新部署都会再次运行它，迁移可重复执行。
+`airflow-init.sh` 同样在 manager 上执行，只负责等待当前服务配置产生的最新任务变为 Complete：它比较任务与服务的
+容器配置（镜像、环境变量等），所以只改了 `.env`、标签不变的重新部署，也要等新任务完成，旧任务不算数（2026-10-26
+之前只比较镜像，这种情况会立即报告完成）。需要 Python 3。默认最长 600 秒（`DATACRAFT_INIT_TIMEOUT`），每 5 秒检查一次（`DATACRAFT_INIT_POLL_SECONDS`）；
 超时时提示用 `docker service ps --no-trunc datacraft_airflow-init` 与
 `docker service logs datacraft_airflow-init` 排查。
 
@@ -431,10 +436,11 @@ Airflow 3.3.2 流程、ShellCheck、Compose/Swarm 解析与缺失密钥拒绝、
 单节点 Swarm 上的部署与升级演练。
 工作流只负责编排，每项检查都是 `cicd/` 下的脚本或 `tests/` 下的测试入口，也可以在本机运行；其中
 `cicd/stacks/check-stack-files.sh` 需要 Docker，并且在 `deploy/compose/.env` 已存在时拒绝运行，以免覆盖真实密钥。
-镜像检查（`cicd/images/smoke-images.sh`）还包括 JRE ≥ 25.0.4.1、Airflow ≥ 3.3.2、FAB ≥ 3.9.0，以及
+镜像检查（`cicd/images/smoke-images.sh`）还包括 JRE ≥ 25.0.4.1、Airflow ≥ 3.3.2、FAB ≥ 3.9.0、
+`security-overrides.txt` 里的 certifi 与 urllib3 版本，以及
 API 镜像没有令牌时拒绝启动、不带令牌的请求得到 401、以非 root 运行、数据挂载只读。
 `cicd/images/smoke-compose.sh` 仅限隔离 CI，会销毁其专用测试项目的数据卷，拒绝覆盖已有 `.env`；它还确认
-生成的令牌能打开 `datacraft-api`、镜像内的三个 DAG 都已注册，失败时先输出任务日志。
+生成的令牌能打开 `datacraft-api`、镜像内的三个 DAG 都已注册；失败时在拆除之前依次输出各服务的日志、任务日志与容器状态。
 `cicd/images/smoke-swarm.sh` 同样仅限隔离 CI：它把当前 Docker 初始化为单节点 Swarm，启动一个只监听回环地址的
 registry，然后完全按第 6 节的步骤操作：以精确标签推送两个镜像，运行 `swarm-deploy.sh` 与 `airflow-init.sh`。
 它要求每个常驻服务都在运行（有健康检查的服务要先变为健康），JVM API 没有发布端口、只在 overlay
@@ -451,7 +457,8 @@ CI 的每个步骤失败时，原因（失败的命令、指出错误的输出�
 
 有 Docker 的机器可以在本地运行容器阶段的四个脚本（`cicd/stacks/check-stack-files.sh` 与
 `cicd/images/` 下的三个），不需要登录任何 registry。它们需要 Linux shell、Docker CLI 与 Compose 插件、
-Python 3 和 curl，并且只在 `CI=true` 时运行：脚本会创建和删除 `.env`、容器与数据卷，Swarm 演练还会把这台
+Python 3 和 curl。Compose 冒烟与 Swarm 演练只在 `CI=true` 时运行，栈文件检查在 `deploy/compose/.env`
+已存在时拒绝运行，镜像冒烟在它的探针文件 `.env` 或 `backups/ci-probe.dump` 已存在时拒绝运行：脚本会创建和删除 `.env`、容器与数据卷，Swarm 演练还会把这台
 Docker 初始化为 Swarm 再退出，所以只在不承载其他部署的 Docker 上运行。Linux 或已启用 Docker 集成的 WSL
 里按 CI 的顺序直接执行：
 
@@ -478,7 +485,7 @@ Selector 的主机上 Spark 套件取消，而 CI 中 Spark 套件出现取消�
 平台相关测试按标签排除，而不是在运行时跳过：按操作系统自动激活的 `windows-host` profile 排除
 `posix-only` 测试（符号链接、文件名含 `?`、需要 winutils 的 Hadoop 本地写入），`posix-host` 排除
 `windows-only` 测试（NTFS junction），因此在 Windows 上运行测试不再需要开发者模式或 winutils。
-全部 314 个测试中，Linux 执行 307 个（7 个 junction 测试只在 Windows 运行），Windows 执行 297 个
+全部 317 个测试中，Linux 执行 310 个（7 个 junction 测试只在 Windows 运行），Windows 执行 300 个
 （17 个 posix-only 测试只在 Linux 等非 Windows 系统运行）。
 
 当前尚未执行真实云部署、ARM 主机测试或多机 Swarm 故障切换；这些边界与“部署资料已准备”分开记录，
