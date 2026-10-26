@@ -14,7 +14,13 @@ open, checks every pin against upstream again, and has three independent reviews
 modules, the Airflow, deployment and CI code, and every document against the code. The reviews
 reported 16 findings; each was checked against the code or reproduced before anything changed,
 and every defect was fixed behind a test that failed first. Two findings are recorded instead of
-changed, with the reason below. Items marked **BREAKING** need action from operators.
+changed, with the reason below. The JVM suite ran on Windows (Oracle JDK 25.0.5.0.3, 300 tests)
+and on Linux (WSL, Temurin 25.0.5+8, 310 tests), the three DAGs ran for real on Linux and inside
+the Airflow image, the container stage ran on the local engine, and the push of the round,
+`00562d8`, passed every job of CI (run 40308165416: 310 JVM tests on Linux, the four images built
+and used on Java 25.0.4.1+1, the Compose stack, the Swarm rehearsal with its upgrade) and the
+advisory workflow (40308165410); what the run verified was read back from its annotations.
+Items marked **BREAKING** need action from operators.
 
 #### Security
 - Jackson 2.22.3 -> 2.22.4. jackson-databind 2.22.4 fixes CVE-2026-110879 (#6287 in its release
