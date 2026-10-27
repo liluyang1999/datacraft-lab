@@ -20,6 +20,8 @@ docs/
 design/
 tests/
 cicd/
+# The desktop console is a separate Maven project that no image contains.
+desktop/
 deploy/compose/.env
 
 # Runtime state, database dumps and env files that .gitignore already excludes: never send them to

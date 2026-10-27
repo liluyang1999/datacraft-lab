@@ -40,8 +40,10 @@ datacraft-lab/
 ├── orchestration/airflow/             dags/ (with .airflowignore), requirements.txt,
 │                                      security-overrides.txt
 ├── deploy/                            docker/, compose/, swarm/, scripts/
+├── desktop/                           数艺工坊, the JavaFX desktop console: a Maven project of its own
+│                                      whose parent is the root POM; not a reactor module
 ├── design/                            architecture and design documents (English)
-├── docs/                              README, CHANGELOG, guides/, reports/
+├── docs/                              README, CHANGELOG, guides/, reports/, desktop/
 └── tests/                             every test
     ├── jvm/<artifactId>/{java,scala}  JVM tests of each module, run by that module's build
     ├── jvm/resources/                 shared logging.properties and log4j2-test.properties
@@ -66,6 +68,9 @@ datacraft-lab/
 - The shaded CLI jar is `modules/interfaces/datacraft-cli/target/datacraft-cli.jar`.
 - `orchestration/airflow` orchestrates the built CLI jar and never re-implements JVM logic.
   `deploy/` holds the Dockerfiles, the Compose and Swarm stacks and the scripts around them.
+- `desktop/` is a client of the engine API and Airflow, not part of the engine: it builds with
+  `./mvnw -f desktop/pom.xml verify`, keeps only settings and caches on the user's machine, and is
+  documented in Chinese under [docs/desktop](../docs/desktop/README.md).
 
 ## Module responsibilities
 

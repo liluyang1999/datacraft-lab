@@ -1,0 +1,64 @@
+/* 数艺工坊 light theme: the colour tokens only. Layout and shapes live in base.css. */
+.root {
+    -dc-bg-top: #EDF2F6;
+    -dc-bg-bottom: #E6EDF3;
+    -dc-surface: #F8FAFC;
+    -dc-surface-hover: #F0F4F8;
+    -dc-surface-selected: #E3EDF6;
+    -dc-input: #FFFFFF;
+    -dc-prompt: #71859A;
+    -dc-text: #1C2C3B;
+    -dc-text-secondary: #566A80;
+    -dc-line: #D3DDE6;
+    -dc-line-strong: #B9C8D6;
+
+    -dc-accent: #2F86C1;
+    -dc-accent-text: #256FA3;
+    -dc-accent-fill-top: #2A78AE;
+    -dc-accent-fill-bottom: #246A9B;
+    -dc-on-accent: #FFFFFF;
+    -dc-focus: rgba(47, 134, 193, 0.45);
+
+    -dc-side-top: #12304A;
+    -dc-side-bottom: #0E4D5E;
+    -dc-side-text: #A8BED2;
+    -dc-side-text-active: #F2F7FB;
+    -dc-side-hover: rgba(255, 255, 255, 0.06);
+    -dc-side-mark: #5DB2E6;
+    -dc-side-line: rgba(255, 255, 255, 0.10);
+
+    -dc-success: #2A9D8F;
+    -dc-running: #2F86C1;
+    -dc-waiting: #8FA3B8;
+    -dc-failed: #C8506A;
+    -dc-warning: #C99A3C;
+    -dc-none: #C3CFDA;
+    -dc-success-text: #1F7A6F;
+    -dc-failed-text: #A33E56;
+    -dc-warning-text: #8C6A1E;
+    -dc-failed-wash: #F8E9EC;
+    -dc-warning-wash: #F7F0E1;
+
+    -dc-shadow: rgba(14, 42, 64, 0.18);
+    -dc-scrim: rgba(18, 48, 74, 0.10);
+
+    /* Modena's own variables, so stock controls and popups follow the theme. */
+    -fx-base: #F8FAFC;
+    -fx-background: #EDF2F6;
+    -fx-control-inner-background: #FFFFFF;
+    -fx-control-inner-background-alt: #FFFFFF;
+    -fx-accent: #2F86C1;
+    -fx-default-button: #2A78AE;
+    -fx-focus-color: #2F86C1;
+    -fx-faint-focus-color: rgba(47, 134, 193, 0.18);
+    -fx-selection-bar: #E3EDF6;
+    -fx-selection-bar-non-focused: #E3EDF6;
+    -fx-selection-bar-text: #1C2C3B;
+    -fx-text-base-color: #1C2C3B;
+    -fx-text-background-color: #1C2C3B;
+    -fx-text-inner-color: #1C2C3B;
+    -fx-mark-color: #566A80;
+    -fx-box-border: #D3DDE6;
+    -fx-text-box-border: #C9D5E0;
+    -fx-prompt-text-fill: #71859A;
+}

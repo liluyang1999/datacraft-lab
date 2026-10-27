@@ -1,0 +1,67 @@
+/*
+ * 数艺工坊 dark theme: a blue-tinted night, not near-black with one neon accent. Both theme files
+ * are always loaded; these tokens apply while the scene root carries the "dark" style class, so a
+ * theme switch changes one class instead of the scene's stylesheet list.
+ */
+.root.dark {
+    -dc-bg-top: #0E1822;
+    -dc-bg-bottom: #0B141C;
+    -dc-surface: #15232F;
+    -dc-surface-hover: #1A2B39;
+    -dc-surface-selected: #1C3346;
+    -dc-input: #101D28;
+    -dc-prompt: #7F94A6;
+    -dc-text: #DCE6EE;
+    -dc-text-secondary: #8EA2B4;
+    -dc-line: #24384A;
+    -dc-line-strong: #31485C;
+
+    -dc-accent: #5DB2E6;
+    -dc-accent-text: #6DBDEC;
+    -dc-accent-fill-top: #63B6E8;
+    -dc-accent-fill-bottom: #4FA3D6;
+    -dc-on-accent: #0B141C;
+    -dc-focus: rgba(93, 178, 230, 0.50);
+
+    -dc-side-top: #0A1F30;
+    -dc-side-bottom: #08303A;
+    -dc-side-text: #8FA8BD;
+    -dc-side-text-active: #EAF2F8;
+    -dc-side-hover: rgba(255, 255, 255, 0.05);
+    -dc-side-mark: #5DB2E6;
+    -dc-side-line: rgba(255, 255, 255, 0.08);
+
+    -dc-success: #4CC2B2;
+    -dc-running: #5DB2E6;
+    -dc-waiting: #7F93A8;
+    -dc-failed: #E67A90;
+    -dc-warning: #E0B860;
+    -dc-none: #3A4B5A;
+    -dc-success-text: #5FD0C0;
+    -dc-failed-text: #F08FA3;
+    -dc-warning-text: #E8C57A;
+    -dc-failed-wash: #2C1E27;
+    -dc-warning-wash: #2B261A;
+
+    -dc-shadow: rgba(0, 0, 0, 0.40);
+    -dc-scrim: rgba(4, 10, 16, 0.35);
+
+    -fx-base: #15232F;
+    -fx-background: #0E1822;
+    -fx-control-inner-background: #101D28;
+    -fx-control-inner-background-alt: #101D28;
+    -fx-accent: #5DB2E6;
+    -fx-default-button: #5DB2E6;
+    -fx-focus-color: #5DB2E6;
+    -fx-faint-focus-color: rgba(93, 178, 230, 0.18);
+    -fx-selection-bar: #1C3346;
+    -fx-selection-bar-non-focused: #1C3346;
+    -fx-selection-bar-text: #DCE6EE;
+    -fx-text-base-color: #DCE6EE;
+    -fx-text-background-color: #DCE6EE;
+    -fx-text-inner-color: #DCE6EE;
+    -fx-mark-color: #8EA2B4;
+    -fx-box-border: #24384A;
+    -fx-text-box-border: #2A4054;
+    -fx-prompt-text-fill: #7F94A6;
+}

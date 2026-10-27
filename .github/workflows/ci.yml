@@ -182,6 +182,48 @@ jobs:
       - name: Python type check (pyright, zero diagnostics)
         run: npx --yes pyright@1.1.414 --warnings
 
+  desktop:
+    # 数艺工坊, the JavaFX desktop console: a Maven project of its own (desktop/pom.xml) that no
+    # other job builds. JavaFX needs a display, which xvfb-run provides on the runner.
+    name: Desktop console (JavaFX 25)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Set up JDK 25
+        uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0
+        with:
+          distribution: temurin
+          java-version: "25"
+          check-latest: true
+          cache: maven
+
+      # Format, Checkstyle, Enforcer, unit, client, store and UI tests (every view in both themes,
+      # no JavaFX warning, no stalled FX thread once warm), then the jar.
+      - name: Verify the desktop console on a virtual display
+        run: xvfb-run --auto-servernum ./mvnw -B -ntp -f desktop/pom.xml verify
+
+      # jlink, jpackage, an AOT cache trained by one smoke start, then a second start with it.
+      - name: Package the app image and check that it starts
+        run: xvfb-run --auto-servernum python3 -B cicd/desktop/package_desktop.py
+
+      - name: Upload the UI snapshots
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: desktop-ui-snapshots
+          path: desktop/target/ui-snapshots
+          if-no-files-found: ignore
+
+      - name: Upload test reports
+        if: failure()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: surefire-reports-desktop
+          path: desktop/target/surefire-reports/**
+          if-no-files-found: ignore
+
   compose:
     # Validates the deployment topology definitions only. Nothing is built or deployed.
     name: Compose / Swarm file validation

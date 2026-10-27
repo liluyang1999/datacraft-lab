@@ -6,6 +6,50 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### 数艺工坊: a JavaFX 25 desktop console for the engine API and Airflow (2026-10-27)
+
+A desktop control panel and monitor in `desktop/`, a Maven project of its own whose parent is the
+root POM (its conventions apply: Java floor, Enforcer, Spotless, Checkstyle, zero warnings) but
+which is not a reactor module, so the backend build, its jar and its images are unchanged. It is a
+client only: it adds no backend endpoint and keeps no business data. The documents, in Chinese,
+are in `docs/desktop/` (scope, architecture, UI design, backend integration, performance, tests,
+and the plan and log of its build loops).
+
+#### Added
+- **The app** (JavaFX 25.0.5 on Java 25): an overview of both backends with every DAG's run ribbon
+  and the newest runs; the engine's jobs with a parameter form for the known parameters of every
+  built-in job (`job-catalog.json`), presets, running and stopping the wait, results and metrics;
+  the DAGs with pause and resume, runs, task instances, triggering with a form or JSON, and task
+  logs read in parts; an activity record; connection profiles, light, dark or system theme,
+  reduced motion and refresh settings. Keyboard: Ctrl+1 to Ctrl+5, Ctrl+R, Esc.
+- **Local data** only under `~/.datacraft` (`DATACRAFT_DESKTOP_HOME` moves it): SQLite through
+  sqlite-jdbc 3.53.4.0 with versioned migrations (settings, profiles, presets, and bounded caches
+  of recent runs and activity), logs, and a folder for the JDK's pipe sockets. The engine token and
+  the Airflow password are sealed with Windows DPAPI for the current user, elsewhere with AES-GCM and
+  a key file only the user can read, or kept in memory for one run only.
+- **Backend integration**: the engine API's status contract (results on 200 and 500, 401, 403, 404,
+  503 busy, 400) with the token sent on `/jobs` only and no `Origin` header; Airflow 3.3.2's REST
+  API v2 with a JWT from `POST /auth/token`, renewed before it expires and once more after a 401.
+  Polling only for what is on screen, one request in flight per kind, back-off to 30 s, results
+  applied in place so tables keep their selection and scroll position.
+- **Packaging**: `cicd/desktop/package_desktop.py` builds a self-contained app image (jdeps, jlink,
+  jpackage) and trains a JDK 25 AOT cache with one `--smoke` start; the image reaches its first
+  frame in about 1.1–1.3 s on the development machine (1.7 s without the cache).
+- **CI**: a `desktop` job verifies the project under `xvfb-run`, packages and starts the app image,
+  and keeps the UI snapshots as an artifact.
+- **Tests** (`tests/jvm/datacraft-desktop`, 76): clients against an in-process stub server, the
+  store and the vaults, services with a manual clock, view models with a test-driven UI queue, and
+  the whole window against scripted backends in both themes (no JavaFX warning, no FX-thread stall
+  over 50 ms once warm, theme switches within 100 ms, a 1500-line log scrolling smoothly, the
+  window restored after a restart). End-to-end tests (`-Pe2e`) against a real `serve-api` and a
+  local Compose deployment passed: jobs run, a triggered `datacraft_engine_jobs` followed to
+  success with its tasks and logs, pause and resume confirmed by Airflow. The packaging script's
+  own logic is tested in `tests/ci/test_package_desktop.py`.
+
+#### Changed
+- `.dockerignore` excludes `desktop/`; `.gitattributes` marks `*.ttf` binary (the bundled Barlow
+  fonts, SIL OFL).
+
 ### Java 25.0.5 everywhere: a pinned Temurin release (2026-10-27)
 
 The last version defect of the previous round: the October 2026 security update of Java was in the

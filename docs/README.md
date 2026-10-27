@@ -18,6 +18,9 @@ whether it is started from the command line, through the JSON HTTP API, or by an
   `DATACRAFT_DATA_NODE`, because its volumes are node-local.
 - **Build**: Java 25 bytecode, a pinned Maven Wrapper, and one `verify` gate covering formatting,
   Checkstyle, dependency rules, tests and packaging; any javac or scalac warning fails the build.
+- **Desktop**: 数艺工坊, a JavaFX 25 control panel and monitor for the engine API and Airflow. It
+  keeps only its settings and caches, in SQLite under `~/.datacraft`; see
+  [the desktop documents](desktop/README.md).
 
 GitHub shows this file as the repository page because the repository root has no README. Links
 below are relative to `docs/`.
@@ -42,10 +45,12 @@ datacraft-lab/
 ├── orchestration/airflow/           dags/ (with .airflowignore), requirements.txt,
 │                                    security-overrides.txt
 ├── deploy/                          docker/, compose/, swarm/, scripts/
+├── desktop/                         数艺工坊, the JavaFX desktop console (a Maven project of its own)
 ├── design/                          architecture and design documents (English)
-├── docs/                            this page, guides/, reports/, CHANGELOG.md
+├── docs/                            this page, guides/, reports/, desktop/, CHANGELOG.md
 └── tests/                           all tests, kept outside the modules
     ├── jvm/<artifactId>/{java,scala}   JVM tests, compiled and run by that module's build
+    │                                   (jvm/datacraft-desktop/ by the desktop project's)
     ├── jvm/resources/                  shared JVM test resources (logging configuration)
     ├── orchestration/                  Airflow DAG contract tests (need Airflow)
     ├── smoke/                          the Airflow runtime smoke test
@@ -120,6 +125,7 @@ Swarm, is in Chinese: [guides/deployment.md](guides/deployment.md).
 | [guides/development.md](guides/development.md) | English | Prerequisites, build and test commands, test layout, CI and the `cicd/` scripts |
 | [guides/airflow.md](guides/airflow.md) | English | DAGs, Airflow configuration, SFTP connection, Airflow tests |
 | [guides/deployment.md](guides/deployment.md) | Chinese | Compose and Swarm deployment tutorial and operations |
+| [desktop/README.md](desktop/README.md) | Chinese | 数艺工坊 desktop console: scope, architecture, UI design, backend integration, performance, tests, loop plan and log |
 | [reports/evaluation-report.html](reports/evaluation-report.html) | Chinese | Consolidated evaluation report: architecture, quality evidence, security, the cloud platform decision with its cost model and calculator, scores and risks |
 | [reports/pricing-evidence.md](reports/pricing-evidence.md) | Chinese | Sources and calculations behind the cloud prices |
 | [CHANGELOG.md](CHANGELOG.md) | English | Change history |

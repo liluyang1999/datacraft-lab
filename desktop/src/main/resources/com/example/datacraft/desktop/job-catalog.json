@@ -1,0 +1,102 @@
+{
+  "jobs": [
+    {
+      "name": "csv-profile",
+      "summary": "在 JVM 中统计一个 UTF-8 CSV 文件：行数、列数、字节数与 SHA-256",
+      "params": [
+        { "key": "input", "required": true, "hint": "CSV 文件在服务端的路径，位于数据根目录下" },
+        { "key": "header", "default": "true", "choices": ["true", "false"], "hint": "首行是否为表头" },
+        { "key": "delimiter", "default": ",", "hint": "分隔符，一个字符" },
+        { "key": "expectedRows", "hint": "期望的数据行数，不一致时运行失败" },
+        { "key": "maxBytes", "default": "67108864", "hint": "允许读取的最大字节数，更大的文件用 row-count" }
+      ]
+    },
+    {
+      "name": "file-checksum",
+      "summary": "计算一个文件的 SHA-256 与大小",
+      "params": [
+        { "key": "input", "required": true, "hint": "文件在服务端的路径，位于数据根目录下" },
+        { "key": "expectedSha256", "hint": "期望的 SHA-256（64 位十六进制），不一致时运行失败" }
+      ]
+    },
+    {
+      "name": "csv-to-parquet",
+      "summary": "用 Spark 把 CSV 数据集转换为 Parquet",
+      "params": [
+        { "key": "input", "required": true, "hint": "CSV 文件或目录" },
+        { "key": "output", "required": true, "hint": "Parquet 输出目录" },
+        { "key": "mode", "default": "overwrite", "choices": ["overwrite", "append", "ignore", "error", "errorifexists"], "hint": "输出已存在时的处理方式" },
+        { "key": "header", "default": "true", "choices": ["true", "false"], "hint": "首行是否为表头" },
+        { "key": "delimiter", "default": ",", "hint": "分隔符" },
+        { "key": "schema", "hint": "DDL 形式的结构，例如 id STRING, amount DECIMAL(22,4)" },
+        { "key": "inferSchema", "default": "true", "choices": ["true", "false"], "hint": "没有给出结构时是否推断类型" },
+        { "key": "multiLine", "default": "true", "choices": ["true", "false"], "hint": "引号内的字段可以跨行" },
+        { "key": "escape", "default": "\"", "hint": "引号内的转义字符" },
+        { "key": "encoding", "default": "UTF-8", "hint": "文件字符集，例如 UTF-8、GBK" }
+      ]
+    },
+    {
+      "name": "row-count",
+      "summary": "用 Spark 统计数据集的行数",
+      "params": [
+        { "key": "input", "required": true, "hint": "数据集路径" },
+        { "key": "inputFormat", "default": "parquet", "choices": ["parquet", "csv", "json", "orc"], "hint": "数据集格式" },
+        { "key": "expectedRows", "hint": "期望的行数，不一致时运行失败" },
+        { "key": "schema", "hint": "CSV 与 JSON 的 DDL 结构，可不填" }
+      ]
+    },
+    {
+      "name": "spark-version",
+      "summary": "报告正在使用的 Spark 版本",
+      "params": []
+    },
+    {
+      "name": "echo",
+      "summary": "原样返回 message 参数",
+      "params": [
+        { "key": "message", "hint": "要返回的文字" }
+      ]
+    },
+    {
+      "name": "noop",
+      "summary": "什么也不做，立即成功",
+      "params": []
+    }
+  ],
+  "dags": [
+    {
+      "name": "datacraft_engine_jobs",
+      "summary": "依次运行引擎的内置作业",
+      "params": []
+    },
+    {
+      "name": "datacraft_spark_etl",
+      "summary": "把 CSV 转换为 Parquet 并核对行数",
+      "params": [
+        { "key": "input", "default": "/opt/datacraft/data/input.csv", "hint": "要转换的 CSV 文件，位于数据根目录下" },
+        { "key": "output", "default": "/opt/datacraft/data/output.parquet", "hint": "要覆盖写入的 Parquet 目录" },
+        { "key": "header", "default": "true", "choices": ["true", "false"], "hint": "首行是否为表头" },
+        { "key": "delimiter", "default": ",", "hint": "分隔符" },
+        { "key": "schema", "default": "", "hint": "DDL 形式的结构，可不填" },
+        { "key": "inferSchema", "default": "true", "choices": ["true", "false"], "hint": "没有给出结构时是否推断类型" },
+        { "key": "multiLine", "default": "true", "choices": ["true", "false"], "hint": "引号内的字段可以跨行" },
+        { "key": "encoding", "default": "UTF-8", "hint": "文件字符集，例如 UTF-8、GBK" }
+      ]
+    },
+    {
+      "name": "datacraft_sftp_ingest",
+      "summary": "经 SFTP 下载 CSV，转换为 Parquet 并核对行数",
+      "params": [
+        { "key": "remote_path", "default": "/upload/input.csv", "hint": "SFTP 服务器上的文件" },
+        { "key": "local_path", "default": "/opt/datacraft/data/ingest/input.csv", "hint": "下载到的位置，位于数据根目录下" },
+        { "key": "output", "default": "/opt/datacraft/data/ingest/output.parquet", "hint": "要覆盖写入的 Parquet 目录" },
+        { "key": "header", "default": "true", "choices": ["true", "false"], "hint": "首行是否为表头" },
+        { "key": "delimiter", "default": ",", "hint": "分隔符" },
+        { "key": "schema", "default": "", "hint": "DDL 形式的结构，可不填" },
+        { "key": "inferSchema", "default": "true", "choices": ["true", "false"], "hint": "没有给出结构时是否推断类型" },
+        { "key": "multiLine", "default": "true", "choices": ["true", "false"], "hint": "引号内的字段可以跨行" },
+        { "key": "encoding", "default": "UTF-8", "hint": "文件字符集，例如 UTF-8、GBK" }
+      ]
+    }
+  ]
+}
