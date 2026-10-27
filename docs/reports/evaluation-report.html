@@ -301,23 +301,23 @@
 <div class="page" lang="zh-CN">
 
 <header class="masthead">
-  <p class="eyebrow">datacraft-lab · Evaluation report v4.4</p>
+  <p class="eyebrow">datacraft-lab · Evaluation report v4.5</p>
   <h1>datacraft-lab 综合评估报告</h1>
-  <p class="lede">个人 JVM 数据处理平台的综合评估：技术架构与模块职责、质量与验证证据、安全边界、东京与新加坡两地的云平台抉择与成本模型，以及残余风险。</p>
+  <p class="lede">个人 JVM 数据处理平台的综合评估：技术架构与模块职责、桌面控制台、质量与验证证据、安全边界、东京与新加坡两地的云平台抉择与成本模型，以及残余风险。</p>
   <dl class="facts">
-    <div><dt>日期</dt><dd>2026-10-26</dd></div>
+    <div><dt>日期</dt><dd>2026-10-27</dd></div>
     <div><dt>分支</dt><dd><code>main</code></dd></div>
     <div><dt>作者</dt><dd>Luyang Li</dd></div>
-    <div><dt>技术栈</dt><dd>Java 25 · Scala 2.13.18 · Spark 4.2.0 · Airflow 3.3.2 · Docker Compose / Swarm</dd></div>
+    <div><dt>技术栈</dt><dd>Java 25 · Scala 2.13.18 · Spark 4.2.0 · Airflow 3.3.2 · Docker Compose / Swarm · JavaFX 25</dd></div>
     <div><dt>价格快照</dt><dd>2026-09-19</dd></div>
   </dl>
   <dl class="kpis">
     <div class="kpi"><dt>Maven 模块</dt><dd class="v">8</dd><dd class="d">4 个职责分组，依赖范围由构建强制</dd></div>
     <div class="kpi"><dt>可调度作业</dt><dd class="v">7</dd><dd class="d">纯 JVM 2 · Spark 3 · 内置 2</dd></div>
-    <div class="kpi"><dt>JVM 测试用例</dt><dd class="v">317</dd><dd class="d">Linux 执行 310 · Windows 执行 300 · 0 跳过</dd></div>
-    <div class="kpi"><dt>Python 与 Node 测试</dt><dd class="v">216</dd><dd class="d">部署 68 · CI/CD 105 · 文档 16 · DAG 21 · 计算器 6</dd></div>
-    <div class="kpi"><dt>构建与检查警告</dt><dd class="v">0</dd><dd class="d">JDK 25.0.5 全量构建（Windows 与 Linux）；pyright、ShellCheck 0 问题</dd></div>
-    <div class="kpi"><dt>综合评分</dt><dd class="v">4.4<small>/ 5</small></dd><dd class="d">2026-09-25 审计前为 3.2，上一版同为 4.4</dd></div>
+    <div class="kpi"><dt>JVM 测试用例</dt><dd class="v">404</dd><dd class="d">后端 317 · 桌面 87；Linux 执行 386 · Windows 执行 376 · 0 跳过</dd></div>
+    <div class="kpi"><dt>Python 与 Node 测试</dt><dd class="v">242</dd><dd class="d">部署 70 · CI/CD 129 · 文档 16 · DAG 21 · 计算器 6</dd></div>
+    <div class="kpi"><dt>构建与检查警告</dt><dd class="v">0</dd><dd class="d">后端与桌面在 JDK 25.0.5 上构建；pyright、ShellCheck 0 问题</dd></div>
+    <div class="kpi"><dt>综合评分</dt><dd class="v">4.4<small>/ 5</small></dd><dd class="d">13 个维度，新增桌面控制台；2026-09-25 审计前为 3.2</dd></div>
     <div class="kpi"><dt>常开月费</dt><dd class="v">$10.15</dd><dd class="d">腾讯云 Lighthouse 2 核 / 8 GB / 80 GB</dd></div>
     <div class="kpi"><dt>按需月费（60 小时）</dt><dd class="v">$4.79</dd><dd class="d">Oracle OCI A1 2 OCPU / 8 GB</dd></div>
   </dl>
@@ -335,13 +335,14 @@
     <li><a href="#scores">七、分维度评分</a></li>
     <li><a href="#risks">八、残余风险与路线图</a></li>
     <li><a href="#appendix-risks">附录 A 本轮明细</a></li>
-    <li><a href="#appendix-1010">附录 B 10-10 明细</a></li>
-    <li><a href="#appendix-1009">附录 C 10-09 明细</a></li>
-    <li><a href="#appendix-fix">附录 D 10-07 CI 修复</a></li>
-    <li><a href="#appendix-round">附录 E 09-26 目录重组</a></li>
-    <li><a href="#appendix-audit">附录 F 09-25 审计</a></li>
-    <li><a href="#appendix-history">附录 G 演进历程</a></li>
-    <li><a href="#appendix-index">附录 H 文档索引</a></li>
+    <li><a href="#appendix-1026">附录 B 10-26 明细</a></li>
+    <li><a href="#appendix-1010">附录 C 10-10 明细</a></li>
+    <li><a href="#appendix-1009">附录 D 10-09 明细</a></li>
+    <li><a href="#appendix-fix">附录 E 10-07 CI 修复</a></li>
+    <li><a href="#appendix-round">附录 F 09-26 目录重组</a></li>
+    <li><a href="#appendix-audit">附录 G 09-25 审计</a></li>
+    <li><a href="#appendix-history">附录 H 演进历程</a></li>
+    <li><a href="#appendix-index">附录 I 文档索引</a></li>
   </ol>
 </nav>
 
@@ -349,14 +350,15 @@
 
 <section id="summary" aria-labelledby="h-summary">
   <h2 id="h-summary">一、执行摘要</h2>
-  <p><strong>总体结论：</strong>datacraft-lab 已达到“个人单机数据处理平台可以放心使用和部署”的水平。CLI、HTTP API 与 Airflow 共用同一个 <code>DataJob</code> 契约和执行引擎，失败语义统一；8 个 Maven 模块按职责分为 core、io、processing、interfaces 四组，越界依赖在构建的 <code>validate</code> 阶段即失败；质量门禁不允许任何编译、类型检查或 Shell 检查警告，CI/CD 逻辑集中在 <code>cicd/</code>，可以脱离 GitHub Actions 在本机复现；流水线每一步失败的原因都会写成公开注解，不需要仓库权限就能读到；Compose 栈与 Swarm 栈都在 CI 上真实部署，本轮起容器阶段也在本机完整运行过。</p>
+  <p><strong>总体结论：</strong>datacraft-lab 已达到“个人单机数据处理平台可以放心使用和部署”的水平。CLI、HTTP API 与 Airflow 共用同一个 <code>DataJob</code> 契约和执行引擎，失败语义统一；8 个 Maven 模块按职责分为 core、io、processing、interfaces 四组，越界依赖在构建的 <code>validate</code> 阶段即失败；质量门禁不允许任何编译、类型检查或 Shell 检查警告，CI/CD 逻辑集中在 <code>cicd/</code>，可以脱离 GitHub Actions 在本机复现；流水线每一步失败的原因都会写成公开注解，不需要仓库权限就能读到；Compose 栈与 Swarm 栈在 CI 与本机都真实部署过；所有镜像运行按版本与校验和固定的 Temurin 25.0.5。本轮新增的桌面控制台“数艺工坊”在一个窗口里查看与操作两个后台，它只是客户端，后端的构建、jar 与镜像不受影响。</p>
   <div class="split">
     <div class="box">
       <span class="box-label">主要优势</span>
       <ul>
         <li>一个契约、一个引擎、三种入口，新作业注册一次即可在 CLI、API 与 Airflow 中使用（第三章）。</li>
         <li>模块边界、JDK 版本下限与零警告由构建强制，而不是靠约定（3.2、4.3）。</li>
-        <li>317 项 JVM 测试与 216 项脚本、文档、DAG 测试，平台差异用标签表达，两个平台都没有跳过的测试；本轮 JVM 套件在 Windows 与 Linux 上都用 JDK 25.0.5 完整跑过，三条 DAG 在 Linux 本机与 Airflow 镜像内都用真实的 <code>spark-submit</code> 跑通（4.2、4.4）。</li>
+        <li>317 项后端 JVM 测试、87 项桌面端测试与 242 项脚本、文档、DAG 测试，平台差异用标签表达，两个平台都没有跳过的测试；后端与桌面的实际执行数都有下限，CI 把数目写成公开注解（4.2、4.5）。</li>
+        <li>桌面控制台“数艺工坊”（JavaFX 25）：本机数据只在 <code>~/.datacraft</code> 的 SQLite 里，令牌与口令加密保存；界面测试覆盖每个视图的两种主题与 FX 线程的停顿，端到端测试对真实的引擎 API 与 Compose 部署通过（3.7）。</li>
       </ul>
     </div>
     <div class="box">
@@ -364,12 +366,12 @@
       <ul>
         <li>HTTP API 现在要求令牌，但它是明文 HTTP 上的共享密钥，仍然只应绑定回环地址或放在终结 TLS 的网关之后（第五章）。</li>
         <li>Swarm 栈每次推送都在 CI 的单节点 Swarm 上部署并升级一遍；两个节点的情形本轮在本机手工验证过一次（放置、路由网格、节点之间的 ESP 加密），不在 CI 之中。默认拓扑仍把所有服务固定在一台数据节点上，不是高可用方案；节点故障、真实主机之间的防火墙与共享存储没有验证（3.5、第八章）。</li>
-        <li>所有 Airflow 容器共享全部机密，DAG、CLI 与 Spark 属于管理员级可信代码；Spark 4.2.0 自带的依赖有尚未修复的公告，要等 4.2.1；官方 Temurin 镜像还没有十月安全更新的 25.0.5，运行镜像暂时仍是 25.0.4.1（第五章、第八章）。</li>
+        <li>所有 Airflow 容器共享全部机密，DAG、CLI 与 Spark 属于管理员级可信代码；Spark 4.2.0 自带的依赖有尚未修复的公告，要等 4.2.1（第五章、第八章）。</li>
       </ul>
     </div>
   </div>
   <p><strong>云平台结论（第六章）：</strong>每月运行不足 227.5 小时时选 Oracle OCI A1 按需（60 小时约 $4.79/月）；常开或超过 227.5 小时选腾讯云 Lighthouse 入门型（$10.15/月）；必须使用 AWS 时选 Lightsail 8 GB（$44.15/月）。托管 Airflow 与 Cloudflare 运行时不采用，R2 只用于备份。所有价格为 2026-09-19 的公开价快照，尚未购买任何云资源。</p>
-  <p><strong>本轮（2026-10-26）完成：</strong>处理 10-21 就绪复核留下的版本问题，并再做一次三路独立复核。Jackson 升到修复 CVE-2026-110879 的 2.22.4，构建拒绝更旧的 jackson-databind；两个 GitHub Action、Surefire 升到最新；基础镜像的拉取失败会重试。逐个查询官方 Airflow 镜像的 440 个 Python 包，发现 18 个有镜像发布之后的公告，本部署能触及的 certifi（严重）与 urllib3（高）已在约束之上换成修复版本，其余逐项写明了为什么触及不到。十月的 Java 安全更新 25.0.5 已用于本机与 CI 的构建，但官方镜像还停在 25.0.4.1，构建下限按决策 4 等镜像更新后再提高。三路复核的 16 条发现里，最要紧的是 Swarm 演练可能删掉以前真实部署留下的数据卷、只改 <code>.env</code> 的重新部署会被误报为初始化完成、“数据挂载只读”的检查不可能失败、参数名两侧的空格让质量门禁被静默跳过；这些都已修复，每处修复都先有失败的测试。逐项对应见附录 A；上一轮（2026-10-10）的明细见附录 B。</p>
+  <p><strong>本轮（2026-10-27）完成两件事。</strong>其一是上一轮唯一等待上游的版本问题：官方 Temurin 与 Maven 镜像在 Temurin 25.0.5 发布五天后仍是 25.0.4.1，本轮不再等它们，新的 <code>Dockerfile.temurin</code> 按版本与 SHA-256 固定 Temurin 25.0.5+8，构建镜像与三个运行镜像都换上它，构建下限提高到 25.0.5（不兼容），公告工作流每周向 Adoptium 核对是否有更新的版本。其二是新增的桌面控制台“数艺工坊”（<code>desktop/</code>，JavaFX 25.0.5）：查看两个后台是否健康、带参数运行作业、触发与跟踪 Airflow 流水线、查看结果与日志；本机数据只在 <code>~/.datacraft</code> 的 SQLite 里，不新增后台接口。它先规划与设计、再分轮实现，一路只读代码审阅的 13 处发现全部修复；第一次 CI 运行之后，又补上了桌面套件的测试数下限与桌面依赖的公告检查。逐项对应见附录 A；上一轮（2026-10-26）的明细见附录 B。</p>
 </section>
 
 <section id="scope" aria-labelledby="h-scope">
@@ -380,16 +382,16 @@
     <thead><tr><th>证据</th><th>来源</th><th>本轮状态</th></tr></thead>
     <tbody>
       <tr><td>代码、配置与文档</td><td>仓库 <code>main</code> 分支</td><td><span class="tag ok">已审阅</span> 关键路径逐项核对，文档与代码一致性由 <code>tests/docs</code> 检查</td></tr>
-      <tr><td>本机构建与测试</td><td>Windows 11 · Oracle JDK 25.0.5.0.3；WSL Ubuntu 24.04 · Temurin 25.0.5+8 · Python 3.12</td><td><span class="tag ok">本轮重跑</span> Maven 3.10.0 全量构建在 Windows（<code>clean</code> 之后）与 Linux 各一遍，<code>cicd/build</code> 检查、pyright、ShellCheck、全部脚本与文档测试；每处修复的测试都先在修复前失败（附录 A.4）</td></tr>
-      <tr><td>Airflow 运行环境</td><td>WSL 虚拟环境 · Airflow 3.3.2 与官方 constraints · 约束之上的 certifi 与 urllib3 · pyspark 4.2.0</td><td><span class="tag ok">本轮重跑</span> 安全下限检查、21 项 DAG 与下限测试，以及运行时冒烟：三条 DAG 用 Linux 构建出的 jar 真实运行，不校验主机密钥的 SFTP 连接被拒绝</td></tr>
-      <tr><td>本机 Docker</td><td>Docker Desktop 4.96.3 · 引擎 29.9.2 · Compose v5.6.1；脚本在带 Docker CLI 的 Linux 容器内执行</td><td><span class="tag ok">本轮重跑</span> 最终代码上，栈文件检查、四个镜像从空缓存构建与冒烟、Compose 冒烟、单节点 Swarm 的部署与升级全部通过（附录 A.5）；另在临时 Swarm 上核对了任务与服务的配置比较</td></tr>
-      <tr><td>Linux CI</td><td>GitHub Actions · ubuntu-24.04</td><td><span class="tag ok">本轮通过</span> 推送 <code>00562d8</code> 的运行 <a href="https://github.com/liluyang1999/datacraft-lab/actions/runs/40308165416">40308165416</a> 五个作业全部成功，公告检查 <a href="https://github.com/liluyang1999/datacraft-lab/actions/runs/40308165410">40308165410</a> 通过；通过的证据从公开注解读回（4.5）</td></tr>
-      <tr><td>依赖版本与公告</td><td>Maven Central、PyPI、npm、Docker Hub 与镜像仓库接口、GitHub 发布页、Adoptium、Oracle 关键补丁公告、Jackson 发布说明；OSV 公告库</td><td><span class="tag ok">2026-10-26 核对</span> 版本逐项核对；28 个直接固定的版本在 OSV 中没有已知公告；另把官方 Airflow 镜像的 440 个 Python 包逐个查询（附录 A.2、A.3）</td></tr>
+      <tr><td>本机构建与测试</td><td>Windows 11 · Oracle JDK 25.0.5.0.3 · Maven 3.10.0；WSL Ubuntu 24.04 · Python 3.12</td><td><span class="tag ok">本轮重跑</span> 后端在 <code>clean</code> 之后全量构建，桌面工程连续三次 <code>verify</code>，都是 0 警告；WSL 中的部署与 CI/CD 测试、ShellCheck，以及文档测试与 pyright；Linux 上的 Maven 构建由 CI 完成（4.5）。每处修复的测试都先在修复前失败（附录 A.4）</td></tr>
+      <tr><td>Airflow 运行环境</td><td>Airflow 3.3.2 与官方 constraints · 约束之上的 certifi 与 urllib3 · pyspark 4.2.0</td><td><span class="tag info">未改动</span> 本轮没有改动 Airflow 一侧，本机虚拟环境没有重跑；CI 的 <code>dags</code> 作业与镜像内的三条流水线照常通过（4.5、附录 A.5）</td></tr>
+      <tr><td>本机 Docker</td><td>Docker Desktop 4.96.3 · 引擎 29.9.2 · Compose v5.6.1；脚本在带 Docker CLI 的 Linux 容器内执行</td><td><span class="tag ok">本轮重跑</span> 固定 Temurin 的提交上，栈文件检查、镜像构建与冒烟（先构建两个带固定 Temurin 的基础镜像）、Compose 冒烟、单节点 Swarm 的部署与升级全部通过；桌面控制台的端到端测试另用一次本机 Compose 部署（附录 A.5）</td></tr>
+      <tr><td>Linux CI</td><td>GitHub Actions · ubuntu-24.04</td><td><span class="tag ok">本轮通过</span> 推送 <code>8a1fbc8</code> 的运行 <a href="https://github.com/liluyang1999/datacraft-lab/actions/runs/40484775949">40484775949</a> 六个作业全部成功（含新增的 <code>desktop</code>），公告检查 <a href="https://github.com/liluyang1999/datacraft-lab/actions/runs/40484775916">40484775916</a> 通过；通过的证据从公开注解读回（4.5）</td></tr>
+      <tr><td>依赖版本与公告</td><td>Maven Central、Gluon 发布说明、Adoptium 接口与发布页、Docker Hub、GitHub 发布页；OSV 公告库</td><td><span class="tag ok">2026-10-27 核对</span> Temurin 25.0.5+8 是最新的 Temurin 25，四个校验和与 Adoptium 公布的一致；JavaFX 25.0.5、sqlite-jdbc 3.53.4.0 是最新版；32 个直接固定的版本（含桌面工程的 4 个）在 OSV 中没有已知公告（附录 A.2）</td></tr>
       <tr><td>云平台价格</td><td>各厂商官方价格页、价格 API 与计费文档</td><td><span class="tag info">快照</span> 2026-09-19 核验，本轮未重新核价（<a href="pricing-evidence.md">价格依据</a>）</td></tr>
     </tbody>
   </table>
   </div>
-  <p><strong>评分方法：</strong>12 个维度各按 1–5 分评定，每项评分都列出可核对的依据；综合评分是 12 个维度的算术平均。评分是评估者的判断，依据与数字分开列出，便于复核。</p>
+  <p><strong>评分方法：</strong>13 个维度各按 1–5 分评定（本版新增桌面控制台一项），每项评分都列出可核对的依据；综合评分是 13 个维度的算术平均。评分是评估者的判断，依据与数字分开列出，便于复核。</p>
   <p><strong>不在范围内：</strong>没有购买或部署任何付费云资源，没有连接真实的生产数据库、SFTP 账号或 Spark 集群，也没有做性能基准测试；涉及这些方面的结论都标为“未验证”。</p>
 </section>
 
@@ -647,8 +649,8 @@
   <p><strong>Swarm 模板：</strong>多机部署使用 CeleryExecutor 与 Redis，但所有服务都固定在 <code>DATACRAFT_DATA_NODE</code> 这一台数据节点上，因为数据卷是节点本地卷；API 不发布端口，只在覆盖网络内可达，并要求令牌；Redis 要求口令，覆盖网络以加密方式创建。CI 的 <code>containers</code> 作业在单节点 Swarm 上把这套栈按部署教程部署一遍、再升级一遍（见下文的流水线表）。它仍然不是高可用方案：跨节点扩展先要有共享存储，而多节点下的行为没有验证过。</p>
 
   <h3>3.5 构建与 CI/CD 流水线</h3>
-  <p>Maven 反应堆由根 POM 统一管理版本与质量门禁，<code>./mvnw verify</code> 依次执行 Enforcer（JDK 25.0.4.1 以上、Maven 3.9 以上、插件版本固定、禁止 POM 仓库、禁止有漏洞的 Jackson、模块边界）、编译（javac <code>-Xlint:all</code> 与 <code>failOnWarning</code>，scalac <code>-Werror</code>）、Spotless 与 Checkstyle、JUnit 与 ScalaTest，以及瘦 jar 打包。GitHub 只从 <code>.github/workflows</code> 读取工作流，因此 <code>ci.yml</code> 只负责触发条件、运行环境、固定版本的工具链与作业编排，每一步只执行一条命令：<code>cicd/</code> 下的脚本、<code>tests/</code> 下的测试入口，或单个工具（Maven Wrapper、pyright）。<code>cicd/</code> 放流水线执行的内容，<code>tests/</code> 放测试运行器或开发者运行的套件，<code>deploy/scripts</code> 放运维在主机上执行的脚本。</p>
-  <p>作业日志需要仓库权限才能读取，而一次运行的注解是公开的。因此工作流把 <code>cicd/step.py</code> 设为所有 <code>run:</code> 步骤的默认 shell：它原样执行步骤并保持退出码，步骤失败时追加一条错误注解，内容是失败的命令、最先指出错误的若干行输出与最后 30 行输出；部署类脚本在拆除失败的栈之前，用 <code>diagnose</code> 把各服务的日志与状态分组输出，每组成为一条独立的注解；通过的检查用 <code>notice</code> 记下证据（各模块实际执行的测试数、运行镜像的 Java 版本、Compose 冒烟与 Swarm 演练的结论）。另一个工作流 <code>advisories.yml</code> 每周一运行 <code>cicd/security/check_advisories.py</code>，向 OSV 查询每一个固定的依赖与 Action 是否有新公告，不引入会自动提交的机器人。</p>
+  <p>Maven 反应堆由根 POM 统一管理版本与质量门禁，<code>./mvnw verify</code> 依次执行 Enforcer（JDK 25.0.5 以上、Maven 3.9 以上、插件版本固定、禁止 POM 仓库、禁止有漏洞的 Jackson、模块边界）、编译（javac <code>-Xlint:all</code> 与 <code>failOnWarning</code>，scalac <code>-Werror</code>）、Spotless 与 Checkstyle、JUnit 与 ScalaTest，以及瘦 jar 打包。GitHub 只从 <code>.github/workflows</code> 读取工作流，因此 <code>ci.yml</code> 只负责触发条件、运行环境、固定版本的工具链与作业编排，每一步只执行一条命令：<code>cicd/</code> 下的脚本、<code>tests/</code> 下的测试入口，或单个工具（Maven Wrapper、pyright）。<code>cicd/</code> 放流水线执行的内容，<code>tests/</code> 放测试运行器或开发者运行的套件，<code>deploy/scripts</code> 放运维在主机上执行的脚本。</p>
+  <p>作业日志需要仓库权限才能读取，而一次运行的注解是公开的。因此工作流把 <code>cicd/step.py</code> 设为所有 <code>run:</code> 步骤的默认 shell：它原样执行步骤并保持退出码，步骤失败时追加一条错误注解，内容是失败的命令、最先指出错误的若干行输出与最后 30 行输出；部署类脚本在拆除失败的栈之前，用 <code>diagnose</code> 把各服务的日志与状态分组输出，每组成为一条独立的注解；通过的检查用 <code>notice</code> 记下证据（各模块实际执行的测试数、运行镜像的 Java 版本、Compose 冒烟与 Swarm 演练的结论）。另一个工作流 <code>advisories.yml</code> 每周一运行 <code>cicd/security/check_advisories.py</code>，向 OSV 查询每一个固定的依赖与 Action 是否有新公告，再由 <code>check_temurin.py</code> 向 Adoptium 核对镜像固定的 Temurin 是否仍是最新版本，不引入会自动提交的机器人。</p>
   <div class="table-wrap">
   <table>
     <caption><code>tests/ci/test_workflow.py</code> 保证每个 <code>run:</code> 只有一条命令（不允许多行块，也不允许 <code>&amp;&amp;</code>、<code>|</code> 等运算符），工作流与 Makefile 引用的脚本都存在，<code>cicd/</code> 里的每个文件都被使用（注释里的提及不算）且没有被 git 忽略，<code>cicd/</code> 与 <code>deploy/scripts/</code> 之外不出现 Shell 脚本；每个作业先检出再执行步骤，没有作业或步骤自设 <code>shell</code> 或 <code>working-directory</code>。</caption>
@@ -658,8 +660,9 @@
       <tr><td class="nowrap"><code>dags</code></td><td><code>cicd/airflow/install-airflow.sh</code> → <code>check_security_floor.py</code> → <code>tests/orchestration</code> → <code>tests/smoke/airflow_runtime_smoke.py</code></td><td>官方 constraints 下的 Airflow 3.3.2，其上的安全修复版本；FAB、certifi、urllib3 等安全版本下限；DAG 契约；三条流水线用构建产物真实运行，包括用 <code>encoding=GBK</code> 转换 GBK 文件</td></tr>
       <tr><td class="nowrap"><code>scripts</code></td><td><code>cicd/lint/check-actions-pinned.sh</code>、<code>install-shellcheck.sh</code>、<code>check-shell-scripts.sh</code>、<code>tests/deploy</code>、<code>tests/ci</code>、<code>tests/docs</code>、计算器测试、pyright 1.1.414</td><td>每个 Action 都写成“提交 SHA 加版本注释”的固定形式；固定版本的 ShellCheck 0.11.0 对全部 Shell 脚本没有任何发现；部署、CI/CD 与文档测试；Python 零诊断</td></tr>
       <tr><td class="nowrap"><code>compose</code></td><td><code>cicd/stacks/check-stack-files.sh</code></td><td>Compose 文件与 Swarm 栈都能插值，缺少任一必需机密（含 API 令牌，Swarm 栈另含 Redis 口令）时拒绝插值</td></tr>
-      <tr><td class="nowrap"><code>containers</code></td><td><code>cicd/images/smoke-images.sh</code> → <code>smoke-compose.sh</code> → <code>smoke-swarm.sh</code>（在 <code>build</code>、<code>scripts</code>、<code>compose</code> 通过后才启动）</td><td>镜像构建；API 镜像没有令牌时拒绝启动，不带令牌或带错令牌的请求得到 401；非 root 的 API；镜像内真实流水线；完整 Compose 栈（生成的令牌是唯一能打开 API 的令牌，三个 DAG 均已注册）与元数据备份恢复；单节点 Swarm 上的部署与升级：全部服务运行并健康，API 只在覆盖网络内可用，管理员经路由网格登录，Redis 拒绝没有口令的客户端，一次 DAG 运行经过 Celery worker，换标签升级后初始化服务再次运行、此前的运行记录仍在</td></tr>
-      <tr><td class="nowrap"><code>advisories</code><br><span class="small muted">另一个工作流，每周一与固定版本变化时</span></td><td><code>cicd/security/check_advisories.py</code></td><td>根 POM 管理的依赖、Airflow 及其 core 包、pyspark、FAB 下限、约束之上的安全修复版本、shellcheck-py、pyright 与各 Action 在 OSV 中没有已知公告；查询不到 OSV 时失败而不是通过</td></tr>
+      <tr><td class="nowrap"><code>containers</code></td><td><code>cicd/images/smoke-images.sh</code> → <code>smoke-compose.sh</code> → <code>smoke-swarm.sh</code>（在 <code>build</code>、<code>scripts</code>、<code>compose</code> 通过后才启动）</td><td>先构建带固定 Temurin 25.0.5+8 的 <code>datacraft/maven</code> 与 <code>datacraft/jre</code>（下载的归档校验 SHA-256），再构建四个镜像，构建镜像与三个运行镜像必须恰好是这个版本；API 镜像没有令牌时拒绝启动，不带令牌或带错令牌的请求得到 401；非 root 的 API；镜像内真实流水线；完整 Compose 栈（生成的令牌是唯一能打开 API 的令牌，三个 DAG 均已注册）与元数据备份恢复；单节点 Swarm 上的部署与升级：全部服务运行并健康，API 只在覆盖网络内可用，管理员经路由网格登录，Redis 拒绝没有口令的客户端，一次 DAG 运行经过 Celery worker，换标签升级后初始化服务再次运行、此前的运行记录仍在</td></tr>
+      <tr><td class="nowrap"><code>desktop</code></td><td><code>xvfb-run ./mvnw -f desktop/pom.xml verify</code> → <code>check_test_counts.py --project desktop</code> → <code>cicd/desktop/package_desktop.py</code></td><td>桌面工程在根 POM 的门禁下（格式、Checkstyle、Enforcer、零警告）通过；界面测试在虚拟显示器上运行每个视图的两种主题，没有 JavaFX 警告，预热后 FX 线程没有超过 50 ms 的停顿；至少执行 76 项测试并记为注解；jlink 与 jpackage 生成的应用目录训练 AOT 缓存后能启动到首帧。界面截图保存为构件</td></tr>
+      <tr><td class="nowrap"><code>advisories</code><br><span class="small muted">另一个工作流，每周一与固定版本变化时</span></td><td><code>cicd/security/check_advisories.py</code> → <code>check_temurin.py</code></td><td>根 POM 管理的依赖、桌面工程固定的 JavaFX 与 sqlite-jdbc、Airflow 及其 core 包、pyspark、FAB 下限、约束之上的安全修复版本、shellcheck-py、pyright 与各 Action 在 OSV 中没有已知公告，查询不到 OSV 时失败而不是通过；镜像固定的 Temurin 是 Adoptium 上最新的 Temurin 25，四个校验和与官方公布的一致</td></tr>
     </tbody>
   </table>
   </div>
@@ -679,10 +682,28 @@
       <tr><td>CI/CD 逻辑独立到 <code>cicd/</code></td><td>检查可在本机复现，ShellCheck 覆盖全部流水线脚本</td><td>需要 Docker 的检查在本机仍无法运行；其中构建镜像的 Maven 步骤已有不依赖 Docker 的等价检查，Swarm 演练的流程有桩测试</td><td>本机实跑结果（4.4）；决策 10</td></tr>
       <tr><td>失败原因与通过证据写入公开注解</td><td>不需要仓库权限就能定位失败的步骤与原因；失败的栈在拆除前留下各服务的状态；通过的运行也留下可核对的数字</td><td>注解只保留 4096 个字符、每步 10 条，要挑选输出行；每个步骤多一层包装</td><td><code>tests/ci</code> 21 项；决策 12</td></tr>
       <tr><td>定时公告检查，不用更新机器人</td><td>固定的版本出现公告时，一周内以失败的运行暴露；提交历史仍只有一位贡献者</td><td>只覆盖直接固定的版本，不含传递依赖与基础镜像；依赖 OSV 这一公共服务，只写在发布说明里的漏洞（本轮的 Jackson CVE）它也发现不了</td><td><code>tests/ci</code> 16 项；决策 13</td></tr>
+      <tr><td>镜像的 Java 按版本与校验和固定</td><td>安全更新不再等官方镜像；下载的归档逐个校验，构建镜像与运行镜像的 Java 一致</td><td>Temurin 的新版本要手动提高，四个校验和一起改；多出两个中间镜像；只固定了 amd64 与 arm64 的归档</td><td>镜像冒烟检查版本；<code>check_temurin.py</code> 6 项测试；决策 4</td></tr>
+      <tr><td>桌面控制台是独立的 Maven 工程，只做客户端</td><td>后端的构建、jar 与镜像不受影响；沿用根 POM 的门禁；不新增后台接口，后台的认证与状态码契约不变</td><td>依赖两个后台现有接口的形状，后台改接口时要同步改客户端；只生成应用目录，没有安装包；远程后台要经 SSH 隧道或 TLS 网关</td><td>客户端测试对桩服务器、端到端测试对真实后台；<a href="../desktop/architecture.md">桌面端架构</a></td></tr>
     </tbody>
   </table>
   </div>
   <p class="small muted">每条决策的背景与后果见 <a href="../../design/decisions.md">架构决策记录</a>；完整的架构说明见 <a href="../../design/architecture.md">架构说明</a>，构建规则见 <a href="../../design/build-and-quality.md">构建与质量</a>。</p>
+
+  <h3>3.7 桌面控制台“数艺工坊”</h3>
+  <p>本轮新增的 <code>desktop/</code> 是一个独立的 Maven 工程（父 POM 是根 POM，但不在反应堆里），用 JavaFX 25.0.5 在 JDK 25 上运行：在一个窗口里看两个后台是否健康、带参数运行作业、触发与跟踪 Airflow 流水线、查看结果与任务日志。它只调用后台现有的接口，即引擎 API 的 <code>/health</code> 与 <code>/jobs</code>、Airflow 3.3.2 的 REST API v2；它不保存业务数据，本机只有 <code>~/.datacraft</code> 下的设置、连接配置、参数预设与有上限的缓存。</p>
+  <div class="table-wrap">
+  <table>
+    <thead><tr><th>层</th><th>职责</th><th>线程</th></tr></thead>
+    <tbody>
+      <tr><td>界面 <code>ui</code></td><td>侧栏、顶栏与五个视图（总览、作业、流水线、活动、设置），侧滑面板与通知；“蓝晒”冷色调的浅色与深色两套主题</td><td>FX 线程，只做界面</td></tr>
+      <tr><td>视图模型 <code>viewmodel</code></td><td>可观察的状态与命令；轮询结果按主键就地更新，同类结果只应用最新的一次</td><td>FX 线程（测试中由测试控制的队列代替）</td></tr>
+      <tr><td>服务 <code>service</code></td><td>连接配置与会话、两个后台的健康检查、作业运行、流水线、活动记录；只轮询屏幕上的数据，失败退避到 30 秒</td><td>一个到点线程，请求在虚拟线程上</td></tr>
+      <tr><td>接口客户端 <code>api</code></td><td>JDK <code>HttpClient</code> 上的引擎与 Airflow 客户端；错误归为几类（无法连接、超时、令牌错误、拒绝、繁忙、服务端错误）并带上服务端的说明</td><td>异步，可取消</td></tr>
+      <tr><td>本机存储 <code>store</code></td><td>SQLite（带迁移），令牌与口令的加密保存（Windows DPAPI，其他系统 AES-GCM）</td><td>一个专用线程独占连接</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <p>依赖只向下：服务、客户端与存储都不引用 JavaFX。流畅度的预算（视图切换不超过 100 ms、FX 线程单次停顿不超过 50 ms、主题切换不超过 100 ms）由界面测试检查，首帧时间每轮记录；打包脚本用 jlink 与 jpackage 生成自带运行时的应用目录，并用一次启动训练 JDK 25 的 AOT 缓存。细节见附录 A.3 与 <a href="../desktop/README.md">docs/desktop</a>。</p>
 </section>
 
 <section id="quality" aria-labelledby="h-quality">
@@ -704,6 +725,7 @@
       <tr><td>云部署评估与成本</td><td>11 个平台、两个地域、成本模型与计算器（第六章）</td><td>价格快照 2026-09-19；计算器 6 项测试</td><td><span class="tag ok">满足</span></td></tr>
       <tr><td>零警告构建</td><td>编译、类型检查、Shell 检查的警告都会使门禁失败</td><td>本机全量构建 0 警告；pyright、ShellCheck 0 问题</td><td><span class="tag ok">满足</span></td></tr>
       <tr><td>在线 API 的访问控制</td><td>令牌认证（回环之外强制）、并发运行上限、回环绑定、Origin 检查、数据根约束</td><td>29 项 API 测试；镜像、Compose 与 Swarm 冒烟；没有 TLS，属于已记录的边界</td><td><span class="tag ok">满足</span></td></tr>
+      <tr><td>实时的桌面控制面板与监控界面</td><td>数艺工坊：JavaFX 25.0.5，对接引擎 API 与 Airflow；本机配置与缓存只在 <code>~/.datacraft</code> 的 SQLite</td><td>87 项测试（每个平台执行 76 项，CI 核对下限）；端到端测试对真实的 <code>serve-api</code> 与本机 Compose 部署通过；FX 线程的停顿与主题切换有界面测试</td><td><span class="tag ok">满足</span></td></tr>
     </tbody>
   </table>
   </div>
@@ -730,11 +752,12 @@
   <table>
     <thead><tr><th>其他套件</th><th>位置</th><th class="num">数量</th><th>运行环境</th></tr></thead>
     <tbody>
-      <tr><td>部署脚本与模板</td><td><code>tests/deploy</code></td><td class="num">68</td><td>Python 标准库；用 bash 运行部署脚本的用例需要 POSIX（Linux 或 WSL）</td></tr>
-      <tr><td>CI/CD 脚本、工作流结构与构建设置</td><td><code>tests/ci</code></td><td class="num">105</td><td>Python 标准库；25 项需要 POSIX 的 bash 或管道（其中 Swarm 演练的桩测试 14 项只在 Linux 运行）</td></tr>
+      <tr><td>部署脚本与模板</td><td><code>tests/deploy</code></td><td class="num">70</td><td>Python 标准库；用 bash 运行部署脚本的用例需要 POSIX（Linux 或 WSL）</td></tr>
+      <tr><td>CI/CD 脚本、工作流结构与构建设置</td><td><code>tests/ci</code></td><td class="num">129</td><td>Python 标准库；25 项需要 POSIX 的 bash 或管道（其中 Swarm 演练的桩测试 14 项只在 Linux 运行）</td></tr>
       <tr><td>文档一致性</td><td><code>tests/docs/test_docs_consistency.py</code></td><td class="num">16</td><td>Python 标准库</td></tr>
       <tr><td>费用计算器</td><td><code>tests/docs/cloud-costs.test.cjs</code></td><td class="num">6</td><td>Node</td></tr>
       <tr><td>DAG 契约与安全下限</td><td><code>tests/orchestration</code></td><td class="num">21</td><td>Airflow 3.3.2（安全下限的 4 项只需要 <code>packaging</code>）</td></tr>
+      <tr><td>桌面控制台</td><td><code>tests/jvm/datacraft-desktop</code></td><td class="num">87</td><td>JDK 25 与显示器（Linux CI 用 Xvfb）；每个平台执行 76 项（<code>VaultPlatformTest</code> 的两项各属一个平台），<code>e2e</code> 标签的 10 项需要运行中的后台，用 <code>-Pe2e</code> 单独运行</td></tr>
       <tr><td>运行时冒烟</td><td><code>tests/smoke/airflow_runtime_smoke.py</code></td><td class="num">1 个脚本</td><td>Airflow、Java 与 pyspark；在 <code>dags</code> 作业与 Airflow 镜像内各运行一次。镜像、Compose 与 Swarm 的冒烟是流水线步骤，在 <code>cicd/images</code>（3.5）</td></tr>
     </tbody>
   </table>
@@ -748,9 +771,10 @@
       <tr><td>javac</td><td><code>-Xlint:all</code>，<code>failOnWarning</code></td><td>构建失败</td></tr>
       <tr><td>scalac</td><td><code>-deprecation -feature -unchecked -Xlint -Werror</code></td><td>构建失败</td></tr>
       <tr><td>格式与导入</td><td>Spotless、Checkstyle 14.3.0</td><td>构建失败</td></tr>
-      <tr><td>构建环境、插件版本、依赖</td><td>Enforcer 规则（含 JDK 25.0.4.1 下限与模块边界）</td><td>构建失败</td></tr>
+      <tr><td>构建环境、插件版本、依赖</td><td>Enforcer 规则（含 JDK 25.0.5 下限与模块边界；桌面工程同样适用）</td><td>构建失败</td></tr>
       <tr><td>打包</td><td>过滤依赖清单、合并 NOTICE、保留一份 LICENSE、合并服务描述、不打包 <code>module-info.class</code></td><td>配置；CI 检查清单与 <code>module-info.class</code></td></tr>
       <tr><td>JVM 运行时警告</td><td><code>.mvn/jvm.config</code>；Spark 测试 JVM 参数与 Spark 4.2 启动器对齐</td><td>配置</td></tr>
+      <tr><td>JavaFX 运行时警告</td><td>JavaFX 与 sqlite-jdbc 的本机访问用 <code>--enable-native-access</code> 显式授权；界面测试把 JavaFX 记录的警告当作失败</td><td>桌面工程的测试</td></tr>
       <tr><td>Resolver 对第三方仓库的警告</td><td><code>.mvn/maven.config</code> 关闭 Maven 3.10 的仓库前缀探测，构建不再向依赖的 POM 里提到的仓库发请求</td><td>配置；<code>tests/deploy</code> 检查该选项与构建镜像对 <code>.mvn/</code> 的复制</td></tr>
       <tr><td>测试日志噪声</td><td>测试中默认静默；SFTP 测试服务器改用 MINA 传输</td><td>配置</td></tr>
       <tr><td>跳过与取消的测试</td><td>平台标签与按操作系统激活的 profile</td><td>CI 只统计实际执行的测试，并在 Spark 套件被取消时失败</td></tr>
@@ -764,31 +788,29 @@
 
   <h3>4.4 本轮验证证据</h3>
   <ul>
-    <li><strong>Maven 全量构建，Windows</strong>（Windows 11 · Oracle JDK 25.0.5.0.3 · Maven 3.10.0）：<code>./mvnw -B -ntp -o clean spotless:apply verify</code> 8 个模块全部成功；执行 300 项 JVM 测试，0 失败、0 跳过、0 取消；输出 720 行，<strong>0 条</strong> <code>[WARNING]</code> 或 JVM 警告。</li>
-    <li><strong>Maven 全量构建，Linux</strong>（WSL Ubuntu 24.04 · Temurin 25.0.5+8 · Maven 3.10.0，与 CI 的系统和 JDK 相同）：<code>./mvnw -B -ntp verify</code> 执行 310 项测试，0 警告，Linux 专属的符号链接与 Spark 写入测试都在其中。Temurin 25.0.5 取自 Adoptium 的发布页，SHA-256 与官方公布的一致。</li>
-    <li><strong><code>cicd/build</code> 脚本</strong>（Git Bash 与 WSL，后者经过 <code>cicd/step.py</code>）：<code>check_test_counts.py</code> 在两个平台各按本平台的新下限通过，执行数与下限逐项相等；<code>check-spark-suite.sh</code>、<code>smoke-cli-jar.sh</code>、<code>check-cli-exit-codes.sh</code>、<code>check-image-build.sh</code> 通过；<code>check-maven-wrapper.sh</code> 与 <code>check-jar-contents.sh</code> 在 Git Bash 通过，后者确认 jar 里的 Jackson 是 2.22.4。</li>
-    <li><strong>Airflow</strong>（WSL，Python 3.12 虚拟环境，Airflow 3.3.2，pyspark 4.2.0，约束之上的 certifi 与 urllib3）：<code>check_security_floor.py</code> 通过；21 项 DAG 与下限测试全部通过；<code>tests/smoke/airflow_runtime_smoke.py</code> 用 Linux 构建出的 jar 真实运行三条 DAG，不校验主机密钥的 SFTP 连接被拒绝。</li>
-    <li><strong>本机 Docker 上的容器阶段</strong>（Docker Desktop 4.96.3）：最终代码上 <code>check-stack-files.sh</code>、<code>smoke-images.sh</code>、<code>smoke-compose.sh</code>、<code>smoke-swarm.sh</code> 依次通过，镜像从空缓存构建（附录 A.5）。</li>
-    <li><strong>真实环境里的复现：</strong>新的安全下限在官方 Airflow 镜像里失败、装上修复版本后通过；“只读挂载”的旧检查在可写挂载上照样通过；一个发不完请求头的连接在 JDK 默认设置下 20 秒后仍然挂着；临时 Swarm 上，只改环境变量之后旧任务的容器配置不再与服务一致（附录 A.3、A.4）。</li>
-    <li><strong><code>cicd/lint</code> 脚本</strong>（WSL，ShellCheck 0.11.0）：23 个 Shell 脚本通过 <code>bash -n</code>，ShellCheck 在最低的 style 级别也没有任何发现；<code>check-actions-pinned.sh</code> 核对了两个工作流中的 14 处 <code>uses</code>。</li>
-    <li><strong>类型检查与脚本测试：</strong><code>npx --yes pyright@1.1.414 --warnings</code> 0 errors、0 warnings、0 informations；WSL 中 <code>tests/deploy</code> 68 项、<code>tests/ci</code> 105 项、<code>tests/docs</code> 16 项全部通过（DeprecationWarning 视为错误）；计算器 6 项 Node 测试通过。</li>
-    <li><strong>测试确实能发现问题：</strong>本轮每处修复的测试都先在修复前运行并失败；Jackson 的禁用规则与 Spark 版本一致性另做了改坏检查，6 处改动全部被发现（附录 A.4）。</li>
-    <li><strong>公告查询：</strong><code>cicd/security/check_advisories.py</code> 实际查询 OSV，28 个固定版本（含新的 certifi 与 urllib3）没有已知公告。</li>
+    <li><strong>后端 Maven 全量构建，Windows</strong>（Windows 11 · Oracle JDK 25.0.5.0.3 · Maven 3.10.0）：先 <code>clean</code>，<code>verify</code> 8 个模块全部成功；执行 300 项 JVM 测试，0 失败、0 跳过、0 取消；输出 673 行，<strong>0 条</strong> <code>[WARNING]</code> 或 JVM 警告。Linux 上的 310 项由 CI 执行（4.5）。</li>
+    <li><strong>桌面工程</strong>（同一环境）：<code>./mvnw -B -ntp -f desktop/pom.xml verify</code> 连续三次，每次执行 76 项测试，0 失败、0 跳过、0 警告；界面测试把每个视图的两种主题、触发面板与日志存为截图，逐张检查过。</li>
+    <li><strong>桌面控制台对真实后台：</strong><code>-Pe2e</code> 先对 CLI jar 启动的 <code>serve-api</code>、再对本机 Compose 部署运行，全部通过：作业目录、中文往返、<code>csv-profile</code> 的指标、失败结果与错误令牌；Airflow 的登录、三个 DAG、暂停与恢复、触发 <code>datacraft_engine_jobs</code> 并跟踪到 success、任务日志；窗口里运行作业（附录 A.5）。</li>
+    <li><strong>打包：</strong><code>cicd/desktop/package_desktop.py</code> 生成约 116 MB 的应用目录与约 45 MB 的 AOT 缓存，带缓存的首帧 1.09–1.27 s；不带缓存的 <code>java -jar</code> 约 1.7 s。</li>
+    <li><strong>本机 Docker 上的容器阶段</strong>（Docker Desktop 4.96.3）：固定 Temurin 的提交上 <code>check-stack-files.sh</code>、<code>smoke-images.sh</code>、<code>smoke-compose.sh</code>、<code>smoke-swarm.sh</code> 依次通过；构建镜像与三个运行镜像的 Java 都是 25.0.5+8-LTS（附录 A.5）。</li>
+    <li><strong>失败的情形：</strong>在 Oracle JDK 25.0.4.1 上构建在 <code>validate</code> 停止并说明原因；把一个校验和改错一位，镜像构建以 “digest mismatch” 停止；桌面端 13 处审阅发现除一处外，修复前都先有一个失败的测试（附录 A.1、A.4）。</li>
+    <li><strong>脚本与类型检查：</strong>WSL（Python 3.12，ShellCheck 0.11.0）中 <code>tests/deploy</code> 70 项与 <code>tests/ci</code> 129 项全部通过（DeprecationWarning 视为错误），23 个 Shell 脚本 ShellCheck 没有任何发现，<code>check-actions-pinned.sh</code> 核对了 18 处 <code>uses</code>；Windows 上 <code>tests/docs</code> 16 项通过，<code>npx --yes pyright@1.1.414 --warnings</code> 0 诊断。</li>
+    <li><strong>公告与版本查询：</strong><code>check_advisories.py</code> 实际查询 OSV，32 个固定版本（含桌面工程的 JavaFX 三个模块与 sqlite-jdbc）没有已知公告；<code>check_temurin.py</code> 对 Adoptium 实测：25.0.5+8 是最新的 Temurin 25，四个校验和一致。</li>
   </ul>
 <pre class="reactor"><code id="reactor">[INFO] Reactor Summary for datacraft-lab 0.1.0-SNAPSHOT:
 [INFO]
-[INFO] datacraft-lab ...................................... SUCCESS [ 13.875 s]
-[INFO] datacraft-common ................................... SUCCESS [  4.517 s]
-[INFO] datacraft-config ................................... SUCCESS [  2.302 s]
-[INFO] datacraft-io ....................................... SUCCESS [ 12.985 s]
-[INFO] datacraft-engine ................................... SUCCESS [  2.280 s]
-[INFO] datacraft-jobs ..................................... SUCCESS [  3.899 s]
-[INFO] datacraft-spark .................................... SUCCESS [ 48.484 s]
-[INFO] datacraft-api ...................................... SUCCESS [  7.261 s]
-[INFO] datacraft-cli ...................................... SUCCESS [ 11.432 s]
+[INFO] datacraft-lab ...................................... SUCCESS [ 17.062 s]
+[INFO] datacraft-common ................................... SUCCESS [  7.669 s]
+[INFO] datacraft-config ................................... SUCCESS [  3.852 s]
+[INFO] datacraft-io ....................................... SUCCESS [ 18.078 s]
+[INFO] datacraft-engine ................................... SUCCESS [  4.858 s]
+[INFO] datacraft-jobs ..................................... SUCCESS [  7.255 s]
+[INFO] datacraft-spark .................................... SUCCESS [01:06 min]
+[INFO] datacraft-api ...................................... SUCCESS [  8.355 s]
+[INFO] datacraft-cli ...................................... SUCCESS [ 16.389 s]
 [INFO] ------------------------------------------------------------------------
 [INFO] BUILD SUCCESS
-[INFO] Total time:  01:47 min   (Windows 11, Oracle JDK 25.0.5.0.3, Maven 3.10.0, clean build, 0 warnings)</code></pre>
+[INFO] Total time:  02:30 min   (Windows 11, Oracle JDK 25.0.5.0.3, Maven 3.10.0, clean build, 0 warnings)</code></pre>
 
   <h3>4.5 CI 状态</h3>
   <div class="table-wrap">
@@ -806,10 +828,13 @@
       <tr><td class="nowrap"><code>287c1b2</code> · 2026-10-09</td><td><a href="https://github.com/liluyang1999/datacraft-lab/actions/runs/37898567994">37898567994</a><br>公告检查 <a href="https://github.com/liluyang1999/datacraft-lab/actions/runs/37898568005">37898568005</a></td><td><span class="tag ok">通过</span> 复核发现的问题的修复；演练一步 357 秒，其中升级 111 秒；公告检查覆盖 26 个版本</td></tr>
       <tr><td class="nowrap"><code>e989fc4</code> · 2026-10-11</td><td><a href="https://github.com/liluyang1999/datacraft-lab/actions/runs/38067189382">38067189382</a><br>公告检查 <a href="https://github.com/liluyang1999/datacraft-lab/actions/runs/38067189346">38067189346</a></td><td><span class="tag ok">通过</span> 本轮的四个提交。读回的注解：Linux 上执行 307 项 JVM 测试；三个运行镜像（含第一次在 CI 构建的 Spark 镜像）的 Java 为 25.0.4.1+1-LTS，Spark 镜像完成转换与计数，初始化在 UID 1000 下运行，SFTP 流水线在没有主机密钥校验时被拒绝；Compose 栈的令牌、登录、DAG 运行与备份恢复；Swarm 演练一步 364 秒，其中升级 111 秒；<code>containers</code> 作业约 15 分钟（镜像一步 411 秒，其中包括第一次在 CI 上拉取并构建的 Spark 镜像）</td></tr>
       <tr><td class="nowrap"><code>00562d8</code> · 2026-10-26</td><td><a href="https://github.com/liluyang1999/datacraft-lab/actions/runs/40308165416">40308165416</a><br>公告检查 <a href="https://github.com/liluyang1999/datacraft-lab/actions/runs/40308165410">40308165410</a></td><td><span class="tag ok">通过</span> 本轮的代码提交。读回的注解：Linux 上执行 310 项 JVM 测试；三个运行镜像（含 Spark 镜像）的 Java 为 25.0.4.1+1-LTS（官方镜像尚未提供 25.0.5），初始化在 UID 1000 下运行，SFTP 流水线在没有主机密钥校验时被拒绝；Compose 栈的令牌、登录、DAG 运行与备份恢复；Swarm 演练用新的 <code>airflow-init.sh</code> 部署并升级，43 秒内替换全部 Airflow 任务；<code>containers</code> 作业 552 秒</td></tr>
+      <tr><td class="nowrap"><code>d0f90ae</code> · 2026-10-27</td><td><a href="https://github.com/liluyang1999/datacraft-lab/actions/runs/40445373779">40445373779</a><br>公告检查 <a href="https://github.com/liluyang1999/datacraft-lab/actions/runs/40445373737">40445373737</a></td><td><span class="tag ok">通过</span> Java 固定版本的提交。读回的注解：Linux 上执行 310 项 JVM 测试；构建镜像、<code>datacraft/jvm</code>、<code>datacraft/airflow</code> 与 <code>datacraft/spark</code> 由本提交构建，三个运行镜像的 Java 为 25.0.5+8-LTS；Compose 栈与 Swarm 演练的结论同上；<code>containers</code> 作业 568 秒；公告运行里 Temurin 一步通过</td></tr>
+      <tr><td class="nowrap"><code>a38579a</code> · 2026-10-27</td><td><a href="https://github.com/liluyang1999/datacraft-lab/actions/runs/40481873297">40481873297</a><br>公告检查 <a href="https://github.com/liluyang1999/datacraft-lab/actions/runs/40481873301">40481873301</a></td><td><span class="tag ok">通过</span> 桌面控制台的提交。新增的 <code>desktop</code> 作业第一次运行，54 秒通过（Xvfb 下的 <code>verify</code>、打包并启动应用目录）；其余作业的注解与上一行相同；<code>containers</code> 作业 871 秒</td></tr>
+      <tr><td class="nowrap"><code>8a1fbc8</code> · 2026-10-27</td><td><a href="https://github.com/liluyang1999/datacraft-lab/actions/runs/40484775949">40484775949</a><br>公告检查 <a href="https://github.com/liluyang1999/datacraft-lab/actions/runs/40484775916">40484775916</a></td><td><span class="tag ok">通过</span> CI 检查的补充。读回的注解新增 <code>desktop</code> 作业实际执行的测试数：Linux 上 76 项，与 Windows 本机相同；Linux 上执行 310 项 JVM 测试，三个运行镜像的 Java 为 25.0.5+8-LTS，Compose 栈与 Swarm 演练的结论同上；<code>desktop</code> 作业 62 秒，<code>containers</code> 作业 834 秒；公告检查第一次包含桌面工程固定的版本</td></tr>
     </tbody>
   </table>
   </div>
-  <p><strong>更正：</strong>v4.0 写的是“GitHub Actions 额度不足，推送不会触发 CI”，并据此把 CI 记为“未运行”。这个前提是错的：09-26 的两次推送都触发了运行，<code>containers</code> 作业两次都失败，而当时没有去看。失败的原因是上一轮自己引入的（附录 D.1）：根 POM 给 Surefire 显式设置了 <code>&lt;skip&gt;</code>，它取代了构建镜像所依赖的 <code>-Dmaven.test.skip=true</code>，而 Docker 构建上下文里没有 <code>tests/</code>。作业日志需要仓库权限才能下载，所以根因是在本机用一份按 <code>.dockerignore</code> 过滤的仓库副本复现的：旧配置同样以 “No tests to run!” 失败，修复后通过。</p>
+  <p><strong>更正：</strong>v4.0 写的是“GitHub Actions 额度不足，推送不会触发 CI”，并据此把 CI 记为“未运行”。这个前提是错的：09-26 的两次推送都触发了运行，<code>containers</code> 作业两次都失败，而当时没有去看。失败的原因是上一轮自己引入的（附录 E.1）：根 POM 给 Surefire 显式设置了 <code>&lt;skip&gt;</code>，它取代了构建镜像所依赖的 <code>-Dmaven.test.skip=true</code>，而 Docker 构建上下文里没有 <code>tests/</code>。作业日志需要仓库权限才能下载，所以根因是在本机用一份按 <code>.dockerignore</code> 过滤的仓库副本复现的：旧配置同样以 “No tests to run!” 失败，修复后通过。</p>
   <p><strong>本机与 CI 两边都运行容器阶段：</strong>四个容器脚本在推送之前先在本机跑通（附录 A.5），CI 上的结论仍然从公开接口 <code>/repos/{owner}/{repo}/check-runs/{job id}/annotations</code> 读回，上表各行就是这样得到的。表中最后一行之后还有一次推送，就是本报告；它触发的运行不在表中，因为报告无法引用包含它自己的那一次运行，结果以 <a href="https://github.com/liluyang1999/datacraft-lab/actions">Actions 页面</a>为准。</p>
 </section>
 
@@ -819,14 +844,15 @@
   <table>
     <thead><tr><th>攻击面</th><th>风险</th><th>当前防护</th><th>残余</th></tr></thead>
     <tbody>
-      <tr><td>HTTP API</td><td>能到达端口的一方运行作业、读取文件摘要；大量并发请求耗尽资源</td><td>回环之外没有令牌即拒绝启动；<code>/jobs</code> 下的每个请求都要带 Bearer 令牌，否则 401（比较的是摘要，令牌不落日志）；同时最多运行 4 个作业，超出返回 503；Compose 只绑定 127.0.0.1，Swarm 不发布端口；带 <code>Origin</code> 的运行请求返回 403；纯 JVM 作业限制在只读挂载的数据根</td><td><span class="tag info">低</span> 令牌经明文 HTTP 传输，对外暴露前仍需终结 TLS 的网关；请求头一直发不完的连接没有时限（附录 A.4）</td></tr>
+      <tr><td>HTTP API</td><td>能到达端口的一方运行作业、读取文件摘要；大量并发请求耗尽资源</td><td>回环之外没有令牌即拒绝启动；<code>/jobs</code> 下的每个请求都要带 Bearer 令牌，否则 401（比较的是摘要，令牌不落日志）；同时最多运行 4 个作业，超出返回 503；Compose 只绑定 127.0.0.1，Swarm 不发布端口；带 <code>Origin</code> 的运行请求返回 403；纯 JVM 作业限制在只读挂载的数据根</td><td><span class="tag info">低</span> 令牌经明文 HTTP 传输，对外暴露前仍需终结 TLS 的网关；请求头一直发不完的连接没有时限（附录 B.4）</td></tr>
       <tr><td>作业路径参数</td><td>覆盖写删除任意目录；通配符越界读取</td><td>Spark 转换与纯 JVM 作业受 <code>DATACRAFT_DATA_ROOT</code> 约束；拒绝 glob 字符；Airflow 参数模式校验</td><td><span class="tag info">低</span> <code>row-count</code> 只读且不受约束；远程存储白名单未设计</td></tr>
       <tr><td>Airflow 任务参数</td><td>Shell 注入、模板注入</td><td>参数经环境变量逐项引用；<code>template_ext</code> 为空；参数键白名单</td><td><span class="tag ok">低</span></td></tr>
       <tr><td>SFTP</td><td>中间人攻击、误删或误覆盖</td><td>JVM 客户端严格校验主机密钥；Airflow 下载要求 <code>host_key</code>，本轮起由一次真实的 DAG 运行验证；字面路径；原子下载；密码字节用后清零；服务器返回的条目名必须是单个路径段</td><td><span class="tag info">低</span> 需要对真实服务器验收；JVM 客户端对“连接活着但不应答”的服务器没有超时，失败的上传会留下不完整的远端文件（暂无作业使用它）</td></tr>
       <tr><td>部署机密</td><td>弱默认值、泄露到进程参数或镜像</td><td>七个机密（含 API 令牌与 Redis 口令）独立随机生成并做强度预检，数据库口令同样不接受占位符；缺失即拒绝启动；密码经 stdin 传递；<code>.dockerignore</code> 排除机密；<code>datacraft-api</code> 容器只拿到自己的令牌</td><td><span class="tag warn">中</span> 所有 Airflow 容器共享机密（也能看到 API 令牌与 Redis 口令），DAG、CLI 与 Spark 属于管理员级可信代码</td></tr>
       <tr><td>部署脚本与 <code>.env</code></td><td><code>.env</code> 里的一行被 shell 当作命令执行；未经检查的 Compose override 把 API 发布到回环之外</td><td><code>swarm-deploy.sh</code> 在读取之前要求文件是纯 <code>KEY=value</code>（本轮之前，带 shell 语法的行会被执行）；预检、启动与停止使用同一份 Compose 配置，override 文件一并检查（本轮之前只检查主文件）</td><td><span class="tag info">低</span> <code>.env</code> 仍是受信文件：能改它的人本来就能改机密与镜像标签</td></tr>
-      <tr><td>构建与供应链</td><td>被篡改的构建工具或依赖、带漏洞的 JDK、固定版本出现新公告而无人察觉</td><td>Wrapper SHA-256 校验；Actions 固定 SHA 并注明完整版本；禁用有公告的 Jackson（jackson-databind 低于 2.22.4）；官方 constraints，其上只装能触及的安全修复版本；构建前拉取基础镜像，失败重试；JDK 25.0.4.1 强制下限；每周向 OSV 查询每个固定的依赖与 Action</td><td><span class="tag warn">中</span> 运行镜像的 Java 仍是 25.0.4.1，等官方镜像提供 25.0.5；公告检查不含传递依赖与基础镜像，只写在发布说明里的漏洞也查不到；基础镜像未固定 digest</td></tr>
-      <tr><td>Swarm 网络</td><td>节点间流量被读取；任何能进入覆盖网络的一方使用 Redis 或 API</td><td>覆盖网络以加密方式创建（节点间 IPsec）；Redis 要求口令；JVM API 要求令牌；有状态服务固定在数据节点；文档要求防火墙限制 2377、7946、4789 端口并放行 ESP</td><td><span class="tag info">低</span> 节点之间的 ESP 在一次两节点试验里验证过（附录 B.1），真实主机之间的防火墙没有；同一节点内的流量不加密，网络仍可被附加，只有可信节点才能加入</td></tr>
+      <tr><td>构建与供应链</td><td>被篡改的构建工具、依赖或 JDK 归档，带漏洞的 JDK，固定版本出现新公告而无人察觉</td><td>Wrapper SHA-256 校验；Actions 固定 SHA 并注明完整版本；禁用有公告的 Jackson（jackson-databind 低于 2.22.4）；官方 constraints，其上只装能触及的安全修复版本；镜像的 Java 是按版本与 SHA-256 固定的 Temurin 25.0.5+8，构建时校验；JDK 25.0.5 强制下限；每周向 OSV 查询每个固定的依赖与 Action（含桌面工程），向 Adoptium 核对 Temurin 是否有新版本</td><td><span class="tag info">低</span> 公告检查不含传递依赖与基础镜像，只写在发布说明里的漏洞也查不到；基础镜像未固定 digest；Temurin 的新版本要手动提高（公告工作流会提醒）</td></tr>
+      <tr><td>Swarm 网络</td><td>节点间流量被读取；任何能进入覆盖网络的一方使用 Redis 或 API</td><td>覆盖网络以加密方式创建（节点间 IPsec）；Redis 要求口令；JVM API 要求令牌；有状态服务固定在数据节点；文档要求防火墙限制 2377、7946、4789 端口并放行 ESP</td><td><span class="tag info">低</span> 节点之间的 ESP 在一次两节点试验里验证过（附录 C.1），真实主机之间的防火墙没有；同一节点内的流量不加密，网络仍可被附加，只有可信节点才能加入</td></tr>
+      <tr><td>桌面控制台</td><td>本机保存的令牌与口令被读取；令牌被发到不该发的地方</td><td>令牌与 Airflow 口令在 Windows 上用 DPAPI 绑定当前用户加密，其他系统用 AES-GCM 与只有本人可读的密钥文件，也可以只留在本次运行的内存里；本机数据只在 <code>~/.datacraft</code>；令牌只发给引擎的 <code>/jobs</code>，请求不带 <code>Origin</code>；客户端不记录请求头；不新增后台接口</td><td><span class="tag info">低</span> 能以同一用户身份运行代码的一方可以解密；连接远程后台时与 API 的边界相同，需要 SSH 隧道或终结 TLS 的网关</td></tr>
     </tbody>
   </table>
   </div>
@@ -1049,7 +1075,7 @@ bash deploy/scripts/compose-up.sh                # 预检机密与端口后启�
 
 <section id="scores" aria-labelledby="h-scores">
   <h2 id="h-scores">七、分维度评分</h2>
-  <p>灰点是 2026-09-25 审计前的评分，青绿点是当前评分（1–5 分）；数值依次为审计前、审计后与当前。综合评分为 12 个维度的平均值：3.2 → 4.3 → 4.4（上一版 v4.3 同为 4.4）。本轮没有调整任何一项：修复的缺陷都在这些评分已经描述的范围之内（演练的拆除、初始化的等待、只读检查、参数名的近似检查），新发现的 Java 镜像滞后与 Airflow 镜像里的公告由上游决定，已在第八章记录。合计 53.0 ÷ 12 = 4.42，记为 4.4。</p>
+  <p>灰点是 2026-09-25 审计前的评分，青绿点是当前评分（1–5 分）；数值依次为审计前、审计后与当前。本版新增“桌面控制台”一个维度，它在审计时还不存在，只有当前评分。综合评分为各维度的平均值：审计前 3.2、审计后 4.3（12 个维度），当前 4.4（13 个维度；上一版 v4.4 是 12 个维度的 4.4）。其余 12 项没有调整：Java 镜像的滞后已经解决，但“构建与供应链”本来就是 4.5，它的扣分理由（基础镜像未固定 digest）仍然成立。合计 57.0 ÷ 13 = 4.38，记为 4.4。</p>
   <div class="legend" aria-hidden="true"><span class="dot" style="--swatch: var(--mark-ctx)">2026-09-25 审计前</span><span class="dot" style="--swatch: var(--accent)">当前</span></div>
   <div class="table-wrap">
   <table>
@@ -1063,10 +1089,11 @@ bash deploy/scripts/compose-up.sh                # 预检机密与端口后启�
       <tr><td>CLI 与 HTTP 接口</td><td><div class="db" role="img" aria-label="3.0 到 4.5"><span class="seg" style="left:50%;width:37.5%"></span><span class="pt prev" style="left:50%"></span><span class="pt now" style="left:87.5%"></span></div></td><td class="db-val">3.0 → 4.5 → 4.5</td><td>退出码与状态码契约可测试；输出跨平台字节一致；令牌认证与并发上限有完整的状态码契约（401、503）</td></tr>
       <tr><td>Airflow 编排</td><td><div class="db" role="img" aria-label="3.5 到 4.5"><span class="seg" style="left:62.5%;width:25%"></span><span class="pt prev" style="left:62.5%"></span><span class="pt now" style="left:87.5%"></span></div></td><td class="db-val">3.5 → 4.5 → 4.5</td><td>路径约束、SFTP 主机密钥守卫；依赖用 <code>chain()</code> 声明</td></tr>
       <tr><td>容器与部署</td><td><div class="db" role="img" aria-label="3.0 到 4.5"><span class="seg" style="left:50%;width:37.5%"></span><span class="pt prev" style="left:50%"></span><span class="pt now" style="left:87.5%"></span></div></td><td class="db-val">3.0 → 4.0 → 4.5</td><td>缺失机密即拒绝启动、非 root API、API 令牌与 Redis 口令由部署脚本生成并强制；预检检查的就是启动的配置，初始化在任意 UID 下可用；Compose 与 Swarm 两个栈在 CI 与本机都真实部署，Swarm 还演练升级，两节点手工验证过一次。仍无高可用</td></tr>
-      <tr><td>构建与供应链</td><td><div class="db" role="img" aria-label="3.0 到 4.5"><span class="seg" style="left:50%;width:37.5%"></span><span class="pt prev" style="left:50%"></span><span class="pt now" style="left:87.5%"></span></div></td><td class="db-val">3.0 → 4.5 → 4.5</td><td>零警告门禁；JDK 下限强制；版本逐项核对，Maven 升到 3.10.0，只有 google-java-format 因 Spotless 不兼容暂缓；固定版本每周核对公告，基础镜像仍未固定 digest</td></tr>
+      <tr><td>构建与供应链</td><td><div class="db" role="img" aria-label="3.0 到 4.5"><span class="seg" style="left:50%;width:37.5%"></span><span class="pt prev" style="left:50%"></span><span class="pt now" style="left:87.5%"></span></div></td><td class="db-val">3.0 → 4.5 → 4.5</td><td>零警告门禁；JDK 下限强制；镜像的 Java 按版本与校验和固定，每周与 Adoptium 核对；版本逐项核对，只有 google-java-format 因 Spotless 不兼容暂缓；固定版本（含桌面工程）每周核对公告，基础镜像仍未固定 digest</td></tr>
       <tr><td>测试与 CI</td><td><div class="db" role="img" aria-label="3.5 到 4.5"><span class="seg" style="left:62.5%;width:25%"></span><span class="pt prev" style="left:62.5%"></span><span class="pt now" style="left:87.5%"></span></div></td><td class="db-val">3.5 → 4.5 → 4.5</td><td>平台标签取代跳过；两个平台各有执行下限；JVM 套件与三条 DAG 在 Linux 本机实跑；修复做过变异检查，推送前做过独立复核；失败原因写入公开注解并经历过真实的失败；容器阶段在 CI 与本机都能运行，四个镜像都被构建和使用。两节点 Swarm 不在流水线里</td></tr>
       <tr><td>文档</td><td><div class="db" role="img" aria-label="3.0 到 4.5"><span class="seg" style="left:50%;width:37.5%"></span><span class="pt prev" style="left:50%"></span><span class="pt now" style="left:87.5%"></span></div></td><td class="db-val">3.0 → 4.0 → 4.5</td><td>文档与设计分目录；单一评估报告；链接、存放位置与过时路径有测试</td></tr>
       <tr><td>安全</td><td><div class="db" role="img" aria-label="2.5 到 4.0"><span class="seg" style="left:37.5%;width:37.5%"></span><span class="pt prev" style="left:37.5%"></span><span class="pt now" style="left:75%"></span></div></td><td class="db-val">2.5 → 3.5 → 4.0</td><td>API 在回环之外必须有令牌，并发运行有上限；Swarm 的 Redis 有口令、覆盖网络加密；固定版本每周核对公告；本轮堵上 <code>.env</code> 被当作命令执行与 override 绕过预检两处。令牌经明文 HTTP 传输，机密仍在 Airflow 容器间共享</td></tr>
+      <tr><td>桌面控制台</td><td><div class="db" role="img" aria-label="新增，4.0"><span class="pt now" style="left:75%"></span></div></td><td class="db-val">— → — → 4.0</td><td>分层清楚，FX 线程只做界面，流畅度有预算并由测试检查；87 项测试，端到端测试对真实后台通过，CI 在虚拟显示器上运行并打包启动；13 处审阅发现已修复。新工程：只有应用目录、没有安装包，远程连接依赖隧道，尚未经过长期使用</td></tr>
     </tbody>
   </table>
   </div>
@@ -1080,30 +1107,128 @@ bash deploy/scripts/compose-up.sh                # 预检机密与端口后启�
     <tbody>
       <tr><td><span class="tag warn">P2</span></td><td>API 令牌经明文 HTTP 传输</td><td>能读到流量的一方可以取得令牌；令牌是所有调用方共用的一个密钥</td><td>保持回环绑定，经 SSH 隧道访问；对外暴露前在前面加终结 TLS 的网关</td></tr>
       <tr><td><span class="tag warn">P2</span></td><td>Spark 4.2.0 自带依赖的公告</td><td>Spark 自带的 Jackson 2.21.2 在 OSV 中有 19 条公告（databind 16 条、core 3 条），CVE-2026-110879 也影响它；Netty、Jetty 也有公告。<code>spark-submit</code> 先加载 Spark 自带的 Jackson，本项目的升级管不到 Spark 作业的进程；当前配置下不可达。2026-10-26 复核时 Spark 仍只有 4.2.0</td><td>不发布 Spark UI 与 RPC 端口；Spark 4.2.1 发布后升级</td></tr>
-      <tr><td><span class="tag warn">P2</span></td><td>运行镜像的 Java 仍是 25.0.4.1</td><td>2026-10 的关键补丁更新修复了 39 个影响 25.0.4.1 的漏洞，其中包括 API 使用的 JDK HTTP 服务器（CVE-2026-91453）；25.0.4.1 的信任库还信任私钥已泄露的 emSign ECC Root CA - G3（本项目的 JVM 代码没有对外的 TLS 连接）。构建与本机已在 25.0.5 上，官方 <code>eclipse-temurin</code> 与 <code>maven</code> 镜像截至 2026-10-26 仍是 25.0.4.1</td><td>官方镜像更新后立即重新构建；随后把构建下限提高到 25.0.5（决策 4）</td></tr>
       <tr><td><span class="tag warn">P2</span></td><td>机密在 Airflow 容器间共享</td><td>任一任务代码都能读取全部机密，包括 JVM API 的令牌与 Redis 口令。只对任务隐藏其中几项意义不大：数据库口令与 Fernet 密钥足以改写元数据、解密连接</td><td>视为可信代码边界；多租户前把 worker 与元数据库的凭据分开，再做机密隔离</td></tr>
       <tr><td><span class="tag info">P3</span></td><td>多节点 Swarm 只做过一次手工验证</td><td>两个嵌套引擎在一台机器上：放置、路由网格与节点之间的 ESP 通过。它不在 CI 里，脚本或 Docker 版本变化之后不会自动重验；真实主机之间的防火墙、节点故障之后的行为与共享存储没有验证；默认拓扑仍把所有服务固定在一台数据节点上</td><td>扩展到多机前在真实主机上按部署教程演练一次，并在节点之间放行 ESP（IP 协议 50）；需要长期保障时把两节点试验做成可以重复运行的脚本</td></tr>
       <tr><td><span class="tag info">P3</span></td><td>SFTP 客户端的两个限度</td><td>JVM 的 <code>SftpClient</code> 对保持 SSH 连接却不应答请求的服务器没有超时；上传是原地写入，失败会留下不完整的远端文件。目前没有作业使用这个客户端，Airflow 的 SFTP 下载走的是 provider</td><td>第一个使用它的作业出现时：在外层为调用设时限，上传到临时名称再重命名</td></tr>
       <tr><td><span class="tag info">P3</span></td><td>CSV 编码检查的两个限度</td><td>检查要把输入多读一遍；编码指错但字节恰好合法时无法识别（没有字节序标记的 UTF-8 文本总是合法的 ISO-8859-1）。引号内的 CRLF 仍被存为 LF</td><td>为数据源固定并写明编码；对结果有疑问时用 <code>csv-profile</code> 或抽样核对</td></tr>
-      <tr><td><span class="tag info">P3</span></td><td>公告检查的覆盖范围</td><td>每周的检查只看直接固定的 28 个版本，不含 Spark 与 Airflow 的传递依赖，也不含基础镜像；只写在发布说明里的漏洞查不到（本轮的 Jackson CVE 就是这样）。本轮手工查询了官方 Airflow 镜像的 440 个 Python 包：18 个有公告，其中 16 个本部署触及不到，等下一个 Airflow 版本（附录 A.3）</td><td>关注 Spark、Airflow 与 Jackson 的发行说明；Airflow 发布新版本后去掉 <code>security-overrides.txt</code> 里约束已经覆盖的行；需要可重复的镜像时再固定 digest 并配套更新流程</td></tr>
+      <tr><td><span class="tag info">P3</span></td><td>公告检查的覆盖范围</td><td>每周的检查只看直接固定的 32 个版本（本轮起含桌面工程的 JavaFX 与 sqlite-jdbc），不含 Spark 与 Airflow 的传递依赖，也不含基础镜像；只写在发布说明里的漏洞查不到（本轮的 Jackson CVE 就是这样）。本轮手工查询了官方 Airflow 镜像的 440 个 Python 包：18 个有公告，其中 16 个本部署触及不到，等下一个 Airflow 版本（附录 B.3）</td><td>关注 Spark、Airflow 与 Jackson 的发行说明；Airflow 发布新版本后去掉 <code>security-overrides.txt</code> 里约束已经覆盖的行；需要可重复的镜像时再固定 digest 并配套更新流程</td></tr>
       <tr><td><span class="tag info">P3</span></td><td>Airflow 上游的弃用提示</td><td>Airflow 3.3.2 读取 <code>.airflowignore</code> 时，其自身代码触发 pathspec 1.1.1 的 DeprecationWarning，不影响行为；2026-10-26 复核时 3.3.2 仍是最新版</td><td>等待 Airflow 上游修复；改用 regexp 忽略语法的收益不抵配置改动</td></tr>
       <tr><td><span class="tag info">P3</span></td><td>部署上的三处约定</td><td>Compose 项目名取自目录名 <code>compose</code>，同一主机上的第二份检出会共用容器与数据卷；修改 <code>.env</code> 后重跑启动脚本会重建全部 Airflow 容器，运行中的任务只有 10 秒；从最早版本（PostgreSQL 16 的卷布局）升级的步骤只用 <code>postgres:18</code> 验证过两个环节，没有做完整演练。三处都已写入部署教程</td><td>一台主机一份部署；挑没有任务运行的时候改配置；从最早的版本升级前先在副本上演练</td></tr>
       <tr><td><span class="tag info">P3</span></td><td>Spark 会话锁无超时；<code>durationMillis</code> 含排队时间；Lifecycle 仅为标签</td><td>API 的并发上限使排队的请求数有界（默认最多 3 个在等）；API 镜像不含 Spark，当前部署拓扑下不触发</td><td>引入 HTTP 侧 Spark 服务或多租户时再处理</td></tr>
       <tr><td><span class="tag info">P3</span></td><td>一项新版本未采用</td><td>google-java-format 1.37.0 在 Spotless 3.10.4 下失败（2026-10-09 与 2026-10-26 两次实测），Spotless 没有新版本</td><td>等 Spotless 支持后两者一起升级</td></tr>
       <tr><td><span class="tag info">P3</span></td><td>API 对慢请求没有时限</td><td>JDK HTTP 服务器默认不限制请求到达的时间：发不完请求头的连接一直占着套接字与虚拟线程，足够多时会耗尽文件描述符或内存。只设 <code>sun.net.httpserver.maxReqTime</code> 不够：请求带有处理器不读的请求体时，计时要到响应写完才停，长作业会被切断。端口只能从回环、Swarm 覆盖网络或隧道到达</td><td>在处理器里先读完（有上限的）请求体，再设置 <code>maxReqTime</code> 与 <code>jdk.httpserver.maxConnections</code>，并用一个故意发不完请求头的测试验证</td></tr>
-      <tr><td><span class="tag info">路线图</span></td><td>功能扩展</td><td>—</td><td>真实主机上的多节点演练与共享存储，可重复的两节点脚本；更多纯 JVM 作业与流式 CSV 解析；配置化作业目录；对象存储版 <code>StorageService</code>（S3A）；docker secrets；云端、ARM 与真实 SFTP 服务器验收</td></tr>
+      <tr><td><span class="tag info">P3</span></td><td>Temurin 固定版本要手动提高</td><td>镜像的 Java 不再随官方镜像更新：Temurin 发布新版本后，要改 <code>Dockerfile.temurin</code> 的版本与四个校验和并重新构建镜像，在此之前镜像停在旧版本；只固定了 amd64 与 arm64 的归档</td><td>公告工作流每周核对，出现新版本时失败；收到失败当天提高固定版本、重新构建并部署</td></tr>
+      <tr><td><span class="tag info">P3</span></td><td>桌面控制台的限度</td><td>只生成应用目录，没有安装包与代码签名；AOT 缓存按时间戳核对 jar，复制应用目录要保留时间戳；连接远程后台要靠 SSH 隧道或 TLS 网关；CI 的截图要登录才能下载，Linux 运行器上的中文显示没有核对；流水线视图的主题切换最慢约 75 ms，接近 100 ms 的预算</td><td>需要分发给别人时再做安装包与签名；远程主机沿用 API 的边界，经 SSH 隧道访问</td></tr>
+      <tr><td><span class="tag info">路线图</span></td><td>功能扩展</td><td>—</td><td>真实主机上的多节点演练与共享存储，可重复的两节点脚本；更多纯 JVM 作业与流式 CSV 解析；配置化作业目录；对象存储版 <code>StorageService</code>（S3A）；docker secrets；云端、ARM 与真实 SFTP 服务器验收；桌面控制台的安装包与经 SSH 隧道自动连接远程主机</td></tr>
     </tbody>
   </table>
   </div>
 </section>
 
 <section id="appendix-risks" aria-labelledby="h-appendix-risks">
-  <h2 id="h-appendix-risks">附录 A　本轮明细（2026-10-26）：版本缺陷、十月的 Java 更新与第三次全面复核</h2>
+  <h2 id="h-appendix-risks">附录 A　本轮明细（2026-10-27）：固定的 Java 25.0.5 与桌面控制台</h2>
 
-  <h3>A.1 上一轮列出的版本缺陷与本轮的处理</h3>
+  <h3>A.1 上一轮留下的版本缺陷与本轮的处理</h3>
   <div class="table-wrap">
   <table>
-    <caption>左列是 2026-10-21 部署就绪复核列出的版本问题与 v4.3 第八章中与版本有关的事项。“现状”一列里，只有标为“已解决”的事项不再出现在第八章。</caption>
+    <caption>左列是 v4.4 第八章与附录 B.1 里“等待上游”的两项。“现状”一列里标为“已解决”的事项不再出现在第八章。</caption>
+    <thead><tr><th>事项</th><th>本轮的处理</th><th>如何验证</th><th>现状</th></tr></thead>
+    <tbody>
+      <tr><td>运行镜像的 Java 仍是 25.0.4.1（P2）：官方 <code>eclipse-temurin</code> 与 <code>maven</code> 镜像在 Temurin 25.0.5+8 发布五天后仍是 25.0.4.1+1，它们的更新在等其他 CPU 架构；10-27 当天 <code>eclipse-temurin:25-jre</code> 换了一层 Ubuntu 重新推送，Java 仍未变</td><td>不再等官方镜像。新的 <code>deploy/docker/Dockerfile.temurin</code> 按版本与四个归档（JRE 与 JDK，amd64 与 arm64）的 SHA-256 固定 Temurin 25.0.5+8，BuildKit 从 Adoptium 的发布页下载并校验（<code>ADD --checksum</code>），删掉基础镜像自带的 Java 后换上它：<code>build-images.sh</code> 先构建 <code>datacraft/maven</code>（官方 Maven 镜像加固定的 JDK）与 <code>datacraft/jre</code>（官方 JRE 镜像加固定的 JRE），构建镜像从前者开始，三个运行镜像的 Java 取自后者</td><td>本机容器阶段：四个镜像构建，三个运行镜像与构建镜像都是 25.0.5+8-LTS；把校验和改错一位时构建以 “digest mismatch” 停止。CI 运行 <a href="https://github.com/liluyang1999/datacraft-lab/actions/runs/40445373779">40445373779</a> 的注解同样读回 25.0.5+8-LTS</td><td><span class="tag ok">已解决</span></td></tr>
+      <tr><td>Temurin 25.0.4.1 的信任库仍信任 emSign ECC Root CA - G3</td><td>随 25.0.5 一起解决：Temurin 25.0.5 去掉了这个根证书</td><td>同上</td><td><span class="tag ok">已解决</span></td></tr>
+      <tr><td>构建下限停在 25.0.4.1（决策 4）</td><td>镜像不再依赖官方的更新，下限提高到 <code>[25.0.5,)</code>（<strong>不兼容</strong>：在 25.0.4.1 上构建会在 <code>validate</code> 停止）；<code>smoke-images.sh</code> 要求各镜像恰好是固定的版本、且不低于 25.0.5，一项测试要求这个下限与 Enforcer 的相同、不高于固定的版本</td><td>在 Oracle JDK 25.0.4.1 上构建被拒绝并给出原因；25.0.5.0.3 上 Windows 全量构建 0 警告</td><td><span class="tag ok">已解决</span></td></tr>
+      <tr><td>固定的版本会过时</td><td><code>cicd/security/check_temurin.py</code> 成为公告工作流的第二步：Adoptium 有更新的 Temurin 25 发行版、或固定的校验和与 Adoptium 公布的不同时失败；OSV 一步失败时它照样运行，改动固定版本的推送也会触发它</td><td>对 Adoptium 接口实测：“25.0.5+8 是最新的 Temurin 25，四个校验和与 Adoptium 公布的一致”；6 项桩测试（当前、更新的版本、错误的校验和、接口不可达、读不出固定版本）。公告运行 <a href="https://github.com/liluyang1999/datacraft-lab/actions/runs/40445373737">40445373737</a> 通过</td><td><span class="tag ok">已解决</span></td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <h3>A.2 版本核对</h3>
+  <div class="table-wrap">
+  <table>
+    <caption>核对日期 2026-10-27。来源：Maven Central、Adoptium、Gluon 与 GitHub 发布页。</caption>
+    <thead><tr><th>组件</th><th>原版本</th><th>当前版本</th><th>说明</th></tr></thead>
+    <tbody>
+      <tr><td>镜像中的 Java</td><td class="money">25.0.4.1+1</td><td class="money">25.0.5+8</td><td>Temurin，按版本与 SHA-256 固定（A.1）</td></tr>
+      <tr><td>JDK 下限（Enforcer）</td><td class="money">[25.0.4.1,)</td><td class="money">[25.0.5,)</td><td>Oracle 的五段式版本号（如 25.0.5.0.3）同样通过</td></tr>
+      <tr><td>JavaFX</td><td class="money">—</td><td class="money">25.0.5</td><td>2026-10-20 发布，需要 JDK 23 以上；桌面控制台新用</td></tr>
+      <tr><td>sqlite-jdbc</td><td class="money">—</td><td class="money">3.53.4.0</td><td>同上；自带各平台的本机库</td></tr>
+      <tr><td>javafx-maven-plugin</td><td class="money">—</td><td class="money">0.0.8</td><td>只用于 <code>javafx:run</code></td></tr>
+      <tr><td>Barlow 字体</td><td class="money">—</td><td class="money">1.408</td><td>SIL OFL，只用两个字重，许可证随字体放在资源里</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <p class="small muted">桌面工程沿用根 POM 管理的 Jackson 2.22.4、JUnit 6.1.3 与全部插件版本；它不进入后端的反应堆，也不进入任何镜像（<code>.dockerignore</code> 排除 <code>desktop/</code>）。</p>
+
+  <h3>A.3 数艺工坊（桌面控制台）</h3>
+  <p>本轮新增的桌面端：在一台开发机或运维机上看两个后台是否健康、带参数运行作业、触发与跟踪流水线、查看结果与日志。它是独立的 Maven 工程（<code>desktop/</code>，父 POM 是根 POM，沿用 Java 下限、Enforcer、Spotless、Checkstyle 与零警告），只是客户端：不新增后台接口，不保存业务数据。规划、架构、界面设计、接口对接、流畅度、测试与循环记录在 <a href="../desktop/README.md">docs/desktop</a>（中文）。</p>
+  <div class="table-wrap">
+  <table>
+    <thead><tr><th>方面</th><th>做法</th><th>证据</th></tr></thead>
+    <tbody>
+      <tr><td>分层</td><td>界面 → 视图模型 → 服务 → 接口客户端 / 本机存储，依赖只向下；FX 线程只做界面，网络在虚拟线程上，SQLite 由单线程独占，轮询的到点线程只读 <code>volatile</code> 副本</td><td>视图模型测试用由测试控制的队列代替 FX 线程</td></tr>
+      <tr><td>后台对接</td><td>引擎 API 的状态码契约（200 与 500 的结果、401、403、404、503、400），令牌只发给 <code>/jobs</code>，不带 <code>Origin</code>；Airflow 3.3.2 REST v2，JWT 到期前续期、401 后重新登录一次；超过等待上限是 <code>TIMED_OUT</code> 而不是“无法连接”，作业在引擎上继续</td><td>客户端测试对进程内桩服务器；端到端测试对真实后台（A.5）</td></tr>
+      <tr><td>本机数据</td><td>只在 <code>~/.datacraft</code>：SQLite（设置、连接配置、参数预设、有上限的最近运行与活动缓存，<code>PRAGMA user_version</code> 迁移）、日志、JDK 管道套接字的目录。令牌与口令在 Windows 上用 DPAPI 绑定当前用户加密，其他系统用 AES-GCM 与只有本人可读的密钥文件，也可以只留在本次运行的内存里</td><td>存储测试：建库、迁移、拒绝更新的结构、保留上限、加解密往返与密钥文件权限</td></tr>
+      <tr><td>流畅度</td><td>只轮询屏幕上的数据，同类请求只有一个在途，失败退避到 30 s，结果按主键就地更新；视图常驻场景只切换可见性，主题只增删根节点的一个样式类；本机数据与 JavaFX 并行启动</td><td>预热后切换视图无超过 50 ms 的停顿，主题切换 12–75 ms，1500 行日志滚动无停顿；首帧约 1.7 s，打包的应用目录带 JDK 25 AOT 缓存约 1.1–1.3 s</td></tr>
+      <tr><td>界面</td><td>“蓝晒”冷色调，浅色与深色两套；只有运行纹带一处用力；文字与背景对比度按 WCAG 公式逐对核算，不低于 4.5:1（雾灰从 <code>#61748A</code> 调到 <code>#566A80</code>，主按钮的填充压暗）</td><td>界面测试把每个视图的两种主题、触发面板与日志存为截图，逐张检查</td></tr>
+      <tr><td>打包与 CI</td><td><code>cicd/desktop/package_desktop.py</code>：jdeps 与 jlink 生成精简运行时，jpackage 生成应用目录，一次 <code>--smoke</code> 启动训练 AOT 缓存，再启动一次检查；CI 新增 <code>desktop</code> 作业（<code>xvfb-run</code>），核对至少执行 76 项测试并把数目写成注解；每周的公告检查也查询桌面工程固定的 JavaFX 与 sqlite-jdbc</td><td>脚本自身的逻辑 13 项测试；CI 运行见 4.5</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <h3>A.4 发现与处理</h3>
+  <p>实现过程中先由测试与本机运行发现了四处问题；完成后另起一路只读代码审阅，报告 13 处缺陷，逐一对照代码核实后全部修复；第一次 CI 运行之后，对照后端的作业又补了两处检查。除特别说明外，每处修复都先有一个在修复前失败的测试。</p>
+  <div class="table-wrap">
+  <table>
+    <thead><tr><th>位置</th><th>问题</th><th>处理与测试</th></tr></thead>
+    <tbody>
+      <tr><td>启动</td><td>开发机的系统 TEMP 目录放不下 JDK 为 NIO 管道创建的 AF_UNIX 套接字，HTTP 客户端无法创建，应用一启动就退出（后端的测试由构建参数绕开了同一个问题）</td><td>启动器把 <code>jdk.net.unixdomain.tmpdir</code> 指到 <code>~/.datacraft/tmp</code>；实测 TEMP 本身不行、其下新建的目录可以</td></tr>
+      <tr><td>Airflow 运行的配置</td><td><code>Map.copyOf</code> 不接受 <code>null</code>：配置里有 JSON <code>null</code> 的一次运行会让整个运行列表加载失败；指标也因此失去引擎给出的顺序</td><td>保序、可含 <code>null</code> 的不可变副本；两项测试</td></tr>
+      <tr><td>Airflow 的 409</td><td><code>detail</code> 是含 SQL 语句的对象，原样显示在界面上</td><td>只取 <code>reason</code>；测试</td></tr>
+      <tr><td>性能</td><td>每解析一个 DAG 运行就新建一个 JSON 映射器；主题切换要重排包括隐藏视图在内的全部节点（实测最高 215 ms）；视图每次重新挂上场景都要重新匹配全部 CSS</td><td>共用一个映射器；主题改为根节点样式类，切换前取下隐藏的视图；视图常驻场景。测量结果见 A.3</td></tr>
+      <tr><td>审阅：退出</td><td>关闭窗口时 <code>HttpClient.close()</code> 等待进行中的交换，一次仍在等待的作业运行（默认上限 30 分钟）让进程在窗口消失后继续存在</td><td>改为取消在途请求再有限等待；测试在修复前 3 秒超时</td></tr>
+      <tr><td>审阅：作业</td><td>超过等待上限被说成“无法连接引擎 API”；切换连接后旧连接的作业列表、选择与结果仍在；预设列表会显示到别的作业下，保存失败没有提示</td><td><code>TIMED_OUT</code> 与对应的说明；切换连接时清空作业视图的状态；预设按作业核对、失败给出提示。五项测试</td></tr>
+      <tr><td>审阅：连接</td><td>切换连接时，上一个连接还在途的检查能为新连接“担保”令牌正确，错误的令牌显示为正常；“使用此连接”忽略未保存的修改；慢的测试结果显示在后来打开的连接下；回到设置时清空正在新建的连接</td><td>检查结果与发起它的连接绑定，旧连接的结果不再应用；先保存再连接；测试结果按表单的版本核对；新建中的表单不被重载。四项测试</td></tr>
+      <tr><td>审阅：流水线</td><td>日志加载中再打开另一份日志时第二份不再加载；先前所选运行的任务在等待界面时被应用到新选的运行；暂停之前已发出的轮询把开关拨回；映射任务的日志缺少 <code>map_index</code>；日志面板每次打开都留下一个监听器</td><td>新的日志请求取代旧的；运行与任务的结果带上所属的 DAG 与运行；暂停或恢复在途时停止轮询 DAG 列表；带上 <code>map_index</code>；关闭面板时移除监听器（这一处直接修复）。四项测试</td></tr>
+      <tr><td>第一次 CI 运行之后</td><td>对照后端作业发现两处缺口：<code>desktop</code> 作业不核对测试数，测试类改名或不再运行时套件会悄悄变小；每周的公告检查只读根 POM，<code>desktop/pom.xml</code> 自己固定的 JavaFX 与 sqlite-jdbc 从没有被查询</td><td><code>check_test_counts.py --project desktop</code>：下限 76，两个平台相同，通过时写成注解；公告检查读取 <code>desktop/pom.xml</code>，连同 <code>javafx-controls</code> 带来的 base 与 graphics 模块，改动这个文件也会触发检查（实际查询 OSV：32 个固定版本没有已知公告）。新增与改动的测试都先失败后通过</td></tr>
+      <tr><td>测试本身</td><td>桩服务器一次只处理一个请求，一个被扣住的请求会挡住其他请求，使一项测试因错误的原因通过；两项测试依赖时序</td><td>桩服务器改为每个请求一个线程；改用确定的同步点，并把修复临时撤掉确认测试会失败</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <h3>A.5 本机运行</h3>
+  <div class="table-wrap">
+  <table>
+    <caption>环境：Windows 11 · Oracle JDK 25.0.5.0.3；Docker Desktop 4.96.3（引擎 29.9.2）。容器阶段在 Java 固定版本的提交上运行；端到端测试在桌面控制台的最终代码上运行。</caption>
+    <thead><tr><th>步骤</th><th>结果</th><th class="num">耗时</th></tr></thead>
+    <tbody>
+      <tr><td><code>cicd/stacks/check-stack-files.sh</code></td><td><span class="tag ok">通过</span></td><td class="num">3 秒</td></tr>
+      <tr><td><code>cicd/images/smoke-images.sh</code></td><td><span class="tag ok">通过</span> 构建 <code>datacraft/maven</code> 与 <code>datacraft/jre</code>，再构建四个镜像；构建镜像与三个运行镜像的 Java 都是 25.0.5+8-LTS；其余检查与上一轮相同</td><td class="num">17 分 1 秒</td></tr>
+      <tr><td><code>cicd/images/smoke-compose.sh</code></td><td><span class="tag ok">通过</span></td><td class="num">3 分 22 秒</td></tr>
+      <tr><td><code>cicd/images/smoke-swarm.sh</code></td><td><span class="tag ok">通过</span></td><td class="num">5 分 8 秒</td></tr>
+      <tr><td>桌面工程 <code>./mvnw -f desktop/pom.xml verify</code></td><td><span class="tag ok">通过</span> 76 项测试，0 失败、0 跳过、0 警告，连续三次相同</td><td class="num">约 1 分</td></tr>
+      <tr><td>端到端，对 CLI jar 启动的 <code>serve-api</code></td><td><span class="tag ok">通过</span> 作业目录、<code>echo</code> 中文往返、<code>csv-profile</code> 的行数与列数、缺参数时的失败结果、未知作业、错误令牌；窗口里运行作业</td><td class="num">—</td></tr>
+      <tr><td>端到端，对本机 Compose 部署</td><td><span class="tag ok">通过</span> Airflow 3.3.2 的登录、健康与版本，三个 DAG，暂停与恢复后 Airflow 的状态一致，触发 <code>datacraft_engine_jobs</code> 约 9 秒到 success、两个任务成功、日志可读；窗口里两个后台都为正常。部署是仓库副本里生成的一次性机密，测试后连同数据卷删除</td><td class="num">—</td></tr>
+      <tr><td><code>cicd/desktop/package_desktop.py</code></td><td><span class="tag ok">通过</span> 应用目录约 116 MB，AOT 缓存约 45 MB；带缓存的首帧 1.09–1.27 s，保留时间戳复制到别处后仍为 1.1–1.2 s</td><td class="num">约 30 秒</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <p>后端在 Windows 上全量构建（25.0.5.0.3）0 警告；Linux（WSL）上 <code>tests/deploy</code> 70 项、<code>tests/ci</code> 129 项（含第一次 CI 运行之后补上的 5 项）通过，ShellCheck 对 23 个 Shell 脚本没有发现，<code>check-actions-pinned.sh</code> 核对了 18 处 <code>uses</code>；pyright 0 诊断。</p>
+
+  <h3>A.6 部署与升级时要注意的变化</h3>
+  <ul>
+    <li><strong>构建需要 JDK 25.0.5 或更新（不兼容）：</strong>25.0.4.1 上的构建在 <code>validate</code> 停止并说明原因。</li>
+    <li><strong>镜像构建多出两个镜像：</strong><code>datacraft/maven</code> 与 <code>datacraft/jre</code>；部署教程的镜像表与清理命令已列出它们。Temurin 有新版本时，改 <code>Dockerfile.temurin</code> 里的版本与四个校验和（公告工作流会提醒）。</li>
+    <li><strong>桌面控制台是新增的、可选的：</strong>后端的构建、jar、镜像与部署不受影响；需要时按 <a href="../desktop/README.md">docs/desktop</a> 构建或打包，连接本机 Compose 部署的默认地址就是“本机部署”这个连接的默认值。</li>
+  </ul>
+</section>
+
+<section id="appendix-1026" aria-labelledby="h-appendix-1026">
+  <h2 id="h-appendix-1026">附录 B　2026-10-26 明细：版本缺陷、十月的 Java 更新与第三次全面复核</h2>
+
+  <h3>B.1 上一轮列出的版本缺陷与本轮的处理</h3>
+  <div class="table-wrap">
+  <table>
+    <caption>左列是 2026-10-21 部署就绪复核列出的版本问题与 v4.3 第八章中与版本有关的事项；“现状”是 v4.4 当时的状态，此后的变化见附录 A.1。</caption>
     <thead><tr><th>事项</th><th>本轮的处理</th><th>如何验证</th><th>现状</th></tr></thead>
     <tbody>
       <tr><td>Oracle 2026 年 10 月关键补丁更新（2026-10-20）：55 个 Java SE 补丁，其中 39 个把 25.0.4.1 列为受影响，包括 API 使用的 JDK HTTP 服务器（CVE-2026-91453，5.3 分）</td><td>本机升级到 Oracle JDK 25.0.5.0.3；Linux 验证改用 Adoptium 官方发布、校验过 SHA-256 的 Temurin 25.0.5+8；CI 的 <code>setup-java</code> 取最新版，同样是 25.0.5。构建下限仍为 25.0.4.1：官方 <code>eclipse-temurin:25-jre</code> 与 <code>maven:3.10.0-eclipse-temurin-25</code> 镜像仍是 25.0.4.1+1，它们的更新（adoptium/containers 1092）在等其他 CPU 架构，此时提高下限会让镜像构建失败。按决策 4，本机、CI 与构建镜像都到达新版本时再提高</td><td>Windows 与 Linux 两次全量构建都在 25.0.5 上 0 警告；Docker Hub 与 GitHub 接口在 2026-10-26 当天多次核对镜像状态</td><td><span class="tag warn">等待上游</span> 镜像更新后重新构建即带上 25.0.5，无需改代码</td></tr>
@@ -1117,7 +1242,7 @@ bash deploy/scripts/compose-up.sh                # 预检机密与端口后启�
   </table>
   </div>
 
-  <h3>A.2 版本核对</h3>
+  <h3>B.2 版本核对</h3>
   <div class="table-wrap">
   <table>
     <caption>核对日期 2026-10-26。来源：Maven Central、PyPI、npm、Docker Hub、GitHub 发布页与 Adoptium；固定的 28 个版本另经 OSV 查询，没有已知公告。</caption>
@@ -1127,7 +1252,7 @@ bash deploy/scripts/compose-up.sh                # 预检机密与端口后启�
       <tr><td>maven-surefire-plugin</td><td class="money">3.6.0</td><td class="money">3.6.1</td><td>2026-10-26 发布，修复分组过滤与分叉 JVM 退出时的挂起；两个平台的测试数与下限逐项相等</td></tr>
       <tr><td><code>actions/setup-java</code></td><td class="money">v6.0.1</td><td class="money">v6.1.0</td><td>提交 <code>b843ebf</code></td></tr>
       <tr><td><code>actions/setup-python</code></td><td class="money">v7.0.0</td><td class="money">v7.1.0</td><td>提交 <code>6d4fd22</code></td></tr>
-      <tr><td>certifi（Airflow 镜像与 dags 作业）</td><td class="money">2026.7.22</td><td class="money">2026.10.23</td><td>装在 Airflow 约束之上，见 A.3</td></tr>
+      <tr><td>certifi（Airflow 镜像与 dags 作业）</td><td class="money">2026.7.22</td><td class="money">2026.10.23</td><td>装在 Airflow 约束之上，见 B.3</td></tr>
       <tr><td>urllib3（同上）</td><td class="money">2.7.0</td><td class="money">2.8.0</td><td>同上</td></tr>
       <tr><td>本机 JDK</td><td class="money">25.0.4.1</td><td class="money">25.0.5.0.3</td><td>Oracle JDK；Linux 验证用 Temurin 25.0.5+8</td></tr>
       <tr><td>本机 Docker</td><td class="money">29.8.2</td><td class="money">29.9.2</td><td>Docker Desktop 4.96.3，Compose v5.6.1</td></tr>
@@ -1136,7 +1261,7 @@ bash deploy/scripts/compose-up.sh                # 预检机密与端口后启�
   </div>
   <p class="small muted"><strong>其余仍是最新或有意不动：</strong>Spark 4.2.0、Scala 2.13.18、JUnit 6.1.3、JSch 2.28.8、scopt 4.2.0、MINA SSHD 2.20.0、Spotless 3.10.4、Checkstyle 14.3.0、Maven 3.10.0 与其余插件、Airflow 3.3.2、pyspark 4.2.0、pyright 1.1.414 与其余 Action 都是最新。比 3.3.2 约束更新的 provider（FAB 3.10.2、SFTP 7.0.0、SSH 7.0.1、standard 1.21.0）不装：约束固定的是 Airflow 测试过的组合，OSV 对固定的版本没有公告。<code>postgres:18</code>、<code>redis:8</code> 在 10 月有新的推送，按标签拉取即可得到。</p>
 
-  <h3>A.3 官方 Airflow 镜像里的公告</h3>
+  <h3>B.3 官方 Airflow 镜像里的公告</h3>
   <p>Airflow 3.3.2 的约束文件把每个 Python 依赖固定在 2026-09-17 的版本，官方 <code>apache/airflow:3.3.2</code> 镜像就是按它构建的。本轮把镜像里的 440 个包逐个向 OSV 查询，其中 18 个出现了之后发布的公告。逐项判断本部署能否触及（结论都对照了镜像里的 Airflow 代码与两个栈的配置），只有两项能触及，并且修复在兼容的版本里：</p>
   <div class="table-wrap">
   <table>
@@ -1153,7 +1278,7 @@ bash deploy/scripts/compose-up.sh                # 预检机密与端口后启�
   </div>
   <p>两个修复版本写在 <code>orchestration/airflow/security-overrides.txt</code> 里：<code>Dockerfile.airflow</code> 与 <code>install-airflow.sh</code> 在约束安装之后安装它们并运行 <code>pip check</code>；<code>check_security_floor.py</code> 在 dags 作业和镜像内都把它们当作下限；公告检查向 OSV 询问它们，文件一改就触发。实测：新的下限检查在官方镜像里失败（certifi 与 urllib3 都低于下限），装上之后通过，<code>pip check</code> 无冲突。</p>
 
-  <h3>A.4 三路复核的发现与处理</h3>
+  <h3>B.4 三路复核的发现与处理</h3>
   <p>与上一轮一样，另起三路只读复核：JVM 各模块；Airflow、部署与 CI 代码（包括本轮的改动）；全部文档与代码的对照。三份报告共 16 条发现，另有一处过时的工作流注释。每一条都先对照代码核实，能在真实环境里复现的都复现过。</p>
   <div class="table-wrap">
   <table>
@@ -1173,10 +1298,10 @@ bash deploy/scripts/compose-up.sh                # 预检机密与端口后启�
   </div>
   <p class="small muted"><strong>没有改动的两条：</strong>JDK 的 HTTP 服务器对一直发不完请求头的连接没有时限（实测 20 秒后连接仍在；设 <code>sun.net.httpserver.maxReqTime=2</code> 后 3 秒被关闭）。只设这个参数还不够：请求带有处理器不读的请求体时，JDK 要等响应写完才停止计时，长作业会被切断，需要先在处理器里读完请求体，记入第八章。构建 jar 的 <code>docker build --pull</code> 不重试，原因见上表。三份报告认为没有问题的方面包括：API 的认证、路由与 <code>Origin</code> 检查，数据根约束，SFTP 的主机密钥，执行引擎的失败边界，Spark 的会话所有权与参数顺序，机密经 stdin 传递，Compose 与 Swarm 的健康检查一致，以及本轮新增的覆盖安装与 Action 固定。</p>
 
-  <h3>A.5 本机运行</h3>
+  <h3>B.5 本机运行</h3>
   <div class="table-wrap">
   <table>
-    <caption>环境：Docker Desktop 4.96.3（引擎 29.9.2，Compose v5.6.1）。前三步是最终代码上的一次完整运行，基础镜像重新拉取，构建缓存为空；那一次的 Swarm 演练因初始化等待的比较方式而失败（A.4），修正之后单独重跑了最后一步。</caption>
+    <caption>环境：Docker Desktop 4.96.3（引擎 29.9.2，Compose v5.6.1）。前三步是最终代码上的一次完整运行，基础镜像重新拉取，构建缓存为空；那一次的 Swarm 演练因初始化等待的比较方式而失败（B.4），修正之后单独重跑了最后一步。</caption>
     <thead><tr><th>步骤</th><th>结果</th><th class="num">耗时</th></tr></thead>
     <tbody>
       <tr><td><code>cicd/stacks/check-stack-files.sh</code></td><td><span class="tag ok">通过</span> 两个栈文件插值成功，缺少任何一个必需机密时都拒绝</td><td class="num">2 秒</td></tr>
@@ -1188,36 +1313,36 @@ bash deploy/scripts/compose-up.sh                # 预检机密与端口后启�
   </div>
   <p>JVM 套件在最终代码上跑了两遍：Windows（Oracle JDK 25.0.5.0.3，<code>clean</code> 之后）执行 300 项，Linux（WSL，Temurin 25.0.5+8）执行 310 项，都是 0 失败、0 跳过、0 警告，<code>cicd/build</code> 的检查全部通过。Linux 上另跑了 <code>tests/deploy</code> 68 项、<code>tests/ci</code> 105 项、<code>tests/docs</code> 16 项、ShellCheck、DAG 契约 21 项，以及用 Linux 构建出的 jar 真实运行三条 DAG 的冒烟。第一次运行这个冒烟时容器阶段正在同时构建镜像，初始化脚本超过了 180 秒的时限；在空闲的机器上重跑通过，同一个冒烟在 Airflow 镜像内也通过，说明是负载而不是覆盖安装引起的。</p>
 
-  <h3>A.6 部署与升级时要注意的变化</h3>
+  <h3>B.6 部署与升级时要注意的变化</h3>
   <ul>
     <li><strong>Swarm 的 manager 需要 Python 3：</strong><code>airflow-init.sh</code> 用它比较任务与服务的配置（<code>swarm-deploy.sh</code> 本来就需要）。</li>
     <li><strong>只改 <code>.env</code> 的重新部署现在会等新的初始化任务完成：</strong>以前会立即报告完成。</li>
     <li><strong>演练拒绝留有 <code>datacraft</code> 数据卷的引擎：</strong>要在曾经运行过真实部署的引擎上演练，先确认那些卷可以丢弃并删掉它们。</li>
     <li><strong>参数名两侧的空格现在会报错：</strong>原先被静默忽略的 <code>expectedRows&nbsp;=3</code> 一类写法会让作业失败并提示正确的名字。</li>
-    <li><strong>Java 25.0.5 会自动到来：</strong>官方镜像更新之后重新运行 <code>build-images.sh</code>，三个运行镜像就会带上 25.0.5，之后构建下限会提高到 25.0.5。</li>
+    <li><strong>Java 25.0.5 会自动到来：</strong>官方镜像更新之后重新运行 <code>build-images.sh</code>，三个运行镜像就会带上 25.0.5，之后构建下限会提高到 25.0.5。（后来没有等官方镜像，改为固定的 Temurin 版本，见附录 A.1。）</li>
   </ul>
 </section>
 
 <section id="appendix-1010" aria-labelledby="h-appendix-1010">
-  <h2 id="h-appendix-1010">附录 B　2026-10-10 明细：本机容器运行与三路复核</h2>
+  <h2 id="h-appendix-1010">附录 C　2026-10-10 明细：本机容器运行与三路复核</h2>
 
-  <h3>B.1 上一版列出的事项与本轮的处理</h3>
+  <h3>C.1 上一版列出的事项与本轮的处理</h3>
   <div class="table-wrap">
   <table>
-    <caption>左列是 v4.2 第八章列出的事项；“现状”是 v4.3 当时的状态，此后的变化见附录 A。</caption>
+    <caption>左列是 v4.2 第八章列出的事项；“现状”是 v4.3 当时的状态，此后的变化见附录 B。</caption>
     <thead><tr><th>事项（v4.2）</th><th>本轮的处理</th><th>如何验证</th><th>现状</th></tr></thead>
     <tbody>
-      <tr><td>容器阶段只在 CI 上运行；错误注解没有经历过真实的失败（P3）</td><td>本机装好 Docker 之后，容器阶段的四个脚本（栈文件检查、镜像构建与冒烟、Compose 冒烟、Swarm 演练）第一次在本机完整运行。Docker Desktop 没有为 WSL 发行版启用集成，所以脚本在一个带 Docker CLI、挂载了引擎套接字的 Linux 容器里执行，仓库挂载在引擎自己看到的路径上；做法写进了部署教程第 7 节。第一次构建在安装 <code>curl</code> 时遇到软件源返回 502 而失败，这是一次真实的失败：<code>cicd/step.py</code> 写出的错误注解包含了那一行 <code>502 Bad Gateway</code> 与出错的 Dockerfile 步骤。随后又故意让 Compose 与 Swarm 两步超时，核对它们在真实引擎上的诊断输出与拆除</td><td>最终代码上的一次完整运行四步全部通过（B.3）；失败路径各 9 条注解，主注解的末尾就是原因；拆除之后没有容器、网络与 <code>.env</code> 残留</td><td><span class="tag ok">已解决</span></td></tr>
+      <tr><td>容器阶段只在 CI 上运行；错误注解没有经历过真实的失败（P3）</td><td>本机装好 Docker 之后，容器阶段的四个脚本（栈文件检查、镜像构建与冒烟、Compose 冒烟、Swarm 演练）第一次在本机完整运行。Docker Desktop 没有为 WSL 发行版启用集成，所以脚本在一个带 Docker CLI、挂载了引擎套接字的 Linux 容器里执行，仓库挂载在引擎自己看到的路径上；做法写进了部署教程第 7 节。第一次构建在安装 <code>curl</code> 时遇到软件源返回 502 而失败，这是一次真实的失败：<code>cicd/step.py</code> 写出的错误注解包含了那一行 <code>502 Bad Gateway</code> 与出错的 Dockerfile 步骤。随后又故意让 Compose 与 Swarm 两步超时，核对它们在真实引擎上的诊断输出与拆除</td><td>最终代码上的一次完整运行四步全部通过（C.3）；失败路径各 9 条注解，主注解的末尾就是原因；拆除之后没有容器、网络与 <code>.env</code> 残留</td><td><span class="tag ok">已解决</span></td></tr>
       <tr><td>Swarm 在多节点下的行为未验证（P2）</td><td>手工做了一次两节点试验，不属于流水线：在一台机器上启动两个嵌套的 Docker 引擎，组成一个 manager 加一个数据节点的 Swarm，用部署教程的 <code>swarm-deploy.sh</code> 与 <code>airflow-init.sh</code> 从 manager 部署</td><td>全部任务落在数据节点，manager 自己不运行任何容器；管理员经 manager 的 8080 端口登录成功（路由网格转发到另一个节点）；manager 上接入覆盖网络的容器访问数据节点上的 API，得到 200、无令牌 401、带令牌 200；两个节点各有 4 条 ESP 安全关联，承载这些请求的一对关联的包计数由 0 变为 78 与 52，两端读数一致；一次 DAG 运行经过 Redis 与 Celery worker</td><td><span class="tag ok">已缓解</span> 只做过一次、在一台机器上；真实主机之间的防火墙、节点故障与共享存储仍未验证，降为 P3</td></tr>
       <tr><td>可选 Spark 镜像的 JDK 低于 25.0.4.1（P3）</td><td><code>Dockerfile.spark</code> 先删除基础镜像自带的 Java，再复制构建时新拉取的 Temurin JRE，与另外两个运行镜像相同；同时把 <code>DATACRAFT_DATA_ROOT</code> 设为 <code>/opt/datacraft/data</code>。<code>smoke-images.sh</code> 开始构建这个镜像（此前没有任何一次流水线运行构建过它），并在其中运行真实的作业</td><td>本机构建后 <code>release</code> 文件为 25.0.4.1+1-LTS、类型 JRE；镜像内以非 root 用户完成 <code>spark-version</code>、一次 CSV 转 Parquet（2 行）与 <code>row-count</code>，输出指向数据目录之外时失败并指出原因</td><td><span class="tag ok">已解决</span></td></tr>
       <tr><td>API 令牌经明文 HTTP 传输（P2）；机密在 Airflow 容器间共享（P2）</td><td>没有变化。两节点试验说明节点之间的 API 流量在加密的覆盖网络上由 ESP 承载；同一节点内与回环端口上仍是明文</td><td>—</td><td><span class="tag warn">仍然存在</span></td></tr>
-      <tr><td>Spark 4.2.0 自带依赖的公告（P2）；Airflow 上游的弃用提示（P3）；google-java-format 1.37.0（P3）</td><td>复核上游版本：Spark 仍只有 4.2.0，Airflow 3.3.2 仍是最新，Spotless 仍是 3.10.4。JSch 有新版本 2.28.8，已采用（B.6）</td><td>2026-10-10 的版本核对；26 个固定版本的公告查询</td><td><span class="tag info">等待上游</span></td></tr>
+      <tr><td>Spark 4.2.0 自带依赖的公告（P2）；Airflow 上游的弃用提示（P3）；google-java-format 1.37.0（P3）</td><td>复核上游版本：Spark 仍只有 4.2.0，Airflow 3.3.2 仍是最新，Spotless 仍是 3.10.4。JSch 有新版本 2.28.8，已采用（C.6）</td><td>2026-10-10 的版本核对；26 个固定版本的公告查询</td><td><span class="tag info">等待上游</span></td></tr>
       <tr><td>CSV 编码检查的两个限度；公告检查的覆盖范围；Spark 会话锁无超时等（P3）</td><td>没有变化</td><td>—</td><td><span class="tag info">仍然存在</span></td></tr>
     </tbody>
   </table>
   </div>
 
-  <h3>B.2 三路复核的发现与处理</h3>
+  <h3>C.2 三路复核的发现与处理</h3>
   <p>本轮另起三路只读复核，分别阅读核心、IO 与作业模块，Airflow 与部署代码，以及全部文档与代码的对照，不给它们任何结论。三份报告共 33 条发现。每一条都先对照代码核实，能运行的在本机复现（部署方面的几条直接对着真实镜像验证），然后分成三类处理：缺陷先写出修复前失败的测试再修复；代码行为正确但文档没写的补进文档；不改的写明原因。</p>
   <div class="table-wrap">
   <table>
@@ -1243,7 +1368,7 @@ bash deploy/scripts/compose-up.sh                # 预检机密与端口后启�
   <p class="small muted"><strong>没有改动的四条：</strong>失败的 SFTP 上传仍会留下不完整的远端文件（没有调用方，写入了契约）；<code>csv-profile</code> 在大小检查与读取之间被换成更大的文件时，仍会先读完再拒绝；Compose 项目名保持不变（改名会让已有部署找不到自己的数据卷）；<code>file-checksum</code> 的流式读取没有测试固定（需要一个比堆还大的文件）。<br>
   三份报告在这些方面没有提出问题：数据根约束（37 种 Windows 路径写法）、CSV 解析与字节偏移、SFTP 的主机密钥校验与原子下载、DAG 的参数校验与注入、镜像里的机密与信号处理、<code>airflow-init.sh</code> 与 <code>deployment_env.py init</code>。这是复核者的结论，本报告没有逐条重做它们的试验。</p>
 
-  <h3>B.3 本机的容器运行</h3>
+  <h3>C.3 本机的容器运行</h3>
   <div class="table-wrap">
   <table>
     <caption>环境：Windows 11 上的 Docker Desktop 29.8.2（Compose v5.5.1，WSL2 后端，12 核、16 GB）。耗时取最终代码上的那一次完整运行；此前的构建已经缓存了镜像层。</caption>
@@ -1261,10 +1386,10 @@ bash deploy/scripts/compose-up.sh                # 预检机密与端口后启�
     <li><strong>真实的失败：</strong>第一次运行在 <code>Dockerfile.jvm</code> 的 <code>apt-get install</code> 处失败，软件源对其中一个包返回 502。错误注解的正文以 <code>E: Failed to fetch … 502 Bad Gateway</code> 与出错的 Dockerfile 行结束，不需要日志就能判断原因。<code>apt-get</code> 因此加上了 5 次重试。</li>
     <li><strong>故意制造的失败：</strong>把 Compose 的启动等待设为 5 秒、把 Swarm 演练的等待设为 20 秒。两次都得到 1 条主注解与 8 条分组注解（各服务日志、任务或容器状态），主注解分别以 <code>timeout waiting for dependencies</code> 和 <code>datacraft_airflow-init did not complete within 20s</code> 结束。</li>
     <li><strong>由此发现的缺陷：</strong>Swarm 演练结束后，栈的命名数据卷还留在引擎里，通过的那两次运行也是如此，而脚本没有任何提示。原因是脚本只等“运行中”的容器消失，停止但尚未被引擎删除的容器仍占着卷，删除失败又被忽略。CI 的 runner 用完即弃，所以从未暴露；在保留的机器上，下一次演练会从上一次的数据库开始。修复后脚本等到栈的全部容器被删除，重试删除，删不掉时失败。同样留下来的还有演练给两个镜像加上的 registry 标签，每次运行多 4 个（不占额外空间）；脚本现在把自己加的标签删掉。修复后在真实引擎上复验：演练结束时没有数据卷、没有这些标签，引擎已退出 Swarm。</li>
-    <li><strong>两节点试验：</strong>结果见 B.1。一个细节：Docker 只在两个节点都有容器接入该网络时才保留节点之间的 IPsec 状态，第一次查看是在探测容器退出之后，所以看到的是 0 条安全关联；让探测容器保持接入后，两端各 4 条，计数随请求增长。</li>
+    <li><strong>两节点试验：</strong>结果见 C.1。一个细节：Docker 只在两个节点都有容器接入该网络时才保留节点之间的 IPsec 状态，第一次查看是在探测容器退出之后，所以看到的是 0 条安全关联；让探测容器保持接入后，两端各 4 条，计数随请求增长。</li>
   </ul>
 
-  <h3>B.4 修复的变异检查</h3>
+  <h3>C.4 修复的变异检查</h3>
   <p>对本轮的每一处修复，都把它故意改回去或改坏一处，再运行相应的测试，要求测试失败；检查结束后文件恢复原样。42 处改动全部被测试发现。部署部分第一次运行时，有一项测试本身因为断言写错而失败，那一轮的结果因此不算数；改正测试、确认基线通过之后重新运行。</p>
   <div class="table-wrap">
   <table>
@@ -1279,7 +1404,7 @@ bash deploy/scripts/compose-up.sh                # 预检机密与端口后启�
   </table>
   </div>
 
-  <h3>B.5 部署与升级时要注意的变化</h3>
+  <h3>C.5 部署与升级时要注意的变化</h3>
   <ul>
     <li><strong>Swarm 部署的 <code>.env</code> 必须是纯文本：</strong><code>swarm-deploy.sh</code> 现在拒绝带引号、空格、<code>$</code>、<code>#</code>、分号或反斜杠的值，并指出行号与变量名；把引号去掉即可。<code>deployment_env.py init</code> 生成的文件满足要求。Compose 部署不受影响。</li>
     <li><strong>override 文件现在会被检查：</strong>放在 <code>deploy/compose</code> 里的 <code>docker-compose.override.yml</code> 以前只在启动时生效，现在预检也会读取它；把 API 发布到回环之外或给它可写挂载的 override 会在启动前被拒绝。</li>
@@ -1290,7 +1415,7 @@ bash deploy/scripts/compose-up.sh                # 预检机密与端口后启�
     <li><strong>Swarm 栈的 Spark 默认并行度：</strong><code>.env</code> 里没有 <code>DATACRAFT_SPARK_MASTER</code> 一行时，现在是 <code>local[2]</code> 而不是 <code>local[*]</code>。</li>
   </ul>
 
-  <h3>B.6 依赖版本</h3>
+  <h3>C.6 依赖版本</h3>
   <div class="table-wrap">
   <table>
     <caption>核对日期 2026-10-10，来源同上一轮。</caption>
@@ -1304,12 +1429,12 @@ bash deploy/scripts/compose-up.sh                # 预检机密与端口后启�
   <p class="small muted"><strong>其余没有变化：</strong>Spark 4.2.0、Scala 2.13.18、Jackson 2.22.3、JUnit 6.1.3、Maven 3.10.0、Spotless 3.10.4、Airflow 3.3.2、pyspark 4.2.0、pyright 1.1.414 与各 Action 仍是最新；google-java-format 1.37.0 仍未采用。本机运行拉取到的基础镜像：<code>eclipse-temurin:25-jre</code> 与 <code>maven:3.10.0-eclipse-temurin-25</code> 的 Java 均为 25.0.4.1+1，<code>postgres:18</code>、<code>redis:8</code>、<code>registry:3</code>、<code>apache/airflow:3.3.2</code>。两节点试验另外用到 <code>docker:dind</code>（引擎 29.9.0），它不是仓库的依赖。</p>
 </section>
 <section id="appendix-1009" aria-labelledby="h-appendix-1009">
-  <h2 id="h-appendix-1009">附录 C　2026-10-09 明细：令牌、编码、可诊断的 CI 与 Swarm 演练</h2>
+  <h2 id="h-appendix-1009">附录 D　2026-10-09 明细：令牌、编码、可诊断的 CI 与 Swarm 演练</h2>
 
-  <h3>C.1 上一版列出的事项与本轮的处理</h3>
+  <h3>D.1 上一版列出的事项与本轮的处理</h3>
   <div class="table-wrap">
   <table>
-    <caption>左列是 v4.1 第八章与“未采用”一节列出的事项；“现状”是 v4.2 当时的状态，此后的变化见附录 B。</caption>
+    <caption>左列是 v4.1 第八章与“未采用”一节列出的事项；“现状”是 v4.2 当时的状态，此后的变化见附录 C。</caption>
     <thead><tr><th>事项（v4.1）</th><th>本轮的处理</th><th>如何验证</th><th>现状</th></tr></thead>
     <tbody>
       <tr><td>HTTP API 无认证（P1）</td><td><code>serve-api</code> 从 <code>DATACRAFT_API_TOKEN</code> 读取令牌；设置之后 <code>/jobs</code> 下的每个请求都要带 <code>Authorization: Bearer</code>，否则 401，<code>/health</code> 保持开放。回环之外没有令牌与数据根即拒绝启动。两个部署栈像其他机密一样要求它，<code>deployment_env.py</code> 负责生成与预检。服务端保存并比较的是令牌的 SHA-256 摘要，令牌不写入日志</td><td>API 28 项、CLI 31 项 JVM 测试；<code>tests/deploy</code>；镜像冒烟（无令牌拒绝启动、401、200）、Compose 冒烟与 Swarm 演练（生成的令牌是唯一能打开 API 的令牌）在 CI 通过</td><td><span class="tag ok">已缓解</span> 令牌经明文 HTTP 传输，列为 P2</td></tr>
@@ -1328,7 +1453,7 @@ bash deploy/scripts/compose-up.sh                # 预检机密与端口后启�
   </table>
   </div>
 
-  <h3>C.2 独立复核发现的问题</h3>
+  <h3>D.2 独立复核发现的问题</h3>
   <p>本轮第一个提交推送之前，另起两路只读复核，分别看 JVM 改动与 CI/部署改动，不给它们任何结论。它们指出的问题逐条在本机复现后修复，每一处修复都先有一项在修复前失败的测试。</p>
   <div class="table-wrap">
   <table>
@@ -1348,7 +1473,7 @@ bash deploy/scripts/compose-up.sh                # 预检机密与端口后启�
   </div>
   <p class="small muted">两份复核报告在这些方面没有提出问题：认证（各种路径与请求头的写法）、令牌是否出现在日志里、并发名额的获取与释放、回环之外的拒绝启动、工作流语法与步骤包装的透传和退出码、部署预检与服务端的令牌规则是否一致。这是复核者的结论，本报告没有逐条重做它们的试验。</p>
 
-  <h3>C.3 新规则的变异检查</h3>
+  <h3>D.3 新规则的变异检查</h3>
   <p>测试通过并不说明测试有用。对本轮新增的每条规则，都把实现故意改坏一处，再运行相应的测试，要求测试失败；检查结束后文件恢复原样。66 处改动全部被测试发现。其中一处第一次没有让测试失败，而是让它一直阻塞：让 <code>serve-api</code> 忽略环境里的令牌之后，那个期待“拒绝启动”的测试启动了服务器，而服务器不会自己返回。这类回归在 CI 上会表现为构建卡到超时。三处期待 <code>serve-api</code> 拒绝启动的调用因此都加了 30 秒时限，重跑后由三项测试在时限内发现。</p>
   <div class="table-wrap">
   <table>
@@ -1365,7 +1490,7 @@ bash deploy/scripts/compose-up.sh                # 预检机密与端口后启�
   </table>
   </div>
 
-  <h3>C.4 部署与升级时要注意的变化</h3>
+  <h3>D.4 部署与升级时要注意的变化</h3>
   <ul>
     <li><strong>旧的 <code>.env</code> 需要补两项：</strong>两个栈文件现在要求 <code>DATACRAFT_API_TOKEN</code>，Swarm 栈另外要求 <code>REDIS_PASSWORD</code>；缺少时在插值阶段或 <code>swarm-deploy.sh</code> 的预检中报错并指出变量名。各用 <code>openssl rand -hex 32</code> 生成一个互不相同的值；新部署由 <code>deployment_env.py init</code> 生成。</li>
     <li><strong>调用 API 要带请求头：</strong><code>/jobs</code> 下的请求加上 <code>Authorization: Bearer &lt;令牌&gt;</code>；<code>/health</code> 不需要。直接 <code>docker run datacraft/jvm</code> 时要传 <code>-e DATACRAFT_API_TOKEN</code>，否则镜像拒绝启动。</li>
@@ -1376,7 +1501,7 @@ bash deploy/scripts/compose-up.sh                # 预检机密与端口后启�
     <li><strong>工作流里的 Action 注释要写完整版本：</strong><code># v7.0.1</code> 可以，<code># v7</code> 会被固定版本检查与公告检查拒绝。</li>
   </ul>
 
-  <h3>C.5 依赖版本</h3>
+  <h3>D.5 依赖版本</h3>
   <div class="table-wrap">
   <table>
     <caption>核对日期 2026-10-09，来源为 Maven Central、PyPI、npm、GitHub 发布页与接口、Docker Hub 与镜像仓库接口、Adoptium。</caption>
@@ -1395,9 +1520,9 @@ bash deploy/scripts/compose-up.sh                # 预检机密与端口后启�
   <strong>其余仍是最新：</strong>Spark 4.2.0、Scala 2.13.18、Jackson 2.22.3、JUnit 6.1.3、JSch 2.28.7、scopt 4.2.0、MINA SSHD 2.20.0、Checkstyle 14.3.0、其余 Maven 插件、Airflow 3.3.2、pyspark 4.2.0、pyright 1.1.414，以及 checkout v7.0.1、setup-java v6.0.1、setup-python v7.0.0。基础镜像按标签拉取：<code>eclipse-temurin:25-jre</code>（25.0.4.1+1）、<code>postgres:18</code>（18.6）、<code>redis:8</code>（8.10.2）、<code>apache/airflow:3.3.2</code>。</p>
 </section>
 <section id="appendix-fix" aria-labelledby="h-appendix-fix">
-  <h2 id="h-appendix-fix">附录 D　2026-10-07 明细：CI 修复与模块复盘</h2>
+  <h2 id="h-appendix-fix">附录 E　2026-10-07 明细：CI 修复与模块复盘</h2>
 
-  <h3>D.1 CI 失败的根因与处理</h3>
+  <h3>E.1 CI 失败的根因与处理</h3>
   <ul>
     <li><strong>现象：</strong>09-26 的两次推送之后，<code>containers</code> 作业都在约 40 秒处失败，其余四个作业通过。</li>
     <li><strong>根因：</strong>上一轮在根 POM 给 Surefire 显式设置了 <code>&lt;skip&gt;</code>。显式值会取代这个参数的默认表达式 <code>${maven.test.skip}</code>，即使它取值为 false；而构建镜像正是用 <code>-Dmaven.test.skip=true</code> 打包。Docker 构建上下文不含 <code>tests/</code>，于是 Surefire 照常运行、找不到测试、以 “No tests to run!” 失败。</li>
@@ -1406,7 +1531,7 @@ bash deploy/scripts/compose-up.sh                # 预检机密与端口后启�
     <li><strong>结果：</strong>提交 <code>0e97d8b</code> 的运行 <a href="https://github.com/liluyang1999/datacraft-lab/actions/runs/37619216939">37619216939</a> 五个作业全部通过，<code>containers</code> 作业自 09-26 以来第一次完整跑完。</li>
   </ul>
 
-  <h3>D.2 模块复盘：发现与处理</h3>
+  <h3>E.2 模块复盘：发现与处理</h3>
   <div class="table-wrap">
   <table>
     <caption>四路只读复盘覆盖了全部 8 个模块、部署定义与 CI/CD，没有发现高危问题。下表每一行的测试都在修复前的代码上确认失败。</caption>
@@ -1426,7 +1551,7 @@ bash deploy/scripts/compose-up.sh                # 预检机密与端口后启�
   </table>
   </div>
 
-  <h3>D.3 CI/CD 调整</h3>
+  <h3>E.3 CI/CD 调整</h3>
   <div class="table-wrap">
   <table>
     <thead><tr><th>事项</th><th>调整前</th><th>调整后</th></tr></thead>
@@ -1445,7 +1570,7 @@ bash deploy/scripts/compose-up.sh                # 预检机密与端口后启�
   </table>
   </div>
 
-  <h3>D.4 依赖版本</h3>
+  <h3>E.4 依赖版本</h3>
   <div class="table-wrap">
   <table>
     <caption>核对日期 2026-10-07，来源为 Maven Central、PyPI、npm、Docker Hub 与 GitHub 发布页。</caption>
@@ -1464,9 +1589,9 @@ bash deploy/scripts/compose-up.sh                # 预检机密与端口后启�
 </section>
 
 <section id="appendix-round" aria-labelledby="h-appendix-round">
-  <h2 id="h-appendix-round">附录 E　2026-09-26 目录重组明细</h2>
+  <h2 id="h-appendix-round">附录 F　2026-09-26 目录重组明细</h2>
 
-  <h3>E.1 工程目录</h3>
+  <h3>F.1 工程目录</h3>
 <pre class="tree"><code>datacraft-lab/
 ├── pom.xml  mvnw  mvnw.cmd  .mvn/  Makefile    构建入口（Wrapper 固定 Maven 3.9.16）
 ├── pyrightconfig.json  config/checkstyle/       Python 类型检查、Checkstyle 规则
@@ -1503,7 +1628,7 @@ bash deploy/scripts/compose-up.sh                # 预检机密与端口后启�
   </table>
   </div>
 
-  <h3>E.2 清理掉的过时内容</h3>
+  <h3>F.2 清理掉的过时内容</h3>
   <ul>
     <li>根目录的云部署费用页面：内容并入本报告第六章。</li>
     <li>原工程报告目录：工程开发文档与 Maven 构建说明中仍然成立的内容移入 <code>design/</code>；2026-09-19 与 2026-09-25 两份复盘记录已被本报告、CHANGELOG 与 git 历史取代。</li>
@@ -1512,7 +1637,7 @@ bash deploy/scripts/compose-up.sh                # 预检机密与端口后启�
     <li><code>.gitignore</code> 中的 IDE 模板残留规则；其中未锚定的 <code>build/</code> 曾让 <code>cicd/build/</code> 被 git 忽略，现在只匹配根目录，并有回归测试。</li>
   </ul>
 
-  <h3>E.3 警告清理</h3>
+  <h3>F.3 警告清理</h3>
   <div class="table-wrap">
   <table>
     <thead><tr><th>来源</th><th>本轮前的现象</th><th>处理方式</th></tr></thead>
@@ -1530,7 +1655,7 @@ bash deploy/scripts/compose-up.sh                # 预检机密与端口后启�
   </table>
   </div>
 
-  <h3>E.4 依赖版本</h3>
+  <h3>F.4 依赖版本</h3>
   <div class="table-wrap">
   <table>
     <caption>核对日期 2026-09-26，来源为 Maven Central、PyPI、npm、Docker Hub 与 GitHub 发布页。</caption>
@@ -1548,12 +1673,12 @@ bash deploy/scripts/compose-up.sh                # 预检机密与端口后启�
     </tbody>
   </table>
   </div>
-  <p class="small muted"><strong>截至 2026-09-26 已是最新、未改动（之后的变化见附录 A.2、B.6、C.5 与 D.4）：</strong>Java 25 字节码目标、Spark 4.2.0 与 pyspark 4.2.0、Scala 2.13.18、Jackson 2.22.3、JUnit 6.1.3、JSch 2.28.7、Apache MINA SSHD 2.19.0、scopt 4.1.0、Checkstyle 14.1.0、google-java-format 1.36.1、scalafmt 3.11.5、scala-maven-plugin 4.9.10、scalatest-maven-plugin 2.2.0、Maven 3.9.16、Maven Wrapper 3.3.4、Airflow 3.3.2（fab 3.9.0、sftp 6.0.1、ssh 6.0.1、standard 1.19.0）、6 个 GitHub Actions（固定到最新标签的提交 SHA），基础镜像 <code>eclipse-temurin:25-jre</code>（25.0.4.1+1）、<code>postgres:18</code>（18.6）、<code>redis:8</code>。<br>
+  <p class="small muted"><strong>截至 2026-09-26 已是最新、未改动（之后的变化见附录 A.2、B.2、C.6、D.5 与 E.4）：</strong>Java 25 字节码目标、Spark 4.2.0 与 pyspark 4.2.0、Scala 2.13.18、Jackson 2.22.3、JUnit 6.1.3、JSch 2.28.7、Apache MINA SSHD 2.19.0、scopt 4.1.0、Checkstyle 14.1.0、google-java-format 1.36.1、scalafmt 3.11.5、scala-maven-plugin 4.9.10、scalatest-maven-plugin 2.2.0、Maven 3.9.16、Maven Wrapper 3.3.4、Airflow 3.3.2（fab 3.9.0、sftp 6.0.1、ssh 6.0.1、standard 1.19.0）、6 个 GitHub Actions（固定到最新标签的提交 SHA），基础镜像 <code>eclipse-temurin:25-jre</code>（25.0.4.1+1）、<code>postgres:18</code>（18.6）、<code>redis:8</code>。<br>
   <strong>有意不升级：</strong>Jackson 3.x（Spark 4.2 固定 Jackson 2，混用只增加冲突）；Spark 4.3.0（仅有 RC）；Maven 4（尚未 GA）；PostgreSQL 19（仅有 beta）；Temurin 26（非 LTS，Spark 4.2 支持到 Java 25）。</p>
 </section>
 
 <section id="appendix-audit" aria-labelledby="h-appendix-audit">
-  <h2 id="h-appendix-audit">附录 F　2026-09-25 审计与修复</h2>
+  <h2 id="h-appendix-audit">附录 G　2026-09-25 审计与修复</h2>
   <p>上一轮从 11 个维度审查全部代码与部署（引擎、IO、Spark、CLI/API、Airflow、部署、构建与 CI、文档、依赖与漏洞、需求覆盖、安全），提出 137 项发现；每项由另一方尝试反驳并复现，驳回 3 项、确认 134 项（中 23、低 99、信息 12），去重后约 100 个独立问题。问题归并为 13 个文件互不重叠的工作包，先写在旧代码上失败的回归测试再修复，经独立审查与集成后审查（确认 14 项，其中 3 项会导致 CI 失败）后推送，CI 五个作业全部通过。</p>
   <div class="table-wrap">
   <table>
@@ -1578,7 +1703,7 @@ bash deploy/scripts/compose-up.sh                # 预检机密与端口后启�
 </section>
 
 <section id="appendix-history" aria-labelledby="h-appendix-history">
-  <h2 id="h-appendix-history">附录 G　演进历程</h2>
+  <h2 id="h-appendix-history">附录 H　演进历程</h2>
   <ol class="timeline">
     <li><time datetime="2025-05-25">2025-05-25</time>项目初始化，合并早期 data-harvester 仓库。</li>
     <li><time datetime="2026-04-08">2026-04-08</time>代码质量初步改进。</li>
@@ -1591,17 +1716,19 @@ bash deploy/scripts/compose-up.sh                # 预检机密与端口后启�
     <li><time datetime="2026-10-09">2026-10-09</time>逐项处理残余风险：API 令牌认证与并发上限、CSV 编码参数与严格解码、流水线失败原因写入公开注解、每周的依赖公告检查、Maven 3.10.0；Swarm 栈第一次在 CI 的单节点上真实部署与升级，Redis 加口令、覆盖网络加密；两路独立复核及其修复；评估报告 v4.2。</li>
     <li><time datetime="2026-10-10">2026-10-10 – 12</time>本机装好 Docker，容器阶段第一次在 CI 之外完整运行；三路独立复核的 33 条发现及其修复；评估报告 v4.3；写明每个镜像的用途，一台主机用 Compose、两台及以上用 Swarm。</li>
     <li><time datetime="2026-10-26">2026-10-26</time>处理十月的版本问题：Jackson 2.22.4、Action 与 Surefire 升级、Airflow 镜像在约束之上的安全修复；Java 25.0.5 用于构建，镜像等官方更新；第三次三路复核的 16 条发现及其修复；评估报告 v4.4。</li>
+    <li><time datetime="2026-10-27">2026-10-27</time>镜像的 Java 改为按版本与 SHA-256 固定的 Temurin 25.0.5，构建下限提高到 25.0.5；新增 JavaFX 25 桌面控制台“数艺工坊”（<code>desktop/</code>）及其 CI 作业、测试数下限与公告检查；评估报告 v4.5。</li>
   </ol>
 </section>
 
 <section id="appendix-index" aria-labelledby="h-appendix-index">
-  <h2 id="h-appendix-index">附录 H　文档索引</h2>
+  <h2 id="h-appendix-index">附录 I　文档索引</h2>
   <ul class="docs-index">
     <li><a href="../README.md">项目首页</a> <code>docs/README.md</code><br><span class="small muted">概览、目录结构、快速开始、文档地图</span></li>
     <li><a href="../guides/usage.md">使用指南</a> <code>docs/guides/usage.md</code><br><span class="small muted">作业、CLI 参数与退出码、HTTP API</span></li>
     <li><a href="../guides/development.md">开发指南</a> <code>docs/guides/development.md</code><br><span class="small muted">构建、测试布局、平台标签、类型检查、CI 与 <code>cicd/</code> 脚本</span></li>
     <li><a href="../guides/airflow.md">Airflow 编排</a> <code>docs/guides/airflow.md</code><br><span class="small muted">DAG、参数约束、测试环境</span></li>
     <li><a href="../guides/deployment.md">部署教程</a> <code>docs/guides/deployment.md</code><br><span class="small muted">单机 Compose、Swarm、升级、备份与恢复</span></li>
+    <li><a href="../desktop/README.md">数艺工坊（桌面控制台）</a> <code>docs/desktop/</code><br><span class="small muted">构建与运行、架构、界面设计、接口对接、流畅度、测试与循环记录</span></li>
     <li><a href="pricing-evidence.md">价格依据</a> <code>docs/reports/pricing-evidence.md</code><br><span class="small muted">价格来源、SKU、算式与核验范围</span></li>
     <li><a href="../CHANGELOG.md">变更记录</a> <code>docs/CHANGELOG.md</code><br><span class="small muted">逐项变更，含破坏性变更标注</span></li>
     <li><a href="../../design/README.md">设计文档索引</a> <code>design/README.md</code><br><span class="small muted">设计原则与各设计文档</span></li>

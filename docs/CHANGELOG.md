@@ -13,7 +13,11 @@ root POM (its conventions apply: Java floor, Enforcer, Spotless, Checkstyle, zer
 which is not a reactor module, so the backend build, its jar and its images are unchanged. It is a
 client only: it adds no backend endpoint and keeps no business data. The documents, in Chinese,
 are in `docs/desktop/` (scope, architecture, UI design, backend integration, performance, tests,
-and the plan and log of its build loops).
+and the plan and log of its build loops). CI passed on `a38579a` (run 40481873297, the desktop
+job's first run in 54 s) and on `8a1fbc8`, which added the test-count floor and the advisory
+check of its pins (run 40484775949: 76 desktop tests and 310 JVM tests executed on Linux, the
+images on Java 25.0.5+8; advisory run 40484775916); what the runs verified was read back from their
+annotations. The evaluation report is at v4.5, with this round as its appendix A.
 
 #### Added
 - **The app** (JavaFX 25.0.5 on Java 25): an overview of both backends with every DAG's run ribbon
@@ -60,7 +64,9 @@ The last version defect of the previous round: the October 2026 security update 
 build but not in the images, because the official `eclipse-temurin` and `maven` images still
 shipped 25.0.4.1+1 five days after Temurin 25.0.5+8 came out (their update waits for other
 architectures; on 2026-10-27 `eclipse-temurin:25-jre` was re-pushed with a new Ubuntu layer and the
-same Java). The images no longer wait for them. Items marked **BREAKING** need action.
+same Java). The images no longer wait for them. The push, `d0f90ae`, passed every CI job (run
+40445373779: the builder image and the three runtime images on Java 25.0.5+8-LTS) and the advisory
+workflow with its new Temurin step (40445373737). Items marked **BREAKING** need action.
 
 #### Security
 - **BREAKING:** the build requires JDK 25.0.5 or newer (`requireJavaVersion [25.0.5,)`), the release
