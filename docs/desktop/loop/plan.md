@@ -55,8 +55,8 @@
 
 ## L5 打磨
 
-- **状态：**完成（2026-10-27）；Windows 应用目录由 `cicd/desktop/package_desktop.py` 生成，
-  “CI 上 `verify` 通过”以推送后的 CI 结果为准，见[记录](log.md)
+- **状态：**完成（2026-10-27）；Windows 应用目录由 `cicd/desktop/package_desktop.py` 生成；
+  CI 运行 40481873297 的 `desktop` 作业在 Linux 上通过，见[记录](log.md)
 - **交付：**跟随系统主题、减少动效、键盘操作（Ctrl+1…5 切换视图、Ctrl+R 刷新、Esc 关闭侧滑面板）、
   `FxWatchdog`、启动与切换计时、Windows 应用镜像（`jpackage`）、CI 作业、文档与教程。
 - **验收：**1000 行表格滚动无超时帧；CI 上 `verify` 通过；按 README 能从零构建并启动。

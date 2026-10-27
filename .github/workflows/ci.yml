@@ -204,6 +204,10 @@ jobs:
       - name: Verify the desktop console on a virtual display
         run: xvfb-run --auto-servernum ./mvnw -B -ntp -f desktop/pom.xml verify
 
+      # The desktop suite against its own floor; the passing count becomes a notice.
+      - name: Assert the desktop suite executed its tests
+        run: python3 -B cicd/build/check_test_counts.py --project desktop
+
       # jlink, jpackage, an AOT cache trained by one smoke start, then a second start with it.
       - name: Package the app image and check that it starts
         run: xvfb-run --auto-servernum python3 -B cicd/desktop/package_desktop.py

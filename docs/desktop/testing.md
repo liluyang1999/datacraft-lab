@@ -14,8 +14,10 @@
 | 打包 | 应用目录能生成并启动两次（训练 AOT 缓存、带缓存运行），首帧时间写入输出 | `cicd/desktop/package_desktop.py`；它自身的逻辑由 `tests/ci/test_package_desktop.py` 覆盖 | JDK 25 的 jlink 与 jpackage，显示器 |
 
 测试代码在 `tests/jvm/datacraft-desktop/java/`（仓库的测试都在 `tests/` 下）。单元到界面测试由
-`./mvnw -f desktop/pom.xml verify` 运行；CI 的 `desktop` 作业在 Xvfb 下运行它，再运行打包脚本，并把界面
-截图作为构件保存。
+`./mvnw -f desktop/pom.xml verify` 运行；CI 的 `desktop` 作业在 Xvfb 下运行它，用
+`cicd/build/check_test_counts.py --project desktop` 核对实际执行的测试不少于 76 项（两个平台相同：各自只运行
+`VaultPlatformTest` 里本平台的一项，`verify` 不运行 `e2e` 测试），通过时把数目写成公开注解；再运行打包脚本，
+并把界面截图作为构件保存。
 
 ## 端到端
 

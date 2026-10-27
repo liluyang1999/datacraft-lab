@@ -15,7 +15,10 @@ platform's tagged tests: --platform names it and defaults to the platform this s
 On a GitHub runner a passing check also records the counts as a notice annotation: annotations can
 be read through the public API, so the number of tests a run executed is visible without its log.
 
-Usage: python3 -B cicd/build/check_test_counts.py [--platform {linux,windows}] [REPOSITORY_ROOT]
+--project desktop checks the desktop console (desktop/pom.xml) instead of the reactor's modules.
+
+Usage: python3 -B cicd/build/check_test_counts.py [--platform {linux,windows}]
+       [--project {backend,desktop}] [REPOSITORY_ROOT]
 Exit status: 0 when every module meets its floor, 1 otherwise.
 """
 
@@ -56,6 +59,20 @@ MODULE_DIRS = {
     "datacraft-spark": "modules/processing/datacraft-spark",
     "datacraft-api": "modules/interfaces/datacraft-api",
     "datacraft-cli": "modules/interfaces/datacraft-cli",
+}
+
+# The desktop console (数艺工坊) is a Maven project of its own, desktop/pom.xml, outside the reactor:
+# its CI job builds nothing else and runs this check with --project desktop. Each platform runs one
+# of VaultPlatformTest's two platform tests and `verify` never runs the e2e-tagged ones, so the
+# floor is the same on both.
+DESKTOP_DIRS = {"datacraft-desktop": "desktop"}
+DESKTOP_FLOORS = {"datacraft-desktop": 76}
+
+# What --project selects: the module directories, the floors per platform, and the notice's title.
+PROJECTS = {
+    "backend": (MODULE_DIRS, PLATFORM_FLOORS, "JVM tests"),
+    "desktop": (DESKTOP_DIRS, {"linux": DESKTOP_FLOORS, "windows": DESKTOP_FLOORS},
+                "Desktop console tests"),
 }
 
 
@@ -115,16 +132,18 @@ def host_platform():
     return "windows" if sys.platform == "win32" else "linux"
 
 
-def check(root, floors=None, executed_by_module=None):
+def check(root, floors=None, executed_by_module=None, module_dirs=None):
     """Returns the list of failure messages; empty when every module meets its floor.
 
     executed_by_module, when given, receives the executed count of each module that has reports.
+    module_dirs maps each module of floors to its directory (default: the reactor's MODULE_DIRS).
     """
     floors = FLOORS if floors is None else floors
+    module_dirs = MODULE_DIRS if module_dirs is None else module_dirs
     failures = []
     for module, floor in floors.items():
         try:
-            executed, skipped = executed_tests(root / MODULE_DIRS[module] / "target" / "surefire-reports")
+            executed, skipped = executed_tests(root / module_dirs[module] / "target" / "surefire-reports")
         except ReportError as error:
             failures.append(f"{module}: {error}")
             continue
@@ -142,15 +161,19 @@ def main(argv=None):
     parser.add_argument("root", nargs="?", default=".", help="repository root (default: .)")
     parser.add_argument("--platform", choices=sorted(PLATFORM_FLOORS), default=host_platform(),
                         help="platform that ran the tests (default: this one)")
+    parser.add_argument("--project", choices=sorted(PROJECTS), default="backend",
+                        help="the reactor's modules or the desktop console (default: backend)")
     args = parser.parse_args(argv)
-    print(f"floors for tests run on {args.platform}")
+    module_dirs, platform_floors, title = PROJECTS[args.project]
+    print(f"floors for tests run on {args.platform}" +
+          ("" if args.project == "backend" else f" ({args.project})"))
     executed = {}
-    failures = check(Path(args.root), PLATFORM_FLOORS[args.platform], executed)
+    failures = check(Path(args.root), platform_floors[args.platform], executed, module_dirs)
     for failure in failures:
         print(f"::error::{failure}")
     if not failures and os.environ.get("GITHUB_ACTIONS"):
         modules = ", ".join(f"{module} {count}" for module, count in sorted(executed.items()))
-        print(f"::notice title=JVM tests executed on {args.platform}::"
+        print(f"::notice title={title} executed on {args.platform}::"
               f"{sum(executed.values())} in total: {modules}")
     return 1 if failures else 0
 

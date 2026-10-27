@@ -5,7 +5,9 @@ reports when a pinned version turns out to be vulnerable either. This check asks
 (https://osv.dev) about each pin:
 
 - the dependencies the root pom.xml manages (Jackson's BOM stands for jackson-core and
-  jackson-databind, the two artifacts the Enforcer already bans by version);
+  jackson-databind, the two artifacts the Enforcer already bans by version), and those the
+  desktop console's desktop/pom.xml pins itself (JavaFX, with the base and graphics modules that
+  javafx-controls brings, and sqlite-jdbc);
 - apache-airflow and pyspark as cicd/airflow/install-airflow.sh installs them, the FAB provider at
   the floor of cicd/airflow/check_security_floor.py, the fixed releases that
   orchestration/airflow/security-overrides.txt installs over the Airflow constraints, and
@@ -25,7 +27,7 @@ their version ranges are evaluated here, as the OSV schema describes; that needs
 (v7.0.1, not v7), and a pin without one is an error. An answer in several pages is read to its
 last page.
 
-Standard library only: the XML parsed is this repository's own pom.xml.
+Standard library only: the XML parsed is this repository's own pom.xml and desktop/pom.xml.
 
 Usage: python3 -B cicd/security/check_advisories.py [--list] [REPOSITORY_ROOT]
 Exit status: 0 when no pin has an advisory, 1 when one has, 2 when OSV could not be asked.
@@ -48,9 +50,12 @@ BOM_MEMBERS = {
     "com.fasterxml.jackson:jackson-bom": ("com.fasterxml.jackson.core:jackson-core",
                                           "com.fasterxml.jackson.core:jackson-databind"),
 }
-# Distributions a pinned one installs at exactly its own version, and that have advisories of
-# their own.
-COMPANIONS = {"apache-airflow": ("apache-airflow-core",)}
+# Packages a pinned one brings at exactly its own version, and that have advisories of their own,
+# by ecosystem and name: Airflow's core distribution, and the JavaFX modules under javafx-controls.
+COMPANIONS = {
+    ("PyPI", "apache-airflow"): ("apache-airflow-core",),
+    ("Maven", "org.openjfx:javafx-controls"): ("org.openjfx:javafx-base", "org.openjfx:javafx-graphics"),
+}
 PROPERTY = re.compile(r"\$\{([^}]+)\}")
 # An action pinned to a commit, and the same with its full release in the comment.
 COMMIT_ACTION = re.compile(r"^\s*(?:-\s+)?uses:\s+([^@\s]+)@[0-9a-f]{40}\b")
@@ -63,9 +68,9 @@ class LookupFailed(Exception):
     """OSV could not be asked, so nothing is known about the pins."""
 
 
-def maven_packages(root):
-    """(ecosystem, name, version, source) of every dependency the root POM manages."""
-    project = ET.parse(root / "pom.xml").getroot()
+def read_pom(root, path):
+    """The POM at path and a function that expands the ${properties} it defines."""
+    project = ET.parse(root / path).getroot()
     properties = {node.tag.rpartition("}")[2]: (node.text or "").strip()
                   for node in project.findall("{*}properties/*")}
 
@@ -76,9 +81,15 @@ def maven_packages(root):
                 break
             value = expanded
         if "${" in value:
-            raise ValueError(f"pom.xml: cannot resolve {value}")
+            raise ValueError(f"{path}: cannot resolve {value}")
         return value
 
+    return project, resolve
+
+
+def maven_packages(root):
+    """(ecosystem, name, version, source) of every dependency the root POM manages."""
+    project, resolve = read_pom(root, "pom.xml")
     packages = []
     for dependency in project.findall("{*}dependencyManagement/{*}dependencies/{*}dependency"):
         name = resolve(f"{dependency.findtext('{*}groupId')}:{dependency.findtext('{*}artifactId')}")
@@ -91,6 +102,25 @@ def maven_packages(root):
             packages.append(("Maven", name, version, "pom.xml"))
     if not packages:
         raise ValueError("pom.xml manages no dependency")
+    return packages
+
+
+def desktop_packages(root):
+    """(ecosystem, name, version, source) of each dependency desktop/pom.xml pins itself.
+
+    The desktop console is a Maven project outside the reactor whose parent is the root POM: a
+    dependency without a version there is one the root POM manages, so it is checked already.
+    """
+    source = "desktop/pom.xml"
+    project, resolve = read_pom(root, source)
+    packages = []
+    for dependency in project.findall("{*}dependencies/{*}dependency"):
+        version = dependency.findtext("{*}version")
+        if version is not None:
+            name = resolve(f"{dependency.findtext('{*}groupId')}:{dependency.findtext('{*}artifactId')}")
+            packages.append(("Maven", name, resolve(version), source))
+    if not packages:
+        raise ValueError(f"{source}: no pinned version found")
     return packages
 
 
@@ -132,6 +162,7 @@ def action_packages(root):
 def pinned(root):
     """Every pin to check, once each: (ecosystem, name, version, file that pins it)."""
     packages = maven_packages(root)
+    packages += desktop_packages(root)
     packages += pins(root, "cicd/airflow/install-airflow.sh", r"'(apache-airflow|pyspark)==([0-9][^']*)'", "PyPI")
     packages += pins(root, "cicd/airflow/check_security_floor.py",
                      r'"(apache-airflow-providers-[a-z-]+)": "([0-9][^"]*)"', "PyPI")
@@ -142,7 +173,7 @@ def pinned(root):
                      name="shellcheck-py")
     packages += pins(root, "Makefile", r"\b(pyright)@([0-9][0-9.]*)", "npm")
     packages += [(ecosystem, companion, version, source) for ecosystem, name, version, source in packages
-                 for companion in COMPANIONS.get(name, ()) if ecosystem == "PyPI"]
+                 for companion in COMPANIONS.get((ecosystem, name), ())]
     packages += action_packages(root)
     unique = {}
     for ecosystem, name, version, source in packages:

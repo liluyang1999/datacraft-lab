@@ -307,7 +307,7 @@ cicd/
 | `dags` | After `build`: Python 3.13 and JDK 25; `cicd/airflow/install-airflow.sh` (Airflow 3.3.2 and its providers under the official constraints for the running Python, then `pyspark==4.2.0`, then the fixed releases of `orchestration/airflow/security-overrides.txt`); `cicd/airflow/check_security_floor.py` (Airflow 3.3.2, FAB provider 3.9.0 and each override release); `tests/orchestration`; `tests/smoke/airflow_runtime_smoke.py` with the verified jar |
 | `scripts` | `cicd/lint/check-actions-pinned.sh` (every `uses:` is `owner/repo@<full commit SHA> # vX.Y.Z` or a local action, on one line, and none appears in a comment); `cicd/lint/install-shellcheck.sh` (ShellCheck 0.11.0); `cicd/lint/check-shell-scripts.sh` (`bash -n` and ShellCheck over every shell script git knows; every finding fails, sourced files are followed); the `tests/deploy`, `tests/ci` and `tests/docs` suites on Python 3.13; `node --test tests/docs/cloud-costs.test.cjs` on Node.js 24; `npx --yes pyright@1.1.414 --warnings` |
 | `compose` | `cicd/stacks/check-stack-files.sh`: `docker compose config` and `docker stack config` with test-only secrets, and that each missing secret, the API token and for the stack the Redis password included, is rejected |
-| `desktop` | JDK 25 and `xvfb-run`: `./mvnw -B -ntp -f desktop/pom.xml verify` (the 数艺工坊 desktop console: format, Checkstyle, its unit, client, store and UI tests); `cicd/desktop/package_desktop.py` (a jlink runtime, the jpackage app image, an AOT cache trained by one `--smoke` start, and a second start that must reach its first frame); the UI snapshots as an artifact |
+| `desktop` | JDK 25 and `xvfb-run`: `./mvnw -B -ntp -f desktop/pom.xml verify` (the 数艺工坊 desktop console: format, Checkstyle, its unit, client, store and UI tests); `cicd/build/check_test_counts.py --project desktop` (its test-count floor); `cicd/desktop/package_desktop.py` (a jlink runtime, the jpackage app image, an AOT cache trained by one `--smoke` start, and a second start that must reach its first frame); the UI snapshots as an artifact |
 | `containers` | After `build`, `scripts` and `compose`: `cicd/images/smoke-images.sh`, then `cicd/images/smoke-compose.sh`, then `cicd/images/smoke-swarm.sh` |
 
 The `cicd/build` scripts run after `./mvnw verify` on Linux, WSL or Git Bash (they use GNU tools
@@ -327,7 +327,7 @@ secrets.
 A second workflow, `.github/workflows/advisories.yml`, runs
 `python3 -B cicd/security/check_advisories.py` every Monday, on demand, and on a push that changes a
 file which pins a version. The script collects every pin (the dependencies the root `pom.xml`
-manages, Airflow, pyspark, the FAB provider floor, the fixed releases of
+manages, those `desktop/pom.xml` pins itself (JavaFX and sqlite-jdbc), Airflow, pyspark, the FAB provider floor, the fixed releases of
 `orchestration/airflow/security-overrides.txt`, shellcheck-py, pyright and the actions of the
 workflows) and asks [OSV](https://osv.dev) about each. It exits `1` and prints one `::error::` line
 per affected pin when a pinned version has an advisory, and `2` when OSV could not be asked, so a
@@ -361,6 +361,10 @@ pom's `<modules>`.
 | `datacraft-spark` | 59 | 49 |
 | `datacraft-api` | 29 | 29 |
 | `datacraft-cli` | 31 | 31 |
+
+`--project desktop` checks the desktop console instead (`desktop/target/surefire-reports`, one
+floor of 76 on both platforms: each runs one of `VaultPlatformTest`'s two platform tests, and
+`verify` never runs the `e2e` tests). The `desktop` job runs it after `verify`.
 
 ## Zero-warning policy
 

@@ -225,5 +225,73 @@ class CheckTestCountsTests(unittest.TestCase):
             self.assertGreater(floor, 0, module)
 
 
+class DesktopProjectTests(unittest.TestCase):
+    """The desktop console is a Maven project outside the reactor; its job checks it on its own."""
+
+    def setUp(self):
+        directory = tempfile.TemporaryDirectory()
+        self.addCleanup(directory.cleanup)
+        self.root = Path(directory.name)
+        self.floor = counts.DESKTOP_FLOORS["datacraft-desktop"]
+        self.reports = self.root / counts.DESKTOP_DIRS["datacraft-desktop"] / "target" / "surefire-reports"
+
+    def write(self, tests, name="com.example.datacraft.desktop.Test"):
+        self.reports.mkdir(parents=True, exist_ok=True)
+        (self.reports / f"TEST-{name}.xml").write_text(
+            f'<testsuite name="{name}" tests="{tests}" skipped="0" errors="0" failures="0"/>\n',
+            encoding="utf-8")
+
+    def check(self, platform="linux"):
+        output = io.StringIO()
+        with contextlib.redirect_stdout(output):
+            status = counts.main(["--project", "desktop", "--platform", platform, str(self.root)])
+        return status, output.getvalue()
+
+    def test_the_desktop_reports_are_checked_against_the_desktop_floor_alone(self):
+        # No backend module has reports here: the desktop job builds only desktop/pom.xml.
+        self.write(self.floor - 1, "com.example.datacraft.desktop.FirstTest")
+        self.write(1, "com.example.datacraft.desktop.SecondTest")
+        for platform in ("linux", "windows"):
+            status, output = self.check(platform)
+            self.assertEqual(0, status, output)
+            self.assertIn(f"datacraft-desktop: executed {self.floor}", output)
+            self.assertNotIn("datacraft-api", output)
+
+    def test_a_desktop_suite_that_shrank_fails(self):
+        self.write(self.floor - 1)
+        status, output = self.check()
+        self.assertEqual(1, status, output)
+        self.assertIn(f"::error::datacraft-desktop executed {self.floor - 1} tests, "
+                      f"expected at least {self.floor}", output)
+
+    def test_a_passing_desktop_check_on_a_runner_records_its_own_notice(self):
+        self.write(self.floor)
+        command = [sys.executable, "-B", str(SCRIPT), "--project", "desktop", "--platform", "linux",
+                   str(self.root)]
+        runner = {**os.environ, "GITHUB_ACTIONS": "true"}
+        result = subprocess.run(command, capture_output=True, text=True, env=runner)
+        self.assertEqual(0, result.returncode, result.stdout + result.stderr)
+        notices = [line for line in result.stdout.splitlines() if line.startswith("::notice")]
+        self.assertEqual([f"::notice title=Desktop console tests executed on linux::"
+                          f"{self.floor} in total: datacraft-desktop {self.floor}"], notices)
+
+    def test_the_backend_stays_the_default_project(self):
+        self.write(self.floor)
+        status, output = run_check(self.root)
+        self.assertEqual(1, status, output)
+        self.assertIn("::error::datacraft-common: no reports directory", output)
+        self.assertNotIn("datacraft-desktop", output)
+
+    def test_the_desktop_directory_is_a_maven_project_with_one_floor_for_both_platforms(self):
+        self.assertEqual({"datacraft-desktop": "desktop"}, counts.DESKTOP_DIRS)
+        self.assertTrue((REPOSITORY / "desktop" / "pom.xml").is_file())
+        pom = ET.parse(REPOSITORY / "desktop" / "pom.xml").getroot()
+        self.assertEqual("datacraft-desktop", (pom.findtext("{*}artifactId") or "").strip())
+        self.assertGreater(self.floor, 0)
+        # Each platform runs one of VaultPlatformTest's two platform tests.
+        self.assertEqual({"linux": counts.DESKTOP_FLOORS, "windows": counts.DESKTOP_FLOORS},
+                         counts.PROJECTS["desktop"][1])
+
+
 if __name__ == "__main__":
     unittest.main()

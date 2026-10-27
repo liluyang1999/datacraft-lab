@@ -48,6 +48,30 @@ POM = """<project xmlns="http://maven.apache.org/POM/4.0.0">
   </dependencyManagement>
 </project>
 """
+# The desktop console's own POM: its parent is the root POM, which manages the versionless ones.
+DESKTOP_POM = """<project xmlns="http://maven.apache.org/POM/4.0.0">
+  <properties>
+    <javafx.version>25.0.5</javafx.version>
+    <sqlite.jdbc.version>3.53.4.0</sqlite.jdbc.version>
+  </properties>
+  <dependencies>
+    <dependency>
+      <groupId>org.openjfx</groupId>
+      <artifactId>javafx-controls</artifactId>
+      <version>${javafx.version}</version>
+    </dependency>
+    <dependency>
+      <groupId>org.xerial</groupId>
+      <artifactId>sqlite-jdbc</artifactId>
+      <version>${sqlite.jdbc.version}</version>
+    </dependency>
+    <dependency>
+      <groupId>com.fasterxml.jackson.core</groupId>
+      <artifactId>jackson-databind</artifactId>
+    </dependency>
+  </dependencies>
+</project>
+"""
 SHA = "3d3c42e5aac5ba805825da76410c181273ba90b1"
 
 
@@ -59,12 +83,13 @@ def run_main(*arguments):
 
 
 class PinnedVersionsTests(unittest.TestCase):
-    def tree(self, pom=POM):
+    def tree(self, pom=POM, desktop_pom=DESKTOP_POM):
         directory = tempfile.TemporaryDirectory()
         self.addCleanup(directory.cleanup)
         root = Path(directory.name)
         files = {
             "pom.xml": pom,
+            "desktop/pom.xml": desktop_pom,
             "cicd/airflow/install-airflow.sh": "pip install 'apache-airflow==3.3.2'\npip install 'pyspark==4.2.0'\n",
             "cicd/airflow/check_security_floor.py": 'FLOORS = {"apache-airflow": "3.3.2", '
                                                     '"apache-airflow-providers-fab": "3.9.0"}\n',
@@ -88,6 +113,12 @@ class PinnedVersionsTests(unittest.TestCase):
             ("Maven", "com.fasterxml.jackson.core:jackson-core", "2.22.3", "pom.xml"),
             ("Maven", "com.fasterxml.jackson.core:jackson-databind", "2.22.3", "pom.xml"),
             ("Maven", "com.github.scopt:scopt_2.13", "4.2.0", "pom.xml"),
+            # The desktop console pins its own; javafx-controls brings base and graphics at its
+            # version. Its versionless jackson-databind is the root POM's pin above.
+            ("Maven", "org.openjfx:javafx-base", "25.0.5", "desktop/pom.xml"),
+            ("Maven", "org.openjfx:javafx-controls", "25.0.5", "desktop/pom.xml"),
+            ("Maven", "org.openjfx:javafx-graphics", "25.0.5", "desktop/pom.xml"),
+            ("Maven", "org.xerial:sqlite-jdbc", "3.53.4.0", "desktop/pom.xml"),
             ("PyPI", "apache-airflow", "3.3.2", "cicd/airflow/install-airflow.sh"),
             # Advisories are filed against the core distribution too, which the pin installs at
             # the same version.
@@ -110,6 +141,14 @@ class PinnedVersionsTests(unittest.TestCase):
         for message, pom in cases.items():
             with self.subTest(message=message), self.assertRaisesRegex(ValueError, message):
                 advisories.pinned(self.tree(pom))
+        desktop_cases = {
+            "desktop/pom.xml: cannot resolve": DESKTOP_POM.replace(
+                "<javafx.version>25.0.5</javafx.version>", ""),
+            "desktop/pom.xml: no pinned version": re.sub(r"\s*<version>[^<]*</version>", "", DESKTOP_POM),
+        }
+        for message, desktop_pom in desktop_cases.items():
+            with self.subTest(message=message), self.assertRaisesRegex(ValueError, message):
+                advisories.pinned(self.tree(desktop_pom=desktop_pom))
         for name in ("cicd/airflow/install-airflow.sh", "cicd/airflow/check_security_floor.py",
                      "cicd/lint/install-shellcheck.sh", "orchestration/airflow/security-overrides.txt",
                      "Makefile", ".github/workflows/ci.yml"):
@@ -128,9 +167,18 @@ class PinnedVersionsTests(unittest.TestCase):
         managed = pom.findall("{*}dependencyManagement/{*}dependencies/{*}dependency")
         imported = [entry for entry in managed if entry.findtext("{*}scope") == "import"]
         self.assertEqual(1, len(imported))
-        # Every managed dependency is one pin; the BOM stands for its two members.
-        self.assertEqual(len(managed) - 1 + 2, sum(1 for ecosystem, _ in names if ecosystem == "Maven"))
+        desktop = ET.parse(REPOSITORY / "desktop" / "pom.xml").getroot()
+        versioned = [entry for entry in desktop.findall("{*}dependencies/{*}dependency")
+                     if entry.find("{*}version") is not None]
+        self.assertTrue(versioned)
+        # Every managed dependency is one pin; the BOM stands for its two members. Each dependency
+        # the desktop POM pins itself is one more, and javafx-controls brings two companions.
+        self.assertEqual(len(managed) - 1 + 2 + len(versioned) + 2,
+                         sum(1 for ecosystem, _ in names if ecosystem == "Maven"))
         self.assertIn(("Maven", "org.apache.spark:spark-sql_2.13"), names)
+        for artifact in ("javafx-base", "javafx-controls", "javafx-graphics"):
+            self.assertIn(("Maven", f"org.openjfx:{artifact}"), names)
+        self.assertIn(("Maven", "org.xerial:sqlite-jdbc"), names)
         workflows = "".join(path.read_text(encoding="utf-8")
                             for path in (REPOSITORY / ".github" / "workflows").glob("*.y*ml"))
         used = {"/".join(name.lower().split("/")[:2])
@@ -194,7 +242,8 @@ class PinnedVersionsTests(unittest.TestCase):
         self.assertIn("Maven: com.github.scopt:scopt_2.13 4.2.0 (pom.xml)", output.splitlines())
         self.assertIn("PyPI: certifi 2026.10.23 (orchestration/airflow/security-overrides.txt)",
                       output.splitlines())
-        self.assertEqual(13, len(output.splitlines()))
+        self.assertIn("Maven: org.xerial:sqlite-jdbc 3.53.4.0 (desktop/pom.xml)", output.splitlines())
+        self.assertEqual(17, len(output.splitlines()))
 
 
 class AdvisoryMatchingTests(unittest.TestCase):

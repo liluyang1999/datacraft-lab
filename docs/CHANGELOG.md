@@ -35,8 +35,9 @@ and the plan and log of its build loops).
 - **Packaging**: `cicd/desktop/package_desktop.py` builds a self-contained app image (jdeps, jlink,
   jpackage) and trains a JDK 25 AOT cache with one `--smoke` start; the image reaches its first
   frame in about 1.1–1.3 s on the development machine (1.7 s without the cache).
-- **CI**: a `desktop` job verifies the project under `xvfb-run`, packages and starts the app image,
-  and keeps the UI snapshots as an artifact.
+- **CI**: a `desktop` job verifies the project under `xvfb-run`, checks that at least 76 desktop
+  tests ran (`cicd/build/check_test_counts.py --project desktop`, recorded as a notice like the
+  backend's counts), packages and starts the app image, and keeps the UI snapshots as an artifact.
 - **Tests** (`tests/jvm/datacraft-desktop`, 76): clients against an in-process stub server, the
   store and the vaults, services with a manual clock, view models with a test-driven UI queue, and
   the whole window against scripted backends in both themes (no JavaFX warning, no FX-thread stall
@@ -49,6 +50,9 @@ and the plan and log of its build loops).
 #### Changed
 - `.dockerignore` excludes `desktop/`; `.gitattributes` marks `*.ttf` binary (the bundled Barlow
   fonts, SIL OFL).
+- The weekly advisory check also asks OSV about the versions `desktop/pom.xml` pins itself
+  (JavaFX 25.0.5 with the base and graphics modules that `javafx-controls` brings, sqlite-jdbc
+  3.53.4.0), and a change to that file runs it: 32 pins, none with a known advisory on 2026-10-27.
 
 ### Java 25.0.5 everywhere: a pinned Temurin release (2026-10-27)
 

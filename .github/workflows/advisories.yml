@@ -12,6 +12,7 @@ on:
     branches: [main]
     paths:
       - pom.xml
+      - desktop/pom.xml
       - Makefile
       - .github/workflows/**
       - cicd/airflow/**
