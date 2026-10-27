@@ -86,6 +86,29 @@ class ImageBuildContractTests(unittest.TestCase):
             self.assertRegex(text, r"(?m)^ARG JAR_IMAGE$", name)
             self.assertRegex(text, r"(?m)^FROM \$\{JAR_IMAGE\} AS jar$", name)
 
+    def test_a_base_without_a_default_is_declared_so_the_build_prints_no_warning(self):
+        # A base image ARG has no default on purpose (a bare name would resolve to docker.io/datacraft/*,
+        # a namespace this project does not own). BuildKit's InvalidDefaultArgInFrom check warns about
+        # every such FROM; the directive below says the empty default is intended, so the image build
+        # prints no warning.
+        for path in sorted(DOCKERFILES.glob("Dockerfile.*")):
+            text = path.read_text(encoding="utf-8")
+            lines = text.splitlines()
+            directives = []
+            for line in lines:
+                match = re.match(r"#\s*([a-z]+)\s*=\s*(\S+)\s*$", line)
+                if not match:
+                    break
+                directives.append((match.group(1), match.group(2)))
+            no_default = set(re.findall(r"(?m)^ARG ([A-Z_]+)$", text))
+            unset_bases = sorted(name for name in no_default if re.search(r"(?m)^FROM \$\{" + name + r"\}", text))
+            with self.subTest(dockerfile=path.name):
+                self.assertEqual(("syntax", "docker/dockerfile:1"), directives[0] if directives else None)
+                if unset_bases:
+                    self.assertIn(("check", "skip=InvalidDefaultArgInFrom"), directives, unset_bases)
+                else:
+                    self.assertNotIn(("check", "skip=InvalidDefaultArgInFrom"), directives)
+
     def test_no_build_pulls_and_every_public_base_is_pulled_first(self):
         calls = self.run_build(BUILD_SPARK_IMAGE="true")
         builds = [call for call in calls if call[:1] == ["build"]]

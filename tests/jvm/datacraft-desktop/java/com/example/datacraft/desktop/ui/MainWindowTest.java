@@ -4,7 +4,6 @@ import static com.example.datacraft.desktop.ui.FxTesting.find;
 import static com.example.datacraft.desktop.ui.FxTesting.onFx;
 import static com.example.datacraft.desktop.ui.FxTesting.settle;
 import static com.example.datacraft.desktop.ui.FxTesting.shows;
-import static com.example.datacraft.desktop.ui.FxTesting.showsPrefix;
 import static com.example.datacraft.desktop.ui.FxTesting.snapshot;
 import static com.example.datacraft.desktop.ui.FxTesting.waitUntil;
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -15,6 +14,11 @@ import com.example.datacraft.desktop.app.AppPaths;
 import com.example.datacraft.desktop.app.Preferences;
 import com.example.datacraft.desktop.service.FakeBackends;
 import com.example.datacraft.desktop.store.Profile;
+import com.example.datacraft.desktop.ui.component.RunBars;
+import com.example.datacraft.desktop.ui.component.RunMark;
+import com.example.datacraft.desktop.ui.component.StatusRing;
+import com.example.datacraft.desktop.ui.component.TaskGraph;
+import com.example.datacraft.desktop.ui.component.TimeStrip;
 import com.example.datacraft.desktop.ui.shell.MainWindow;
 import com.example.datacraft.desktop.ui.shell.Navigator.Destination;
 import java.nio.file.Path;
@@ -79,6 +83,15 @@ class MainWindowTest {
     backends.close();
   }
 
+  /**
+   * Turns motion on through the preference. Every preference write (the last view, on each
+   * navigation) applies the preference again, so setting Motion directly would last one step.
+   */
+  private void motionOn() {
+    context.preferences().reducedMotion(false);
+    waitUntil("motion is on", () -> !Motion.reduced());
+  }
+
   private Parent root() {
     return onFx(() -> stage.getScene().getRoot());
   }
@@ -100,7 +113,24 @@ class MainWindowTest {
     waitUntil(
         "the overview lists the DAGs",
         () -> shows(root, "datacraft_spark_etl") && shows(root, "datacraft_engine_jobs"));
-    waitUntil("the overview shows recent runs", () -> showsPrefix(root, "上次"));
+    // 14 successes and 3 failures among the finished runs on screen.
+    waitUntil("the donut shows the success share", () -> shows(root, "82%"));
+    waitUntil(
+        "the recent runs are dots on the time line, the newest four named below it",
+        () ->
+            find(root, TimeStrip.class).stream().anyMatch(strip -> strip.count() == 8)
+                && find(root, javafx.scene.layout.HBox.class).stream()
+                        .filter(row -> row.getStyleClass().contains("recent-row"))
+                        .count()
+                    == 4);
+    waitUntil(
+        "each lane draws its runs as bars",
+        () ->
+            find(root, RunBars.class).stream()
+                .map(RunBars::count)
+                .sorted()
+                .toList()
+                .equals(List.of(0, 6, 10)));
     settle();
     snapshot(scene(), "overview-light");
 
@@ -126,13 +156,33 @@ class MainWindowTest {
     onFx(run::fire);
     waitUntil("the result is shown", () -> shows(root, "Profiled 12,480 rows in 6 columns"));
     waitUntil(
-        "the run is in the recent runs",
-        () -> shows(root, "Profiled 12,480 rows in 6 columns") && showsPrefix(root, "1.2 s"));
+        "the outcome is a success mark with the metrics as figures",
+        () ->
+            find(root, RunMark.class).stream().anyMatch(mark -> "success".equals(mark.tone()))
+                && shows(root, "12,480")
+                && shows(root, "1.8 MB"));
+    waitUntil(
+        "the run is a bar of the recent runs",
+        () ->
+            find(root, RunBars.class).stream()
+                .anyMatch(
+                    bars ->
+                        bars.count() == 1
+                            && bars.segments().getFirst().tone()
+                                == com.example.datacraft.desktop.api.RunTone.SUCCESS));
     settle();
     snapshot(scene(), "jobs-light");
 
     go(Destination.PIPELINES);
-    waitUntil("the runs of the first DAG are listed", () -> showsPrefix(root, "scheduled__"));
+    waitUntil(
+        "the runs of the first DAG are bars to pick from",
+        () -> pickableRuns(root) == 12);
+    waitUntil(
+        "its newest run is drawn as the DAG",
+        () ->
+            find(root, TaskGraph.class).stream()
+                .anyMatch(
+                    graph -> graph.taskIds().equals(List.of("noop", "echo", "spark_version"))));
     settle();
     snapshot(scene(), "pipelines-light");
 
@@ -188,10 +238,147 @@ class MainWindowTest {
   }
 
   private static boolean bothUp(Parent root) {
-    return find(root, com.example.datacraft.desktop.ui.component.StatusBadge.class).stream()
-            .filter(badge -> "success".equals(badge.tone()))
+    return find(root, StatusRing.class).stream()
+            .filter(ring -> "success".equals(ring.tone()))
             .count()
         >= 2;
+  }
+
+  /** The run bars of the selected DAG, the ones a click picks from, if they are on screen. */
+  private static java.util.Optional<RunBars> selectableBars(Parent root) {
+    return find(root, RunBars.class).stream()
+        .filter(bars -> bars.getStyleClass().contains("selectable") && FxTesting.visible(bars))
+        .findFirst();
+  }
+
+  private static int pickableRuns(Parent root) {
+    return selectableBars(root).map(RunBars::count).orElse(-1);
+  }
+
+  /** The card of a task in the graph; its user data is the task instance it shows. */
+  private static java.util.Optional<javafx.scene.Node> card(Parent root, String taskId) {
+    return find(root, javafx.scene.layout.HBox.class).stream()
+        .filter(
+            node ->
+                node.getStyleClass().contains("task-card")
+                    && node.getUserData()
+                        instanceof com.example.datacraft.desktop.api.AirflowModels.TaskInstance task
+                    && task.taskId().equals(taskId))
+        .<javafx.scene.Node>map(node -> node)
+        .findFirst();
+  }
+
+  private static boolean cardIs(Parent root, String taskId, String tone) {
+    return card(root, taskId).map(node -> node.getStyleClass().contains(tone)).orElse(false);
+  }
+
+  /** A primary click at a point of a node, given in the node's own coordinates. */
+  private static javafx.scene.input.MouseEvent clickAt(javafx.scene.Node node, double x, double y) {
+    javafx.geometry.Point2D scene = node.localToScene(x, y);
+    return new javafx.scene.input.MouseEvent(
+        javafx.scene.input.MouseEvent.MOUSE_CLICKED,
+        scene.getX(),
+        scene.getY(),
+        scene.getX(),
+        scene.getY(),
+        javafx.scene.input.MouseButton.PRIMARY,
+        1,
+        false,
+        false,
+        false,
+        false,
+        true,
+        false,
+        false,
+        true,
+        false,
+        true,
+        null);
+  }
+
+  @Test
+  void theOverviewsPlayButtonOpensTheTriggerPanelAndABarPicksTheRunTheGraphShows() {
+    Parent root = root();
+    go(Destination.OVERVIEW);
+    waitUntil("the overview lists the DAGs", () -> shows(root, "datacraft_spark_etl"));
+    onFx(
+        () ->
+            find(root, javafx.scene.layout.HBox.class).stream()
+                .filter(
+                    row ->
+                        row.getStyleClass().contains("lane")
+                            && row.getUserData()
+                                instanceof com.example.datacraft.desktop.viewmodel.DagRow dag
+                            && dag.dagId().equals("datacraft_spark_etl"))
+                .findFirst()
+                .flatMap(
+                    lane ->
+                        find(lane, Button.class).stream()
+                            .filter(button -> "触发运行".equals(button.getAccessibleText()))
+                            .findFirst())
+                .orElseThrow()
+                .fire());
+    waitUntil(
+        "the pipelines view opened the spark ETL trigger panel",
+        () -> shows(root, "触发 datacraft_spark_etl") && shows(root, "encoding"));
+    onFx(() -> window.go(Destination.PIPELINES)); // closes the panel
+    waitUntil("the spark ETL runs are bars", () -> pickableRuns(root) == 6);
+    waitUntil(
+        "the running run is drawn",
+        () -> cardIs(root, "row_count", "running"));
+    // The second bar from the right is the failed run before it.
+    RunBars bars = onFx(() -> selectableBars(root).orElseThrow());
+    onFx(() -> bars.fireEvent(clickAt(bars, 23 * (12 + 4) + 6, 40)));
+    waitUntil(
+        "the failed run is drawn instead",
+        () ->
+            cardIs(root, "row_count", "failed") && cardIs(root, "csv_to_parquet", "success"));
+    assertEquals(
+        List.of(23),
+        onFx(
+            () -> {
+              List<Integer> marked = new java.util.ArrayList<>();
+              var children = bars.getChildrenUnmodifiable();
+              for (int slot = 0; slot < children.size(); slot++) {
+                if (children.get(slot).getStyleClass().contains("selected")) {
+                  marked.add(slot);
+                }
+              }
+              return marked;
+            }),
+        "the picked bar, and only it, is marked");
+    // The keyboard does the same: Left picks the older run, a successful one.
+    onFx(() -> bars.fireEvent(key(javafx.scene.input.KeyCode.LEFT)));
+    waitUntil(
+        "Left picked the older, successful run",
+        () -> cardIs(root, "row_count", "success") && cardIs(root, "csv_to_parquet", "success"));
+    // Enter on a lane selects its pipeline: the SFTP DAG has no run yet, so its shape stands alone.
+    onFx(
+        () ->
+            find(root, javafx.scene.layout.HBox.class).stream()
+                .filter(
+                    row ->
+                        row.getStyleClass().contains("lane")
+                            && FxTesting.visible(row)
+                            && row.getUserData()
+                                instanceof com.example.datacraft.desktop.viewmodel.DagRow dag
+                            && dag.dagId().equals("datacraft_sftp_ingest"))
+                .findFirst()
+                .orElseThrow()
+                .fireEvent(key(javafx.scene.input.KeyCode.ENTER)));
+    waitUntil(
+        "Enter selected the SFTP pipeline and drew its shape",
+        () ->
+            find(root, TaskGraph.class).stream()
+                .anyMatch(
+                    graph ->
+                        graph.taskIds().equals(List.of("download", "csv_to_parquet", "row_count"))));
+    assertEquals(List.of(), FxTesting.javafxWarnings(), "JavaFX logged warnings (CSS or layout)");
+  }
+
+  private static javafx.scene.input.KeyEvent key(javafx.scene.input.KeyCode code) {
+    return new javafx.scene.input.KeyEvent(
+        javafx.scene.input.KeyEvent.KEY_PRESSED, "", "", code, false, false, false, false);
   }
 
   @Test
@@ -201,20 +388,23 @@ class MainWindowTest {
     waitUntil("the DAGs are listed", () -> shows(root, "datacraft_spark_etl"));
     onFx(() -> window.go(Destination.OVERVIEW));
     waitUntil("the overview lists the DAGs", () -> shows(root, "datacraft_spark_etl"));
-    // Open the spark ETL DAG by clicking its overview row.
+    // Open the spark ETL DAG by clicking its overview lane.
     onFx(
         () ->
             find(root, javafx.scene.layout.HBox.class).stream()
                 .filter(
                     row ->
-                        row.getUserData()
+                        row.getStyleClass().contains("lane")
+                            && row.getUserData()
                                 instanceof com.example.datacraft.desktop.viewmodel.DagRow dag
                             && dag.dagId().equals("datacraft_spark_etl"))
                 .findFirst()
                 .orElseThrow()
                 .fireEvent(click()));
-    waitUntil("the spark ETL runs are listed", () -> showsPrefix(root, "manual__"));
-    waitUntil("its tasks are listed", () -> shows(root, "row_count"));
+    waitUntil("the spark ETL runs are bars", () -> pickableRuns(root) == 6);
+    waitUntil(
+        "its tasks are drawn with the newest run's states",
+        () -> shows(root, "row_count") && card(root, "row_count").isPresent());
     Button trigger =
         onFx(
             () ->
@@ -243,30 +433,87 @@ class MainWindowTest {
                     false)));
     waitUntil("Esc closed the panel", () -> !shows(root, "encoding"));
 
-    // The task table refreshes while the run is active and reuses its cells, so pick the button
-    // in the same pulse as the check that its row is row_count.
-    onFx(
-        () ->
-            find(root, javafx.scene.control.TableCell.class).stream()
-                .filter(
-                    cell ->
-                        cell.getItem()
-                                instanceof
-                                com.example.datacraft.desktop.api.AirflowModels.TaskInstance task
-                            && task.taskId().equals("row_count")
-                            && cell.getGraphic() instanceof Button)
-                .map(cell -> (Button) cell.getGraphic())
-                .findFirst()
-                .orElseThrow()
-                .fire());
+    // A click on the task's card opens its log.
+    onFx(() -> card(root, "row_count").orElseThrow().fireEvent(click()));
     waitUntil(
         "the log is read",
         () ->
-            showsPrefix(root, "任务 row_count 的日志")
+            shows(root, "row_count 的日志")
                 && find(root, javafx.scene.control.ListView.class).stream()
                     .anyMatch(list -> list.getItems().size() == 3));
     settle();
     snapshot(scene(), "log-light");
+  }
+
+  @Test
+  void aRunningJobTurnsItsRingUntilTheMarkOfItsOutcomeArrives() throws Exception {
+    motionOn(); // the ring only turns with motion on
+    java.util.concurrent.CountDownLatch release = new java.util.concurrent.CountDownLatch(1);
+    backends.engine.on(
+        "POST /jobs/echo/runs",
+        request -> {
+          try {
+            release.await(10, java.util.concurrent.TimeUnit.SECONDS);
+          } catch (InterruptedException interrupted) {
+            Thread.currentThread().interrupt();
+          }
+          return com.example.datacraft.desktop.api.StubServer.Answer.json(
+              200,
+              "{\"jobName\":\"echo\",\"status\":\"FAILED\",\"message\":\"echo was told to fail\","
+                  + "\"metrics\":{\"durationMillis\":\"5\"}}");
+        });
+    Parent root = root();
+    go(Destination.JOBS);
+    waitUntil("the job list is loaded", () -> shows(root, "echo"));
+    onFx(() -> window.go(Destination.JOBS));
+    @SuppressWarnings("unchecked")
+    javafx.scene.control.ListView<com.example.datacraft.desktop.api.EngineModels.JobInfo> jobs =
+        (javafx.scene.control.ListView<com.example.datacraft.desktop.api.EngineModels.JobInfo>)
+            onFx(
+                () ->
+                    find(root, javafx.scene.control.ListView.class).stream()
+                        .filter(list -> list.getStyleClass().contains("job-list"))
+                        .findFirst()
+                        .orElseThrow());
+    onFx(
+        () ->
+            jobs.getSelectionModel()
+                .select(
+                    jobs.getItems().stream()
+                        .filter(job -> job.name().equals("echo"))
+                        .findFirst()
+                        .orElseThrow()));
+    Button run =
+        onFx(
+            () ->
+                find(root, Button.class).stream()
+                    .filter(b -> "运行作业".equals(b.getText()))
+                    .findFirst()
+                    .orElseThrow());
+    waitUntil("the run button is enabled", () -> !run.isDisabled());
+    onFx(run::fire);
+    waitUntil("the button offers to stop waiting", () -> "停止等待".equals(run.getText()));
+    waitUntil(
+        "the button holds the ring",
+        () -> run.getGraphic() instanceof com.example.datacraft.desktop.ui.component.BusyRing);
+    waitUntil(
+        "the ring turns",
+        () -> ((com.example.datacraft.desktop.ui.component.BusyRing) run.getGraphic()).spinning());
+    com.example.datacraft.desktop.ui.component.BusyRing busy =
+        onFx(() -> (com.example.datacraft.desktop.ui.component.BusyRing) run.getGraphic());
+    // Another view hides the ring: it stops turning, and turns again on the way back.
+    go(Destination.ACTIVITY);
+    assertTrue(!onFx(busy::spinning), "a hidden ring does not turn");
+    go(Destination.JOBS);
+    assertTrue(onFx(busy::spinning), "it turns again when shown");
+    release.countDown();
+    waitUntil(
+        "the failure mark replaces the ring",
+        () ->
+            "运行作业".equals(run.getText())
+                && !busy.spinning()
+                && find(root, RunMark.class).stream()
+                    .anyMatch(mark -> "failed".equals(mark.tone()) && FxTesting.visible(mark)));
   }
 
   @Test
@@ -303,25 +550,12 @@ class MainWindowTest {
   @Test
   void aLogOfFifteenHundredLinesScrollsWithoutStalls() {
     Parent root = root();
-    Motion.reduced(false);
+    motionOn();
     go(Destination.PIPELINES);
     waitUntil(
-        "the newest engine-jobs run lists its tasks",
-        () -> shows(root, FakeBackends.LONG_LOG_TASK));
-    onFx(
-        () ->
-            find(root, javafx.scene.control.TableCell.class).stream()
-                .filter(
-                    cell ->
-                        cell.getItem()
-                                instanceof
-                                com.example.datacraft.desktop.api.AirflowModels.TaskInstance task
-                            && task.taskId().equals(FakeBackends.LONG_LOG_TASK)
-                            && cell.getGraphic() instanceof Button)
-                .map(cell -> (Button) cell.getGraphic())
-                .findFirst()
-                .orElseThrow()
-                .fire());
+        "the newest engine-jobs run's tasks are on their cards",
+        () -> card(root, FakeBackends.LONG_LOG_TASK).isPresent());
+    onFx(() -> card(root, FakeBackends.LONG_LOG_TASK).orElseThrow().fireEvent(click()));
     @SuppressWarnings("unchecked")
     javafx.scene.control.ListView<String> lines =
         (javafx.scene.control.ListView<String>)
@@ -353,7 +587,7 @@ class MainWindowTest {
   @Test
   void theFxThreadDoesNotStallOnceWarm() {
     Parent root = root();
-    Motion.reduced(false); // the animations are part of what must stay smooth
+    motionOn(); // the animations are part of what must stay smooth
     for (Destination destination : Destination.values()) {
       go(destination);
     }

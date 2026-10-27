@@ -1,4 +1,5 @@
 # syntax=docker/dockerfile:1
+# check=skip=InvalidDefaultArgInFrom
 #
 # Builder image: compiles the reactor and produces the shaded CLI jar at /dist/datacraft-cli.jar.
 # Built once and consumed by the jvm / spark / airflow images via `COPY --from`. Uses JDK 25 (the

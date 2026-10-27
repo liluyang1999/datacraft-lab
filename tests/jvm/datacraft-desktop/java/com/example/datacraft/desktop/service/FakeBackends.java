@@ -119,7 +119,36 @@ public final class FakeBackends implements AutoCloseable {
         "GET /api/v2/dags/datacraft_sftp_ingest/dagRuns",
         200,
         "{\"dag_runs\":[],\"total_entries\":0}");
+    structure("datacraft_engine_jobs", "noop", "echo", "spark_version");
+    structure("datacraft_spark_etl", "csv_to_parquet", "row_count");
+    structure("datacraft_sftp_ingest", "download", "csv_to_parquet", "row_count");
     return this;
+  }
+
+  /**
+   * A DAG's tasks as a chain, each the downstream of the one before, listed as Airflow lists them:
+   * by task id ({@code order_by=task_id} is the endpoint's default), not in the order they run.
+   */
+  private void structure(String dagId, String... chain) {
+    StringBuilder body = new StringBuilder("{\"tasks\":[");
+    List<String> byId = java.util.Arrays.stream(chain).sorted().toList();
+    List<String> order = List.of(chain);
+    for (int index = 0; index < byId.size(); index++) {
+      String task = byId.get(index);
+      int at = order.indexOf(task);
+      body.append(index == 0 ? "" : ",")
+          .append("{\"task_id\":\"")
+          .append(task)
+          .append("\",\"task_display_name\":\"")
+          .append(task)
+          .append("\",\"downstream_task_ids\":[")
+          .append(at + 1 < chain.length ? "\"" + chain[at + 1] + "\"" : "")
+          .append("],\"operator_name\":\"_ArgvBashOperator\"}");
+    }
+    airflow.on(
+        "GET /api/v2/dags/" + dagId + "/tasks",
+        200,
+        body.append("],\"total_entries\":").append(chain.length).append("}").toString());
   }
 
   /** A DAG's runs, newest first and {@code step} apart, each with its tasks and their logs. */

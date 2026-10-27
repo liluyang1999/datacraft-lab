@@ -43,6 +43,17 @@
     -dc-failed-wash: #2C1E27;
     -dc-warning-wash: #2B261A;
 
+    -dc-ring-track: #22364A;
+    -dc-chip: #1A2B39;
+    -dc-tile-tint: #132331;
+    -dc-success-wash: #16302C;
+    -dc-kind-jvm: #5DB2E6;
+    -dc-kind-spark: #A996E8;
+    -dc-kind-builtin: #8EA9C2;
+    -dc-kind-jvm-wash: #16304A;
+    -dc-kind-spark-wash: #2A2440;
+    -dc-kind-builtin-wash: #1C2C3A;
+
     -dc-shadow: rgba(0, 0, 0, 0.40);
     -dc-scrim: rgba(4, 10, 16, 0.35);
 

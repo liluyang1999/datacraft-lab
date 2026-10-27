@@ -30,8 +30,25 @@ public final class JobCatalog {
     }
   }
 
+  /** Where a job runs, which decides its glyph: in the JVM, on Spark, or inside the engine. */
+  public enum Kind {
+    JVM,
+    SPARK,
+    BUILT_IN,
+    OTHER;
+
+    static Kind of(String text) {
+      return switch (text == null ? "" : text) {
+        case "jvm" -> JVM;
+        case "spark" -> SPARK;
+        case "builtin" -> BUILT_IN;
+        default -> OTHER;
+      };
+    }
+  }
+
   /** A job or a DAG with its parameters, in the order a form shows them. */
-  public record Entry(String name, String summary, List<Param> params) {
+  public record Entry(String name, String summary, Kind kind, List<Param> params) {
     public Entry {
       params = List.copyOf(params);
     }
@@ -101,7 +118,13 @@ public final class JobCatalog {
                 param.path("hint").asText("")));
       }
       String name = entry.path("name").asText();
-      entries.put(name, new Entry(name, entry.path("summary").asText(""), params));
+      entries.put(
+          name,
+          new Entry(
+              name,
+              entry.path("summary").asText(""),
+              Kind.of(entry.path("kind").asText("")),
+              params));
     }
     return entries;
   }

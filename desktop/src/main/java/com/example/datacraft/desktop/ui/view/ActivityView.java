@@ -4,7 +4,9 @@ import com.example.datacraft.desktop.store.ActivityRepository.Entry;
 import com.example.datacraft.desktop.store.ActivityRepository.Level;
 import com.example.datacraft.desktop.store.ActivityRepository.Source;
 import com.example.datacraft.desktop.ui.component.Controls;
-import com.example.datacraft.desktop.ui.component.StatusBadge;
+import com.example.datacraft.desktop.ui.component.Icons;
+import com.example.datacraft.desktop.ui.component.Icons.Glyph;
+import com.example.datacraft.desktop.ui.component.Tones;
 import com.example.datacraft.desktop.ui.shell.Dialogs;
 import com.example.datacraft.desktop.util.Formats;
 import com.example.datacraft.desktop.viewmodel.ActivityModel;
@@ -18,8 +20,10 @@ import javafx.scene.Node;
 import javafx.scene.control.Label;
 import javafx.scene.control.ListCell;
 import javafx.scene.control.ListView;
+import javafx.scene.control.Tooltip;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.Priority;
+import javafx.scene.layout.StackPane;
 import javafx.scene.layout.VBox;
 
 /** 活动: what happened, newest first, one line each; the selected entry shows its details. */
@@ -54,22 +58,29 @@ public final class ActivityView implements View {
         Controls.segmented(
             List.of(Filter.values()),
             Arrays.stream(Filter.values()).map(choice -> choice.label).toList(),
+            List.of(Glyph.ALL, Glyph.ENGINE, Glyph.AIRFLOW, Glyph.APP),
             filter);
 
     var clear =
         Controls.button(
-            "清除记录",
+            "清除",
             () -> {
               if (dialogs.confirm("清除活动记录", "删除本机保存的全部活动记录？连接配置与设置不受影响。", "清除")) {
                 model.clear();
               }
             },
             "danger");
+    clear.setGraphic(Icons.of(Glyph.TRASH, 16));
     HBox header = Controls.row(12, filters, Controls.grow(), clear);
 
     ListView<Entry> list = new ListView<>(model.visibleEntries());
+    list.getStyleClass().add("activity-list");
     list.setCellFactory(view -> new EntryCell(clock));
-    list.setPlaceholder(Controls.label("还没有活动记录。连接状态的变化、运行与触发都会记在这里。", "secondary"));
+    VBox placeholder =
+        new VBox(10, Icons.of(Glyph.ACTIVITY, 36), Controls.label("还没有活动", "secondary"));
+    placeholder.setAlignment(javafx.geometry.Pos.CENTER);
+    placeholder.getStyleClass().add("placeholder-art");
+    list.setPlaceholder(placeholder);
     VBox.setVgrow(list, Priority.ALWAYS);
 
     Label detail = Controls.label("", "secondary");
@@ -102,6 +113,14 @@ public final class ActivityView implements View {
     };
   }
 
+  static Glyph glyph(Source source) {
+    return switch (source) {
+      case ENGINE -> Glyph.ENGINE;
+      case AIRFLOW -> Glyph.AIRFLOW;
+      case APP -> Glyph.APP;
+    };
+  }
+
   static String source(Source source) {
     return switch (source) {
       case ENGINE -> "引擎";
@@ -110,20 +129,23 @@ public final class ActivityView implements View {
     };
   }
 
-  /** Time, a dot in the entry's tone, the source and the sentence. */
+  /** The source's glyph in the entry's tone, the sentence, and the time on the right. */
   private static final class EntryCell extends ListCell<Entry> {
     private final Clock clock;
-    private final Label time = Controls.label("", "secondary");
-    private final StatusBadge dot = new StatusBadge();
-    private final Label source = Controls.label("", "caption");
+    private final StackPane glyph = new StackPane();
     private final Label text = Controls.label("", "");
-    private final HBox row = Controls.row(12, time, dot, source, text);
+    private final Label time = Controls.label("", "secondary");
+    private final HBox row = Controls.row(12, glyph, text, Controls.grow(), time);
+    private final Tooltip tip = new Tooltip();
 
     EntryCell(Clock clock) {
       this.clock = clock;
+      glyph.getStyleClass().add("activity-glyph");
       time.setMinWidth(96);
-      source.setMinWidth(52);
-      HBox.setHgrow(text, Priority.ALWAYS);
+      time.setAlignment(javafx.geometry.Pos.CENTER_RIGHT);
+      text.setTextOverrun(javafx.scene.control.OverrunStyle.ELLIPSIS);
+      text.setMinWidth(0);
+      HBox.setHgrow(text, Priority.SOMETIMES);
     }
 
     @Override
@@ -131,11 +153,15 @@ public final class ActivityView implements View {
       super.updateItem(entry, empty);
       if (empty || entry == null) {
         setGraphic(null);
+        setTooltip(null);
         return;
       }
       time.setText(Formats.when(entry.at(), clock.instant(), ZoneId.systemDefault()));
-      dot.set(tone(entry.level()), "");
-      source.setText(source(entry.source()));
+      glyph.getChildren().setAll(Icons.of(glyph(entry.source()), 18));
+      glyph.getStyleClass().removeAll(Tones.ALL);
+      glyph.getStyleClass().add(tone(entry.level()));
+      tip.setText(source(entry.source()) + (entry.detail().isBlank() ? "" : "\n" + entry.detail()));
+      setTooltip(tip);
       text.setText(entry.text());
       text.getStyleClass().removeAll("text-failed", "text-warning");
       if (entry.level() == Level.ERROR) {

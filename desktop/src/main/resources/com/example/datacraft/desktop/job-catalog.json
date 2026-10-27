@@ -2,6 +2,7 @@
   "jobs": [
     {
       "name": "csv-profile",
+      "kind": "jvm",
       "summary": "在 JVM 中统计一个 UTF-8 CSV 文件：行数、列数、字节数与 SHA-256",
       "params": [
         { "key": "input", "required": true, "hint": "CSV 文件在服务端的路径，位于数据根目录下" },
@@ -13,6 +14,7 @@
     },
     {
       "name": "file-checksum",
+      "kind": "jvm",
       "summary": "计算一个文件的 SHA-256 与大小",
       "params": [
         { "key": "input", "required": true, "hint": "文件在服务端的路径，位于数据根目录下" },
@@ -21,6 +23,7 @@
     },
     {
       "name": "csv-to-parquet",
+      "kind": "spark",
       "summary": "用 Spark 把 CSV 数据集转换为 Parquet",
       "params": [
         { "key": "input", "required": true, "hint": "CSV 文件或目录" },
@@ -37,6 +40,7 @@
     },
     {
       "name": "row-count",
+      "kind": "spark",
       "summary": "用 Spark 统计数据集的行数",
       "params": [
         { "key": "input", "required": true, "hint": "数据集路径" },
@@ -47,11 +51,13 @@
     },
     {
       "name": "spark-version",
+      "kind": "spark",
       "summary": "报告正在使用的 Spark 版本",
       "params": []
     },
     {
       "name": "echo",
+      "kind": "builtin",
       "summary": "原样返回 message 参数",
       "params": [
         { "key": "message", "hint": "要返回的文字" }
@@ -59,6 +65,7 @@
     },
     {
       "name": "noop",
+      "kind": "builtin",
       "summary": "什么也不做，立即成功",
       "params": []
     }

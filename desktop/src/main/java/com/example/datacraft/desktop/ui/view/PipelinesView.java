@@ -7,9 +7,12 @@ import com.example.datacraft.desktop.service.PipelineService;
 import com.example.datacraft.desktop.ui.component.Controls;
 import com.example.datacraft.desktop.ui.component.EmptyState;
 import com.example.datacraft.desktop.ui.component.Icons;
+import com.example.datacraft.desktop.ui.component.Icons.Glyph;
 import com.example.datacraft.desktop.ui.component.ParamEditor;
-import com.example.datacraft.desktop.ui.component.RunRibbon;
-import com.example.datacraft.desktop.ui.component.StatusBadge;
+import com.example.datacraft.desktop.ui.component.Rows;
+import com.example.datacraft.desktop.ui.component.RunBars;
+import com.example.datacraft.desktop.ui.component.StatusRing;
+import com.example.datacraft.desktop.ui.component.TaskGraph;
 import com.example.datacraft.desktop.ui.component.Tones;
 import com.example.datacraft.desktop.ui.shell.Drawer;
 import com.example.datacraft.desktop.ui.shell.Toasts;
@@ -24,9 +27,9 @@ import java.time.ZoneId;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Optional;
-import java.util.function.Function;
 import javafx.beans.binding.Bindings;
 import javafx.collections.FXCollections;
+import javafx.collections.ListChangeListener;
 import javafx.collections.ObservableList;
 import javafx.geometry.Pos;
 import javafx.scene.Node;
@@ -34,20 +37,21 @@ import javafx.scene.control.Button;
 import javafx.scene.control.Label;
 import javafx.scene.control.ListCell;
 import javafx.scene.control.ListView;
-import javafx.scene.control.TableCell;
-import javafx.scene.control.TableColumn;
-import javafx.scene.control.TableView;
+import javafx.scene.control.ScrollPane;
 import javafx.scene.control.TextArea;
 import javafx.scene.control.TextField;
 import javafx.scene.control.ToggleButton;
+import javafx.scene.control.Tooltip;
+import javafx.scene.input.MouseEvent;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.Priority;
 import javafx.scene.layout.StackPane;
 import javafx.scene.layout.VBox;
 
 /**
- * 流水线: the DAG table with ribbons and pause switches; below it the runs of the selected DAG and the
- * tasks of the selected run. Triggering and logs open in the side panel.
+ * 流水线: one lane per DAG (its runs as bars, a switch for its schedule, a play button); for the
+ * selected DAG its runs as bars to pick from, and the picked run drawn as the DAG it is, task by
+ * task. Triggering and logs open in the side panel.
  */
 public final class PipelinesView implements View {
 
@@ -57,7 +61,8 @@ public final class PipelinesView implements View {
   private final Toasts toasts;
   private final ObjectMapper json;
   private final StackPane root = new StackPane();
-  private final Label detailTitle = Controls.label("", "section-title", "latin");
+  private final TaskGraph graph;
+  private final VBox lanes = new VBox(4);
 
   public PipelinesView(
       PipelinesModel model,
@@ -72,48 +77,82 @@ public final class PipelinesView implements View {
     this.toasts = toasts;
     this.json = json;
 
-    TableView<DagRow> dagTable = dagTable();
-    dagTable.setPrefHeight(36 * 5 + 34);
-    dagTable.setMinHeight(36 * 2 + 34);
-
     Label dagProblem = notice(model.dagProblem().isNotEmpty());
     dagProblem.textProperty().bind(model.dagProblem());
+    Rows.bind(lanes, model.dags(), this::lane, this::updateLane);
+    model.selectedDag().addListener((property, before, now) -> markSelectedLane());
+    Label noDags = Controls.label("", "secondary");
+    noDags.textProperty().bind(Bindings.when(model.loaded()).then("还没有流水线").otherwise("正在读取"));
+    noDags.visibleProperty().bind(Bindings.isEmpty(model.dags()));
+    noDags.managedProperty().bind(noDags.visibleProperty());
 
-    Button trigger = Controls.button("触发运行", this::openTrigger, "primary");
-    trigger.setGraphic(Icons.play());
-    trigger.disableProperty().bind(model.selectedDag().isNull());
-    detailTitle
+    Label title = Controls.label("", "section-title", "latin");
+    title
         .textProperty()
         .bind(
             Bindings.createStringBinding(
                 () -> model.selectedDag().get() == null ? "" : model.selectedDag().get(),
                 model.selectedDag()));
-    HBox detailHeader = Controls.row(12, detailTitle, Controls.grow(), trigger);
+    Button trigger = Controls.button("触发运行", this::openTrigger, "primary");
+    trigger.setGraphic(Icons.of(Glyph.PLAY));
+    trigger.disableProperty().bind(model.selectedDag().isNull());
+    HBox header = Controls.row(12, Icons.of(Glyph.PIPELINES, 18), title, Controls.grow(), trigger);
     Label detailProblem = notice(model.detailProblem().isNotEmpty());
     detailProblem.textProperty().bind(model.detailProblem());
 
-    TableView<DagRun> runTable = runTable();
-    TableView<TaskInstance> taskTable = taskTable();
-    VBox runsBox = new VBox(8, Controls.label("运行", "caption"), runTable);
-    VBox tasksBox = new VBox(8, Controls.label("任务", "caption"), taskTable);
-    VBox.setVgrow(runTable, Priority.ALWAYS);
-    VBox.setVgrow(taskTable, Priority.ALWAYS);
-    HBox.setHgrow(runsBox, Priority.ALWAYS);
-    HBox.setHgrow(tasksBox, Priority.SOMETIMES);
-    runsBox.setPrefWidth(600);
-    tasksBox.setPrefWidth(420);
-    HBox details = new HBox(24, runsBox, tasksBox);
-    VBox.setVgrow(details, Priority.ALWAYS);
+    RunBars runBars =
+        new RunBars(PipelinesModel.RUNS, 12, 4, 48)
+            .onPick(segment -> model.selectRun(segment.key()));
+    Runnable showRuns =
+        () -> {
+          runBars.set(Segments.ofDagRuns(model.runs(), clock.instant()));
+          runBars.select(model.selectedRun().get());
+        };
+    model.runs().addListener((ListChangeListener<DagRun>) change -> showRuns.run());
+    model.selectedRun().addListener((property, before, now) -> showRuns.run());
+    HBox runFacts = new HBox(10);
+    runFacts.setAlignment(Pos.CENTER_LEFT);
+    Runnable showFacts = () -> runFacts.getChildren().setAll(facts(model.selected()));
+    model.runs().addListener((ListChangeListener<DagRun>) change -> showFacts.run());
+    model.selectedRun().addListener((property, before, now) -> showFacts.run());
+    Label noRuns = Controls.label("", "secondary");
+    noRuns.textProperty().bind(Bindings.when(model.runsLoaded()).then("还没有运行").otherwise("正在读取"));
+    noRuns.visibleProperty().bind(Bindings.isEmpty(model.runs()));
+    noRuns.managedProperty().bind(noRuns.visibleProperty());
+    VBox runs = new VBox(10, OverviewView.heading(Glyph.ACTIVITY, "运行"), runBars, runFacts, noRuns);
 
-    VBox page =
-        new VBox(16, dagProblem, dagTable, Controls.rule(), detailHeader, detailProblem, details);
+    graph = new TaskGraph(this::openLog);
+    Runnable showGraph = () -> graph.set(model.structure(), model.tasks());
+    model.tasks().addListener((ListChangeListener<TaskInstance>) change -> showGraph.run());
+    model
+        .structure()
+        .addListener(
+            (ListChangeListener<com.example.datacraft.desktop.api.AirflowModels.Task>)
+                change -> showGraph.run());
+    ScrollPane graphScroll = new ScrollPane(graph);
+    graphScroll.getStyleClass().add("graph-scroll");
+    graphScroll.setFitToHeight(false);
+    graphScroll.setPrefViewportHeight(200);
+    VBox tasks =
+        new VBox(
+            10,
+            Controls.row(
+                8, OverviewView.heading(Glyph.PIPELINES, "任务"), Controls.info("点按任务查看它的日志。")),
+            graphScroll);
+
+    VBox detail = new VBox(20, header, detailProblem, runs, tasks);
+    detail.getStyleClass().add("pipeline-detail");
+    detail.visibleProperty().bind(model.selectedDag().isNotNull());
+
+    VBox page = new VBox(20, dagProblem, lanes, noDags, Controls.rule(), detail);
     page.getStyleClass().add("view-content");
+    ScrollPane scroll = new ScrollPane(page);
+    scroll.setFitToWidth(true);
 
-    EmptyState empty =
-        new EmptyState().set("还没有连接配置。添加连接后即可查看并触发 Airflow 的流水线。", "添加连接", openSettings);
+    EmptyState empty = new EmptyState().set(Glyph.LINK, "先连接你的 Airflow", "添加连接", openSettings);
     empty.visibleProperty().bind(model.connected().not());
-    page.visibleProperty().bind(model.connected());
-    root.getChildren().addAll(page, empty);
+    scroll.visibleProperty().bind(model.connected());
+    root.getChildren().addAll(scroll, empty);
   }
 
   private static Label notice(javafx.beans.value.ObservableBooleanValue visible) {
@@ -125,320 +164,135 @@ public final class PipelinesView implements View {
     return notice;
   }
 
-  // ---------- tables ----------
+  /** The picked run in a few chips: how it started, when, how long, how it stands. */
+  private Node[] facts(Optional<DagRun> picked) {
+    if (picked.isEmpty()) {
+      return new Node[0];
+    }
+    DagRun run = picked.get();
+    StatusRing ring = StatusRing.dot();
+    ring.set(Tones.of(run.tone()), Labels.state(run.state()));
+    Label state = Controls.label(Labels.state(run.state()), "chip");
+    state.setGraphic(ring);
+    Label type =
+        Controls.chip(
+            "manual".equals(run.runType()) ? Glyph.MANUAL : Glyph.CLOCK,
+            Labels.runType(run.runType()));
+    Label start =
+        Controls.chip(
+            Glyph.CLOCK,
+            Formats.when(
+                run.startDate().orElse(run.runAfter()), clock.instant(), ZoneId.systemDefault()));
+    Label took = Controls.chip(Glyph.TIMER, run.duration().map(Formats::duration).orElse("进行中"));
+    Tooltip.install(state, new Tooltip(run.runId()));
+    return new Node[] {state, type, start, took};
+  }
 
-  private TableView<DagRow> dagTable() {
-    TableView<DagRow> table = new TableView<>(model.dags());
-    table.setColumnResizePolicy(TableView.CONSTRAINED_RESIZE_POLICY_FLEX_LAST_COLUMN);
-    table.setPlaceholder(placeholder(model.loaded(), "Airflow 里还没有 DAG。", "正在读取 DAG"));
-    table.getColumns().add(textColumn("DAG", 220, row -> row.dag().displayName(), "latin"));
-    table.getColumns().add(textColumn("调度", 96, row -> Labels.schedule(row.dag().schedule())));
-    TableColumn<DagRow, DagRow> ribbon = column("最近运行", 184);
-    ribbon.setCellFactory(column -> new RibbonCell());
-    table.getColumns().add(ribbon);
-    TableColumn<DagRow, DagRow> last = column("上次", 180);
-    last.setCellFactory(
-        column ->
-            new BadgeCell<>(
-                row ->
-                    row.latest()
-                        .map(
-                            run ->
-                                new Badge(
-                                    Tones.of(run.tone()),
-                                    Labels.state(run.state())
-                                        + "  "
-                                        + Formats.ago(
-                                            run.startDate().orElse(run.runAfter()),
-                                            clock.instant())))
-                        .orElse(new Badge("none", "尚未运行"))));
-    table.getColumns().add(last);
-    TableColumn<DagRow, DagRow> paused = column("启用", 72);
-    paused.setCellFactory(column -> new SwitchCell());
-    table.getColumns().add(paused);
-    table
-        .getSelectionModel()
-        .selectedItemProperty()
-        .addListener(
-            (property, before, row) -> {
-              if (row != null) {
-                model.selectDag(row.dagId());
-              }
+  // ---------- lanes ----------
+
+  private HBox lane() {
+    StackPane schedule = new StackPane();
+    schedule.getStyleClass().add("lane-glyph");
+    Tooltip scheduleTip = new Tooltip();
+    Tooltip.install(schedule, scheduleTip);
+    schedule.setUserData(scheduleTip);
+    Label name = Controls.label("", "name", "latin");
+    name.setMinWidth(220);
+    name.setPrefWidth(220);
+    RunBars bars = RunBars.compact(PipelinesModel.RIBBON);
+    StatusRing last = StatusRing.dot();
+    Label ago = Controls.label("", "secondary");
+    ago.setMinWidth(88);
+    Tooltip switchTip = new Tooltip();
+    ToggleButton toggle = Controls.toggleSwitch("调度开关", on -> {});
+    toggle.setTooltip(switchTip);
+    Button play = Controls.iconButton(Icons.of(Glyph.PLAY), "触发运行", () -> {});
+    HBox row = Controls.row(14, schedule, name, bars, last, ago, Controls.grow(), toggle, play);
+    row.getStyleClass().add("lane");
+    toggle.addEventHandler(MouseEvent.MOUSE_CLICKED, MouseEvent::consume);
+    play.addEventHandler(MouseEvent.MOUSE_CLICKED, MouseEvent::consume);
+    toggle.setOnAction(
+        event -> {
+          if (row.getUserData() instanceof DagRow dag) {
+            boolean on = toggle.isSelected();
+            model
+                .setPaused(dag.dagId(), !on)
+                .whenComplete(
+                    (ignored, failure) ->
+                        javafx.application.Platform.runLater(
+                            () -> {
+                              if (failure == null) {
+                                toasts.success((on ? "已恢复调度 " : "已暂停调度 ") + dag.dagId());
+                              } else {
+                                toasts.failure(PipelineService.describe(failure));
+                              }
+                            }));
+          }
+        });
+    play.setOnAction(
+        event -> {
+          if (row.getUserData() instanceof DagRow dag) {
+            trigger(dag.dagId());
+          }
+        });
+    Controls.activatable(
+        row,
+        () -> {
+          if (row.getUserData() instanceof DagRow dag) {
+            model.selectDag(dag.dagId());
+          }
+        });
+    return row;
+  }
+
+  private void updateLane(HBox row, DagRow dag) {
+    var children = row.getChildren();
+    StackPane schedule = (StackPane) children.get(0);
+    boolean manual = dag.dag().schedule() == null || dag.dag().schedule().isBlank();
+    schedule.getChildren().setAll(Icons.of(manual ? Glyph.MANUAL : Glyph.CLOCK, 18));
+    ((Tooltip) schedule.getUserData()).setText(Labels.schedule(dag.dag().schedule()));
+    ((Label) children.get(1)).setText(dag.dag().displayName());
+    ((RunBars) children.get(2)).set(Segments.ofDagRuns(dag.runs(), clock.instant()));
+    StatusRing last = (StatusRing) children.get(3);
+    Label ago = (Label) children.get(4);
+    dag.latest()
+        .ifPresentOrElse(
+            run -> {
+              last.set(Tones.of(run.tone()), "上次" + Labels.state(run.state()));
+              ago.setText(Formats.ago(run.startDate().orElse(run.runAfter()), clock.instant()));
+            },
+            () -> {
+              last.set("none", "尚未运行");
+              ago.setText("尚未运行");
             });
-    // Keep the selection on the same DAG when a refresh replaces its row.
-    model
-        .dags()
-        .addListener(
-            (javafx.collections.ListChangeListener<DagRow>)
-                change -> reselect(table, model.selectedDag().get(), DagRow::dagId));
-    model
-        .selectedDag()
-        .addListener((property, before, dagId) -> reselect(table, dagId, DagRow::dagId));
-    return table;
-  }
-
-  private TableView<DagRun> runTable() {
-    TableView<DagRun> table = new TableView<>(model.runs());
-    table.setColumnResizePolicy(TableView.CONSTRAINED_RESIZE_POLICY_FLEX_LAST_COLUMN);
-    table.setPlaceholder(Controls.label("还没有运行。", "secondary"));
-    TableColumn<DagRun, String> runIdColumn = textColumn("运行", 260, DagRun::runId, "latin");
-    runIdColumn.setCellFactory(column -> new RunIdCell());
-    table.getColumns().add(runIdColumn);
-    TableColumn<DagRun, DagRun> state = column("状态", 96);
-    state.setCellFactory(
-        column ->
-            new BadgeCell<>(run -> new Badge(Tones.of(run.tone()), Labels.state(run.state()))));
-    table.getColumns().add(state);
-    table
-        .getColumns()
-        .add(
-            textColumn(
-                "开始",
-                104,
-                run ->
-                    run.startDate()
-                        .map(start -> Formats.when(start, clock.instant(), ZoneId.systemDefault()))
-                        .orElse("")));
-    TableColumn<DagRun, String> duration =
-        textColumn("耗时", 64, run -> run.duration().map(Formats::duration).orElse(""));
-    duration.getStyleClass().add("numeric");
-    table.getColumns().add(duration);
-    table.getColumns().add(textColumn("触发", 64, run -> Labels.runType(run.runType())));
-    table
-        .getSelectionModel()
-        .selectedItemProperty()
-        .addListener(
-            (property, before, run) -> {
-              if (run != null) {
-                model.selectRun(run.runId());
-              }
-            });
-    model
-        .runs()
-        .addListener(
-            (javafx.collections.ListChangeListener<DagRun>)
-                change -> reselect(table, model.selectedRun().get(), DagRun::runId));
-    model
-        .selectedRun()
-        .addListener((property, before, runId) -> reselect(table, runId, DagRun::runId));
-    return table;
-  }
-
-  private TableView<TaskInstance> taskTable() {
-    TableView<TaskInstance> table = new TableView<>(model.tasks());
-    table.setColumnResizePolicy(TableView.CONSTRAINED_RESIZE_POLICY_FLEX_LAST_COLUMN);
-    table.setPlaceholder(Controls.label("选择一次运行查看它的任务。", "secondary"));
-    table
-        .getColumns()
-        .add(
-            textColumn(
-                "任务",
-                160,
-                task ->
-                    task.mapIndex() >= 0
-                        ? task.displayName() + " [" + task.mapIndex() + "]"
-                        : task.displayName(),
-                "latin"));
-    TableColumn<TaskInstance, TaskInstance> state = column("状态", 100);
-    state.setCellFactory(
-        column ->
-            new BadgeCell<>(
-                task -> new Badge(Tones.of(task.tone()), Labels.state(task.state().orElse(null)))));
-    table.getColumns().add(state);
-    TableColumn<TaskInstance, String> tries =
-        textColumn("尝试", 56, task -> task.tryNumber() + " / " + (task.maxTries() + 1));
-    tries.getStyleClass().add("numeric");
-    table.getColumns().add(tries);
-    TableColumn<TaskInstance, String> duration =
-        textColumn("耗时", 72, task -> task.duration().map(Formats::duration).orElse(""));
-    duration.getStyleClass().add("numeric");
-    table.getColumns().add(duration);
-    TableColumn<TaskInstance, TaskInstance> log = column("", 72);
-    log.setCellFactory(column -> new LogCell());
-    table.getColumns().add(log);
-    return table;
-  }
-
-  private static <T> void reselect(TableView<T> table, String key, Function<T, String> keyOf) {
-    if (key == null) {
-      table.getSelectionModel().clearSelection();
-      return;
+    ToggleButton toggle = (ToggleButton) children.get(6);
+    toggle.setSelected(!dag.dag().paused());
+    toggle.getTooltip().setText(dag.dag().paused() ? "调度已暂停：点按恢复" : "调度中：点按暂停");
+    row.getStyleClass().remove("paused");
+    if (dag.dag().paused()) {
+      row.getStyleClass().add("paused");
     }
-    T selected = table.getSelectionModel().getSelectedItem();
-    if (selected != null && key.equals(keyOf.apply(selected))) {
-      return;
-    }
-    for (int index = 0; index < table.getItems().size(); index++) {
-      if (key.equals(keyOf.apply(table.getItems().get(index)))) {
-        table.getSelectionModel().select(index);
-        return;
+    markSelectedLane();
+  }
+
+  private void markSelectedLane() {
+    String selected = model.selectedDag().get();
+    for (Node lane : lanes.getChildren()) {
+      boolean on = lane.getUserData() instanceof DagRow dag && dag.dagId().equals(selected);
+      lane.getStyleClass().remove("selected");
+      if (on) {
+        lane.getStyleClass().add("selected");
       }
-    }
-  }
-
-  private static Label placeholder(
-      javafx.beans.value.ObservableBooleanValue loaded, String empty, String loading) {
-    Label label = Controls.label("", "secondary");
-    label.textProperty().bind(Bindings.when(loaded).then(empty).otherwise(loading));
-    return label;
-  }
-
-  private static <S> TableColumn<S, S> column(String title, double width) {
-    TableColumn<S, S> column = new TableColumn<>(title);
-    column.setPrefWidth(width);
-    column.setSortable(false);
-    column.setReorderable(false);
-    column.setCellValueFactory(
-        cell -> new javafx.beans.property.ReadOnlyObjectWrapper<>(cell.getValue()));
-    return column;
-  }
-
-  private static <S> TableColumn<S, String> textColumn(
-      String title, double width, Function<S, String> text, String... styleClasses) {
-    TableColumn<S, String> column = new TableColumn<>(title);
-    column.setPrefWidth(width);
-    column.setSortable(false);
-    column.setReorderable(false);
-    column.setCellValueFactory(
-        cell -> new javafx.beans.property.ReadOnlyStringWrapper(text.apply(cell.getValue())));
-    if (styleClasses.length > 0) {
-      column.setCellFactory(
-          ignored -> {
-            TableCell<S, String> cell =
-                new TableCell<>() {
-                  @Override
-                  protected void updateItem(String value, boolean empty) {
-                    super.updateItem(value, empty);
-                    setText(empty ? null : value);
-                  }
-                };
-            cell.getStyleClass().addAll(styleClasses);
-            return cell;
-          });
-    }
-    return column;
-  }
-
-  /** A run ID, which is long: cut with an ellipsis, shown whole in a tooltip. */
-  private static final class RunIdCell extends TableCell<DagRun, String> {
-    private final javafx.scene.control.Tooltip tip = new javafx.scene.control.Tooltip();
-
-    RunIdCell() {
-      getStyleClass().add("latin");
-      setTextOverrun(javafx.scene.control.OverrunStyle.CENTER_ELLIPSIS);
-    }
-
-    @Override
-    protected void updateItem(String runId, boolean empty) {
-      super.updateItem(runId, empty);
-      setText(empty ? null : runId);
-      if (empty || runId == null) {
-        setTooltip(null);
-      } else {
-        tip.setText(runId);
-        setTooltip(tip);
-      }
-    }
-  }
-
-  /** What a badge cell shows: a tone class and a word. */
-  private record Badge(String tone, String word) {}
-
-  /** A status badge cell. */
-  private static final class BadgeCell<S> extends TableCell<S, S> {
-    private final StatusBadge badge = new StatusBadge();
-    private final Function<S, Badge> describe;
-
-    BadgeCell(Function<S, Badge> describe) {
-      this.describe = describe;
-    }
-
-    @Override
-    protected void updateItem(S item, boolean empty) {
-      super.updateItem(item, empty);
-      if (empty || item == null) {
-        setGraphic(null);
-        return;
-      }
-      Badge shown = describe.apply(item);
-      badge.set(shown.tone(), shown.word());
-      setGraphic(badge);
-    }
-  }
-
-  private final class RibbonCell extends TableCell<DagRow, DagRow> {
-    private final RunRibbon ribbon = new RunRibbon(PipelinesModel.RIBBON);
-
-    @Override
-    protected void updateItem(DagRow row, boolean empty) {
-      super.updateItem(row, empty);
-      if (empty || row == null) {
-        setGraphic(null);
-        return;
-      }
-      ribbon.set(Segments.ofDagRuns(row.runs(), clock.instant()));
-      setGraphic(ribbon);
-    }
-  }
-
-  private final class SwitchCell extends TableCell<DagRow, DagRow> {
-    private final javafx.scene.control.Tooltip tip = new javafx.scene.control.Tooltip();
-    private final ToggleButton toggle =
-        Controls.toggleSwitch(
-            "调度开关",
-            on -> {
-              DagRow row = getItem();
-              if (row != null) {
-                model
-                    .setPaused(row.dagId(), !on)
-                    .whenComplete(
-                        (ignored, failure) ->
-                            javafx.application.Platform.runLater(
-                                () -> {
-                                  if (failure == null) {
-                                    toasts.success((on ? "已恢复调度 " : "已暂停调度 ") + row.dagId());
-                                  } else {
-                                    toasts.failure(PipelineService.describe(failure));
-                                  }
-                                }));
-              }
-            });
-
-    @Override
-    protected void updateItem(DagRow row, boolean empty) {
-      super.updateItem(row, empty);
-      if (empty || row == null) {
-        setGraphic(null);
-        return;
-      }
-      toggle.setSelected(!row.dag().paused());
-      tip.setText(row.dag().paused() ? "调度已暂停：点按恢复" : "调度中：点按暂停");
-      toggle.setTooltip(tip);
-      setGraphic(toggle);
-    }
-  }
-
-  private final class LogCell extends TableCell<TaskInstance, TaskInstance> {
-    private final Button open = Controls.button("日志", () -> {}, "quiet");
-
-    LogCell() {
-      open.setMinWidth(javafx.scene.layout.Region.USE_PREF_SIZE);
-      open.setOnAction(
-          event -> {
-            if (getItem() != null) {
-              openLog(getItem());
-            }
-          });
-    }
-
-    @Override
-    protected void updateItem(TaskInstance task, boolean empty) {
-      super.updateItem(task, empty);
-      setGraphic(empty || task == null || task.tryNumber() < 1 ? null : open);
     }
   }
 
   // ---------- trigger ----------
+
+  /** Selects a DAG and opens its trigger panel, e.g. from the play button of the overview. */
+  public void trigger(String dagId) {
+    model.selectDag(dagId);
+    openTrigger();
+  }
 
   private void openTrigger() {
     drawer.release();
@@ -453,22 +307,25 @@ public final class PipelinesView implements View {
     TextArea jsonText = new TextArea("{\n}");
     jsonText.getStyleClass().add("mono");
     jsonText.setPrefRowCount(12);
-    ToggleButton asJson = new ToggleButton("用 JSON 编辑");
+    ToggleButton asJson = new ToggleButton("JSON");
+    asJson.setGraphic(Icons.of(Glyph.LOG, 16));
+    asJson.setTooltip(new Tooltip("用 JSON 编辑运行配置"));
     TextField note = new TextField();
-    note.setPromptText("备注，可不填");
+    note.setPromptText("备注（可不填）");
     Label error = Controls.label("", "notice", "failed");
     error.setWrapText(true);
     error.setMaxWidth(Double.MAX_VALUE);
     error.setVisible(false);
     error.setManaged(false);
     Button submit = Controls.button("触发运行", () -> {}, "primary");
+    submit.setGraphic(Icons.of(Glyph.PLAY));
     VBox body = new VBox(16);
     Label intro =
         Controls.label(
             known
                 .map(JobCatalog.Entry::summary)
                 .filter(text -> !text.isEmpty())
-                .orElse("这条流水线的参数不在已知目录里，用 JSON 填写运行配置。"),
+                .orElse("用 JSON 填写运行配置"),
             "secondary");
     intro.setWrapText(true);
     Runnable layout =
@@ -478,8 +335,7 @@ public final class PipelinesView implements View {
           if (asJson.isSelected()) {
             body.getChildren().add(jsonText);
           } else if (!rows.isEmpty() || known.isPresent()) {
-            body.getChildren()
-                .add(rows.isEmpty() ? Controls.label("这条流水线没有参数。", "secondary") : form);
+            body.getChildren().add(rows.isEmpty() ? Controls.label("没有参数", "secondary") : form);
           }
           body.getChildren().addAll(note, error, Controls.row(12, submit, Controls.grow(), asJson));
         };
@@ -530,9 +386,9 @@ public final class PipelinesView implements View {
                             }
                           }));
         });
-    javafx.scene.control.ScrollPane scroll = new javafx.scene.control.ScrollPane(body);
+    ScrollPane scroll = new ScrollPane(body);
     scroll.setFitToWidth(true);
-    drawer.open("触发运行 " + dagId, scroll, () -> {});
+    drawer.open("触发 " + dagId, scroll, () -> {});
   }
 
   private static Map<String, String> values(ObservableList<ParamRow> rows) {
@@ -580,7 +436,7 @@ public final class PipelinesView implements View {
     problem.textProperty().bind(model.logProblem());
     // Follow the end while new lines arrive, as a terminal does. The model's list outlives this
     // drawer, so the listener goes when the drawer closes.
-    javafx.collections.ListChangeListener<String> follow =
+    ListChangeListener<String> follow =
         change -> {
           if (!lines.getItems().isEmpty()) {
             lines.scrollTo(lines.getItems().size() - 1);
@@ -590,8 +446,9 @@ public final class PipelinesView implements View {
     VBox body = new VBox(12, problem, lines, Controls.row(12, status, Controls.grow(), more));
     VBox.setVgrow(lines, Priority.ALWAYS);
     body.setAlignment(Pos.TOP_LEFT);
+    int attempt = Math.max(1, task.tryNumber());
     drawer.open(
-        "任务 " + task.taskId() + " 的日志（第 " + Math.max(1, task.tryNumber()) + " 次尝试）",
+        task.taskId() + " 的日志" + (attempt > 1 ? " · 第 " + attempt + " 次尝试" : ""),
         body,
         () -> {
           model.logLines().removeListener(follow);
@@ -607,10 +464,12 @@ public final class PipelinesView implements View {
   @Override
   public void shown() {
     model.shown();
+    graph.resume();
   }
 
   @Override
   public void hidden() {
+    graph.pause();
     model.hidden();
   }
 

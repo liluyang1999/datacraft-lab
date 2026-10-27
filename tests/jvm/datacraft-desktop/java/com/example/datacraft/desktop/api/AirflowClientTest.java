@@ -249,6 +249,27 @@ class AirflowClientTest {
   }
 
   @Test
+  void theTasksOfADagComeWithTheirDownstreamTasks() {
+    issuesTokens(Duration.ofHours(1));
+    server.on(
+        "GET /api/v2/dags/datacraft_spark_etl/tasks",
+        200,
+        "{\"tasks\":["
+            + "{\"task_id\":\"csv_to_parquet\",\"task_display_name\":\"csv_to_parquet\","
+            + "\"downstream_task_ids\":[\"row_count\"],\"operator_name\":\"_ArgvBashOperator\"},"
+            + "{\"task_id\":\"row_count\",\"task_display_name\":\"Row count\","
+            + "\"downstream_task_ids\":[],\"operator_name\":\"_ArgvBashOperator\"}],"
+            + "\"total_entries\":2}");
+    var tasks = client(Clock.fixed(NOW, ZoneOffset.UTC)).tasks("datacraft_spark_etl").join();
+    assertEquals(
+        List.of(
+            new AirflowModels.Task(
+                "csv_to_parquet", "csv_to_parquet", List.of("row_count"), "_ArgvBashOperator"),
+            new AirflowModels.Task("row_count", "Row count", List.of(), "_ArgvBashOperator")),
+        tasks);
+  }
+
+  @Test
   void theExpiryIsReadFromTheTokenItself() {
     assertEquals(Optional.of(NOW), AirflowClient.expiry(jwt(1, NOW)));
     assertEquals(Optional.empty(), AirflowClient.expiry("not-a-jwt"));

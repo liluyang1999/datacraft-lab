@@ -3,6 +3,7 @@ package com.example.datacraft.desktop.service;
 import com.example.datacraft.desktop.api.AirflowModels.Dag;
 import com.example.datacraft.desktop.api.AirflowModels.DagRun;
 import com.example.datacraft.desktop.api.AirflowModels.LogChunk;
+import com.example.datacraft.desktop.api.AirflowModels.Task;
 import com.example.datacraft.desktop.api.AirflowModels.TaskInstance;
 import com.example.datacraft.desktop.api.ApiException;
 import com.example.datacraft.desktop.store.ActivityRepository.Level;
@@ -32,6 +33,10 @@ public final class PipelineService {
 
   public CompletableFuture<List<DagRun>> runs(String dagId, int limit) {
     return call(client -> client.runs(dagId, limit));
+  }
+
+  public CompletableFuture<List<Task>> tasks(String dagId) {
+    return call(client -> client.tasks(dagId));
   }
 
   public CompletableFuture<List<TaskInstance>> taskInstances(String dagId, String runId) {

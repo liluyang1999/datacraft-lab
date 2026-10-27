@@ -84,7 +84,10 @@ public final class ParamEditor extends VBox {
     box.setMinWidth(KEY_WIDTH);
     box.setPrefWidth(KEY_WIDTH);
     if (!spec.hint().isEmpty()) {
-      Tooltip.install(box, new Tooltip(tooltip(spec)));
+      // What the key means is one hover away, not a sentence on the form.
+      Label info = Controls.info(tooltip(spec));
+      HBox.setMargin(info, new javafx.geometry.Insets(0, 0, 0, 4));
+      box.getChildren().add(info);
     }
     return box;
   }
@@ -108,8 +111,11 @@ public final class ParamEditor extends VBox {
     row.spec()
         .ifPresentOrElse(
             spec -> {
+              // A word or two in the field; the explanation is the tooltip.
               value.setPromptText(
-                  spec.defaultValue().isEmpty() ? spec.hint() : "默认 " + spec.defaultValue());
+                  !spec.defaultValue().isEmpty()
+                      ? "默认 " + spec.defaultValue()
+                      : spec.required() ? "必填" : "可不填");
               if (!spec.hint().isEmpty()) {
                 value.setTooltip(new Tooltip(tooltip(spec)));
               }

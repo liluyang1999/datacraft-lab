@@ -1,4 +1,5 @@
 # syntax=docker/dockerfile:1
+# check=skip=InvalidDefaultArgInFrom
 #
 # The Java every image runs: an official base image with its Java replaced by a Temurin release
 # pinned by version and SHA-256. The official eclipse-temurin and maven images can lag a security

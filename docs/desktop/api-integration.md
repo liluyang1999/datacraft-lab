@@ -39,7 +39,8 @@
 | `version()` | `GET /api/v2/version` | 版本号 |
 | `dags()` | `GET /api/v2/dags?limit=100&order_by=dag_id&exclude_stale=true` | DAG 列表 |
 | `setPaused(dag, paused)` | `PATCH /api/v2/dags/{dag_id}` `{"is_paused":…}` | 暂停或恢复调度 |
-| `runs(dag, limit)` | `GET /api/v2/dags/{dag_id}/dagRuns?limit=20&order_by=-run_after` | 最近的运行（纹带与运行表） |
+| `runs(dag, limit)` | `GET /api/v2/dags/{dag_id}/dagRuns?limit=20&order_by=-run_after` | 最近的运行（运行柱） |
+| `tasks(dag)` | `GET /api/v2/dags/{dag_id}/tasks` → `{"tasks":[{"task_id","task_display_name","downstream_task_ids","operator_name"…}]}` | DAG 的形状：任务与下游任务，画成流水线视图的图；每个 DAG 每个连接只读一次 |
 | `trigger(dag, conf, note)` | `POST /api/v2/dags/{dag_id}/dagRuns` `{"logical_date":null,"conf":{…},"note":…}` | 触发一次运行 |
 | `taskInstances(dag, run)` | `GET /api/v2/dags/{dag_id}/dagRuns/{run_id}/taskInstances` | 任务状态 |
 | `log(dag, run, task, map_index, try, token)` | `GET …/taskInstances/{task_id}/logs/{try_number}?full_content=false[&map_index=…][&token=…]`，`Accept: application/json` | 分段读取日志，`continuation_token` 取下一段；映射任务带上 `map_index` |
@@ -69,7 +70,8 @@
 | --- | --- | --- |
 | 两个后台的健康 | 始终（窗口最小化时暂停） | 5 s；连续失败后依次 5 s、10 s、20 s，最长 30 s；节能模式 15 s |
 | 作业目录 | 作业视图可见时 | 60 s，另可手动刷新 |
-| DAG 列表与纹带 | 总览或流水线视图可见时 | 10 s |
+| DAG 列表与运行柱 | 总览或流水线视图可见时 | 10 s |
+| 所选 DAG 的形状 | 第一次选中它时读一次 | 不轮询；切换连接后重新读取 |
 | 所选 DAG 的运行 | 流水线视图可见时 | 有 queued 或 running 时 3 s，否则 15 s |
 | 所选运行的任务实例 | 同上 | 运行未结束时 3 s，结束后停止 |
 

@@ -6,6 +6,52 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### 数艺工坊: a visual-first interface (2026-10-28)
+
+The desktop console's second design: concise and fresh, with graphics and their motion as the main
+way to read and to act, and no long text on screen. Names and figures stay; every explanation
+moved into a hover tip. The design is in `docs/desktop/ui-design.md` (second edition) and the round
+in `docs/desktop/loop/` (L6). Nothing changes for the backends or their deployment.
+
+#### Changed
+- **Overview:** a status ring per backend with its latency, a donut of how the recent runs went
+  with the success share, one lane per pipeline (schedule glyph, duration bars, last state, a play
+  button that opens its trigger panel), and the recent runs as dots on a time line (pipelines above,
+  jobs below; a click opens the run's pipeline or job). Only the newest four are listed by name.
+- **Run bars** replace the run ribbon: the colour is the outcome, the height the duration (relative
+  to the longest shown, square-root scale), a running run stands at full height. In the pipelines
+  view they are the way to pick a run: a click, or the arrow keys.
+- **Pipelines:** the DAG table, the run table and the task table gave way to lanes, run bars and
+  the selected run drawn as its DAG: one card per task placed by its upstream tasks, curved edges,
+  the card's ring and border in the task's state, edges flowing into a running task. A click on a
+  card opens its log. The shape comes from `GET /api/v2/dags/{dag_id}/tasks`, read once per DAG and
+  connection; without it the tasks stand in a row by start time.
+- **Jobs:** each job carries the glyph of where it runs (JVM, Spark, built in; `kind` in
+  `job-catalog.json`); the run button turns into a turning ring while a run is awaited; the outcome
+  is a tick or cross that draws itself, the metrics are figures, long values (a checksum) one line
+  with a copy button, and the recent runs are bars.
+- **Activity, settings, notifications:** the source of an entry is its glyph in the entry's tone;
+  the theme is picked from three preview windows; switches replace check boxes; the sentences under
+  controls became ⓘ tips; notifications carry a tick, cross or i.
+- **Keyboard:** lanes, task cards and the run bars take the focus like buttons (Enter or Space;
+  the arrow keys move between runs) and show a focus ring.
+- Motion only answers a change (rings 420 ms, donut 520 ms, bars 240 ms, marks 320 ms); the two
+  loops are bounded: the waiting ring turns only while a run is awaited and the view is shown, the
+  edges flow only while a task runs and the pipelines view is shown. "减少动效" stops all of it.
+
+#### Fixed
+- The window tests that check for stalls with animations on did not have them on: any preference
+  write (the last view, saved on every navigation) re-applied the reduced-motion setting, so
+  setting `Motion` directly lasted one step. They now switch motion on through the preference, and
+  pass with it on.
+
+#### Tests
+- Desktop tests: the DAG shape from Airflow, the shape read once per DAG and not shown under another
+  DAG, the overview's run mix and success share, the graph layout, the job kinds, and window tests
+  for the play button, picking a run by click and by key, Enter on a lane, and the waiting ring
+  stopping while its view is hidden. The end-to-end suite checks the three DAG shapes against the
+  real Airflow 3.3.2. The CI floor of executed desktop tests rises to 86.
+
 ### 数艺工坊: a JavaFX 25 desktop console for the engine API and Airflow (2026-10-27)
 
 A desktop control panel and monitor in `desktop/`, a Maven project of its own whose parent is the

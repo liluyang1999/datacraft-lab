@@ -252,6 +252,16 @@ def remove(directory):
         shutil.rmtree(directory, onexc=writable_and_retry)
 
 
+def make_writable(directory):
+    """Gives the owner write access to every file under directory. jpackage copies the launcher
+    read-only, and on Windows a read-only file stops `mvn clean` from deleting the image."""
+    for path in directory.rglob("*"):
+        if path.is_file():
+            mode = path.stat().st_mode
+            if not mode & stat.S_IWUSR:
+                os.chmod(path, mode | stat.S_IWUSR)
+
+
 def package(root, skip_aot):
     desktop = root / "desktop"
     target = desktop / "target"
@@ -297,6 +307,8 @@ def package(root, skip_aot):
     started = smoke(launcher, work / "smoke")
     print(f"{image} starts: first frame at {started} ms"
           + ("" if skip_aot else " with the AOT cache"))
+    make_writable(image)
+    make_writable(work)
     return image
 
 

@@ -33,6 +33,21 @@ class JobCatalogTest {
   }
 
   @Test
+  void knowsWhereEachJobRuns() {
+    for (String job : List.of("csv-profile", "file-checksum")) {
+      assertEquals(JobCatalog.Kind.JVM, catalog.job(job).orElseThrow().kind(), job);
+    }
+    for (String job : List.of("csv-to-parquet", "row-count", "spark-version")) {
+      assertEquals(JobCatalog.Kind.SPARK, catalog.job(job).orElseThrow().kind(), job);
+    }
+    for (String job : List.of("echo", "noop")) {
+      assertEquals(JobCatalog.Kind.BUILT_IN, catalog.job(job).orElseThrow().kind(), job);
+    }
+    assertEquals(JobCatalog.Kind.OTHER, catalog.dag("datacraft_spark_etl").orElseThrow().kind());
+    assertEquals(JobCatalog.Kind.OTHER, JobCatalog.Kind.of("unheard-of"));
+  }
+
+  @Test
   void reportsTheRequiredKeysThatAreBlank() {
     var csvToParquet = catalog.job("csv-to-parquet").orElseThrow();
     assertEquals(List.of("input", "output"), csvToParquet.missing(Map.of("output", " ")));

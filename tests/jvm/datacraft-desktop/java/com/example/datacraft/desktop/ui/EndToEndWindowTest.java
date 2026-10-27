@@ -13,7 +13,7 @@ import com.example.datacraft.desktop.api.EngineModels.JobInfo;
 import com.example.datacraft.desktop.app.AppContext;
 import com.example.datacraft.desktop.app.AppPaths;
 import com.example.datacraft.desktop.store.Profile;
-import com.example.datacraft.desktop.ui.component.StatusBadge;
+import com.example.datacraft.desktop.ui.component.StatusRing;
 import com.example.datacraft.desktop.ui.shell.MainWindow;
 import com.example.datacraft.desktop.ui.shell.Navigator.Destination;
 import java.net.URI;
@@ -113,7 +113,7 @@ class EndToEndWindowTest {
     waitUntil(
         "the configured backends are up",
         () ->
-            find(root, StatusBadge.class).stream().filter(b -> "success".equals(b.tone())).count()
+            find(root, StatusRing.class).stream().filter(r -> "success".equals(r.tone())).count()
                 >= expected);
     if (expected == 2) {
       onFx(() -> window.go(Destination.OVERVIEW));
@@ -125,8 +125,20 @@ class EndToEndWindowTest {
       // datacraft_engine_jobs is selected first; once it has run (EndToEndTest triggers it), its
       // newest run is selected and its tasks are listed.
       waitUntil(
-          "the tasks of the newest run are listed",
-          () -> shows(root, "noop") && shows(root, "echo"));
+          "the newest run is drawn as the DAG, noop before echo, with its tasks' states",
+          () ->
+              find(root, com.example.datacraft.desktop.ui.component.TaskGraph.class).stream()
+                      .anyMatch(graph -> graph.taskIds().equals(List.of("noop", "echo")))
+                  && find(root, javafx.scene.layout.HBox.class).stream()
+                      .anyMatch(
+                          card ->
+                              card.getStyleClass().contains("task-card")
+                                  && card.getStyleClass().contains("success")
+                                  && card.getUserData()
+                                      instanceof
+                                      com.example.datacraft.desktop.api.AirflowModels.TaskInstance
+                                      task
+                                  && task.taskId().equals("echo")));
       settle();
       snapshot(onFx(() -> stage.getScene()), "e2e-pipelines");
     }

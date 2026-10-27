@@ -75,6 +75,13 @@ public final class AirflowModels {
     }
   }
 
+  /** One task of a DAG ({@code GET /api/v2/dags/{dag_id}/tasks}) and the tasks that follow it. */
+  public record Task(String taskId, String displayName, List<String> downstream, String operator) {
+    public Task {
+      downstream = List.copyOf(downstream);
+    }
+  }
+
   /** One task instance of a run. */
   public record TaskInstance(
       String taskId,

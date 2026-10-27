@@ -134,6 +134,19 @@ class CacheTests(unittest.TestCase):
             with self.assertRaises(packaging.Failed):
                 packaging.use_cache(cfg)
 
+    def test_the_finished_image_can_be_deleted_by_a_clean_build(self):
+        # jpackage copies the launcher read-only; on Windows that stops `mvn clean` from deleting it.
+        with tempfile.TemporaryDirectory() as directory:
+            image = Path(directory) / "DataCraft"
+            launcher = touch(image / "DataCraft.exe")
+            nested = touch(image / "runtime" / "lib" / "modules")
+            for path in (launcher, nested):
+                os.chmod(path, 0o444)
+            packaging.make_writable(image)
+            for path in (launcher, nested):
+                self.assertTrue(os.access(path, os.W_OK), path)
+                path.unlink()  # what the clean plugin does
+
     def test_the_start_up_time_is_read_from_the_log(self):
         line = "2026-10-27 17:09:27.455 INFO com.example.datacraft.desktop.DesktopApp: Start-up: first frame at 1094 ms"
         match = packaging.STARTUP_LINE.search(line)

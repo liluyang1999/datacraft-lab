@@ -138,6 +138,64 @@ class PipelinesModelTest {
   }
 
   @Test
+  void aDagsRunsCountAsReadOnlyOnceItsOwnAnswerArrived() throws Exception {
+    // "No runs yet" must not show while the first answer is still on its way.
+    model.selectDag(ETL);
+    assertTrue(!model.runsLoaded().get(), "nothing is known about the ETL runs yet");
+    ticker.advance(Duration.ZERO);
+    ui.until("the ETL runs are read", () -> model.runsLoaded().get());
+    assertEquals(6, model.runs().size());
+    model.selectDag("datacraft_sftp_ingest");
+    assertTrue(!model.runsLoaded().get(), "another DAG starts unknown again");
+    ticker.advance(Duration.ZERO);
+    ui.until("the SFTP runs are read", () -> model.runsLoaded().get());
+    assertTrue(model.runs().isEmpty(), "and it has none");
+  }
+
+  @Test
+  void theSelectedDagsShapeIsReadOnceAndAnAnswerForAnotherDagIsDropped() throws Exception {
+    // The first DAG is selected when the list arrives; its shape follows.
+    ui.until(
+        "the engine-jobs graph is known",
+        () ->
+            model.structure().stream().map(task -> task.taskId()).toList()
+                .equals(List.of("echo", "noop", "spark_version")));
+    CountDownLatch release = new CountDownLatch(1);
+    backends.airflow.on(
+        "GET /api/v2/dags/" + ETL + "/tasks",
+        request -> {
+          try {
+            release.await(10, TimeUnit.SECONDS);
+          } catch (InterruptedException interrupted) {
+            Thread.currentThread().interrupt();
+          }
+          return StubServer.Answer.json(
+              200,
+              "{\"tasks\":[{\"task_id\":\"late\",\"task_display_name\":\"late\","
+                  + "\"downstream_task_ids\":[],\"operator_name\":\"x\"}],\"total_entries\":1}");
+        });
+    model.selectDag(ETL); // its shape is slow
+    assertTrue(model.structure().isEmpty(), "the previous DAG's shape is not kept");
+    model.selectDag("datacraft_sftp_ingest");
+    ui.until("the SFTP graph is known", () -> model.structure().size() == 3);
+    release.countDown();
+    Thread.sleep(300); // the ETL answer arrives late
+    ui.drain();
+    assertEquals(
+        List.of("csv_to_parquet", "download", "row_count"),
+        model.structure().stream().map(task -> task.taskId()).toList());
+    // Back to engine jobs: its shape is known already and is not asked for again.
+    model.selectDag("datacraft_engine_jobs");
+    ui.drain();
+    assertEquals(3, model.structure().size());
+    assertEquals(
+        1,
+        backends.airflow.requests().stream()
+            .filter(r -> r.path().equals("/api/v2/dags/datacraft_engine_jobs/tasks"))
+            .count());
+  }
+
+  @Test
   void aPollThatStartedBeforeAPauseDoesNotFlipTheSwitchBack() throws Exception {
     AtomicBoolean paused = new AtomicBoolean(false);
     AtomicReference<CountDownLatch> hold = new AtomicReference<>();

@@ -24,15 +24,27 @@ public final class Motion {
     reduced = value;
   }
 
-  /** A view appearing: 120 ms fade. */
+  /**
+   * A view appearing: 120 ms fade. A whole view at partial opacity is drawn into an offscreen
+   * texture on every frame; cached as a bitmap for the fade, it is drawn once and then only
+   * blended.
+   */
   public static void fadeIn(Node node) {
     if (reduced) {
       node.setOpacity(1);
       return;
     }
+    boolean wasCached = node.isCache();
+    node.setCache(true);
+    node.setCacheHint(javafx.scene.CacheHint.SPEED);
     FadeTransition fade = new FadeTransition(Duration.millis(120), node);
     fade.setFromValue(0.0);
     fade.setToValue(1.0);
+    fade.setOnFinished(
+        event -> {
+          node.setCache(wasCached);
+          node.setCacheHint(javafx.scene.CacheHint.DEFAULT);
+        });
     fade.play();
   }
 

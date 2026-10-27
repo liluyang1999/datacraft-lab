@@ -5,7 +5,7 @@
 ```
 ┌──────────────────────────── ui ────────────────────────────┐
 │ shell（窗口、侧栏、顶栏、通知）  views（总览、作业、流水线、活动、设置）│
-│ components（状态徽标、运行纹带、参数编辑器、空状态…）  theme（CSS、字体、图标）│
+│ components（状态环、运行柱、DAG 图、时间线、参数编辑器…） theme（CSS、字体、图标）│
 └───────────────▲──────────────────────────────▲─────────────┘
                 │ 属性绑定（只在 FX 线程）        │ 用户操作
 ┌───────────────┴────────── viewmodel ──────────┴────────────┐
@@ -39,8 +39,8 @@
 | `desktop.service` | `Session`（当前连接与两个客户端）、`ProfileService`（连接配置、测试连接、内存中的秘密）、`ConnectionMonitor` 与 `BackendStatus`、`Poller` 与 `Ticker`（含失败退避）、`JobService`、`PipelineService`、`JobCatalog`（已知参数）、`ActivityLog`、`Messages`（出错时的说明） |
 | `desktop.viewmodel` | `StatusModel`、`OverviewModel`、`JobsModel`、`PipelinesModel`、`ActivityModel`、`SettingsModel`；`DagRow`、`Labels`（状态与类型的中文名）、`Visibility` |
 | `desktop.ui.shell` | `MainWindow`、`Navigator`（视图切换与懒加载）、`Sidebar`、`TopBar`、`Toasts`、`Drawer`（侧滑面板）、`Dialogs`、`AppIcon` |
-| `desktop.ui.view` | 五个视图，各自只做布局与绑定；`Segments`（纹带的分段与提示） |
-| `desktop.ui.component` | `StatusBadge`、`RunRibbon`、`ParamEditor`、`EmptyState`、`Rows`（短列表的就地更新）、`Controls`、`Icons`、`Tones` |
+| `desktop.ui.view` | 五个视图，各自只做布局与绑定；`Segments`（运行柱的高度、提示与选择键） |
+| `desktop.ui.component` | 图形：`StatusRing`（状态环）、`Donut`（结果构成）、`RunBars`（运行柱）、`TimeStrip`（最近运行的时间线）、`TaskGraph` 与 `GraphLayout`（DAG 图及其纯函数布局）、`RunMark`（勾与叉）、`BusyRing`（等待中的转圈）；表单与布局：`ParamEditor`、`EmptyState`、`Rows`（短列表的就地更新）、`Controls`（含提示用的 ⓘ 与标签片）、`Icons`（`Glyph` 枚举的线条图标）、`Tones` |
 | `desktop.ui.theme` | `ThemeManager`（浅色、深色、跟随系统）、`Fonts`（中文用系统字体，数字用内置 Barlow）；样式表 `base.css`、`light.css`、`dark.css` |
 | `desktop.ui` | `Motion`（全部动效与“减少动效”）、`FxWatchdog`（FX 线程停顿监测） |
 | `desktop.util` | `Fx`（FX 线程的执行器）、`Latest`（只移交最新值）、`Lists`（按主键就地更新）、`Maps`（保序、可含 null 的不可变副本）、`Formats` |

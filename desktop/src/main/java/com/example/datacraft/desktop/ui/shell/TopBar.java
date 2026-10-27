@@ -3,7 +3,7 @@ package com.example.datacraft.desktop.ui.shell;
 import com.example.datacraft.desktop.service.BackendStatus;
 import com.example.datacraft.desktop.ui.component.Controls;
 import com.example.datacraft.desktop.ui.component.Icons;
-import com.example.datacraft.desktop.ui.component.StatusBadge;
+import com.example.datacraft.desktop.ui.component.StatusRing;
 import com.example.datacraft.desktop.ui.component.Tones;
 import com.example.datacraft.desktop.util.Formats;
 import com.example.datacraft.desktop.viewmodel.Labels;
@@ -31,16 +31,17 @@ public final class TopBar extends HBox {
 
   private static HBox backend(
       String name, javafx.beans.value.ObservableValue<BackendStatus> value) {
-    StatusBadge badge = new StatusBadge();
+    StatusRing ring = StatusRing.dot();
+    Label title = Controls.label(name, "");
     Label detail = Controls.label("", "latency", "secondary");
     Tooltip tooltip = new Tooltip();
-    HBox box = new HBox(badge, detail);
+    HBox box = new HBox(ring, title, detail);
     box.getStyleClass().add("backend-status");
     Tooltip.install(box, tooltip);
     Runnable show =
         () -> {
           BackendStatus status = value.getValue();
-          badge.set(Tones.of(status), name);
+          ring.set(Tones.of(status), name + " " + Labels.status(status));
           if (status.state() == BackendStatus.State.UP) {
             detail.setText(status.latency().map(Formats::latency).orElse(""));
             if (!detail.getStyleClass().contains("latin")) {

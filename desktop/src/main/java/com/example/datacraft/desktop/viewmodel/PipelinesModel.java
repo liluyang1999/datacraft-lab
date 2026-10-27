@@ -3,6 +3,7 @@ package com.example.datacraft.desktop.viewmodel;
 import com.example.datacraft.desktop.api.AirflowModels.Dag;
 import com.example.datacraft.desktop.api.AirflowModels.DagRun;
 import com.example.datacraft.desktop.api.AirflowModels.LogChunk;
+import com.example.datacraft.desktop.api.AirflowModels.Task;
 import com.example.datacraft.desktop.api.AirflowModels.TaskInstance;
 import com.example.datacraft.desktop.app.Preferences;
 import com.example.datacraft.desktop.service.JobCatalog;
@@ -39,7 +40,10 @@ import javafx.collections.ObservableList;
 public final class PipelinesModel implements Visibility {
 
   public static final int RIBBON = 20;
-  static final int RUNS = 25;
+
+  /** How many runs of the selected DAG are read and drawn as bars. */
+  public static final int RUNS = 25;
+
   static final Duration DAGS = Duration.ofSeconds(10);
   static final Duration ACTIVE = Duration.ofSeconds(3);
   static final Duration IDLE = Duration.ofSeconds(15);
@@ -73,11 +77,17 @@ public final class PipelinesModel implements Visibility {
   private final ObservableList<DagRow> dags = FXCollections.observableArrayList();
   private final ObservableList<DagRun> runs = FXCollections.observableArrayList();
   private final ObservableList<TaskInstance> tasks = FXCollections.observableArrayList();
+  // The selected DAG's tasks and their order, for the graph; read once per DAG and connection.
+  private final ObservableList<Task> structure = FXCollections.observableArrayList();
+  private final Map<String, List<Task>> structures = new java.util.HashMap<>();
+  // Each request has its own token, so an answer from before a connection change is recognised.
+  private final Map<String, Object> structuresLoading = new java.util.HashMap<>();
   private final StringProperty selectedDag = new SimpleStringProperty();
   private final StringProperty selectedRun = new SimpleStringProperty();
   private final StringProperty dagProblem = new SimpleStringProperty("");
   private final StringProperty detailProblem = new SimpleStringProperty("");
   private final BooleanProperty loaded = new SimpleBooleanProperty(false);
+  private final BooleanProperty runsLoaded = new SimpleBooleanProperty(false);
   private final BooleanProperty connected = new SimpleBooleanProperty(false);
 
   private final ObservableList<String> logLines = FXCollections.observableArrayList();
@@ -144,6 +154,8 @@ public final class PipelinesModel implements Visibility {
                 () -> {
                   connected.set(connection.isPresent());
                   dags.clear();
+                  structures.clear();
+                  structuresLoading.clear();
                   selectDag(null);
                   loaded.set(false);
                   if (visible) {
@@ -169,6 +181,7 @@ public final class PipelinesModel implements Visibility {
     List<DagRun> fresh = answer.runs();
     detailProblem.set("");
     Lists.reconcile(runs, fresh, DagRun::runId);
+    runsLoaded.set(true);
     runsActive = runs.stream().anyMatch(run -> run.tone().active());
     if (selectedRun.get() == null && !runs.isEmpty()) {
       selectRun(runs.getFirst().runId());
@@ -211,15 +224,43 @@ public final class PipelinesModel implements Visibility {
     selectedRun.set(null);
     polledRun = null;
     runs.clear();
+    runsLoaded.set(false);
     runsActive = false;
     tasks.clear();
     detailProblem.set("");
+    structure.setAll(dagId == null ? List.of() : structures.getOrDefault(dagId, List.of()));
+    if (dagId != null && !structures.containsKey(dagId) && !structuresLoading.containsKey(dagId)) {
+      loadStructure(dagId);
+    }
     if (visible && dagId != null) {
       runPoller.restart();
     } else {
       runPoller.stop();
     }
     taskPoller.stop();
+  }
+
+  /**
+   * Reads a DAG's tasks for the graph. An answer for a DAG no longer selected is kept for later but
+   * not shown; a failure leaves the graph to lay the task instances out by themselves.
+   */
+  private void loadStructure(String dagId) {
+    Object request = new Object();
+    structuresLoading.put(dagId, request);
+    service
+        .tasks(dagId)
+        .whenComplete(
+            (list, failure) ->
+                ui.execute(
+                    () -> {
+                      if (!structuresLoading.remove(dagId, request) || failure != null) {
+                        return; // a connection change superseded it, or Airflow refused
+                      }
+                      structures.put(dagId, list);
+                      if (dagId.equals(selectedDag.get())) {
+                        structure.setAll(list);
+                      }
+                    }));
   }
 
   public void selectRun(String runId) {
@@ -479,6 +520,11 @@ public final class PipelinesModel implements Visibility {
     return tasks;
   }
 
+  /** The selected DAG's tasks with their downstream tasks; empty until Airflow answered. */
+  public ObservableList<Task> structure() {
+    return structure;
+  }
+
   public ReadOnlyStringProperty selectedDag() {
     return selectedDag;
   }
@@ -497,6 +543,11 @@ public final class PipelinesModel implements Visibility {
 
   public ReadOnlyBooleanProperty loaded() {
     return loaded;
+  }
+
+  /** Whether the selected DAG's runs have been read at least once since it was selected. */
+  public ReadOnlyBooleanProperty runsLoaded() {
+    return runsLoaded;
   }
 
   public ReadOnlyBooleanProperty connected() {

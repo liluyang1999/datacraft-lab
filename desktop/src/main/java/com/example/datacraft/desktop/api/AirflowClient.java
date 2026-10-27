@@ -5,6 +5,7 @@ import com.example.datacraft.desktop.api.AirflowModels.Dag;
 import com.example.datacraft.desktop.api.AirflowModels.DagRun;
 import com.example.datacraft.desktop.api.AirflowModels.Health;
 import com.example.datacraft.desktop.api.AirflowModels.LogChunk;
+import com.example.datacraft.desktop.api.AirflowModels.Task;
 import com.example.datacraft.desktop.api.AirflowModels.TaskInstance;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
@@ -193,6 +194,31 @@ public final class AirflowClient {
         "/api/v2/dags/" + HttpTransport.encode(dagId) + "/dagRuns",
         body.toString(),
         AirflowClient::run);
+  }
+
+  /** The tasks of a DAG with their downstream tasks: the shape of the pipeline graph. */
+  public CompletableFuture<List<Task>> tasks(String dagId) {
+    return authorized(
+        "GET",
+        "/api/v2/dags/" + HttpTransport.encode(dagId) + "/tasks",
+        null,
+        body -> {
+          List<Task> tasks = new ArrayList<>();
+          for (JsonNode task : array(body, "tasks")) {
+            List<String> downstream = new ArrayList<>();
+            for (JsonNode next : task.path("downstream_task_ids")) {
+              downstream.add(next.asText());
+            }
+            String taskId = task.path("task_id").asText();
+            tasks.add(
+                new Task(
+                    taskId,
+                    task.path("task_display_name").asText(taskId),
+                    downstream,
+                    text(task, "operator_name")));
+          }
+          return List.copyOf(tasks);
+        });
   }
 
   public CompletableFuture<List<TaskInstance>> taskInstances(String dagId, String runId) {

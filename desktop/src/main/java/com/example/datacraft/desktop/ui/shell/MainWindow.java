@@ -57,6 +57,7 @@ public final class MainWindow {
   private final Navigator navigator;
   private final Consumer<Path> openFolder;
   private PipelinesView pipelinesView;
+  private JobsView jobsView;
 
   public MainWindow(AppContext context, Stage stage, Consumer<Path> openFolder) {
     this.context = context;
@@ -136,20 +137,25 @@ public final class MainWindow {
               status,
               context.clock(),
               this::openPipeline,
+              this::triggerPipeline,
+              this::openJob,
               () -> go(Destination.SETTINGS));
-      case JOBS ->
-          new JobsView(
-              new JobsModel(
-                  context.jobs(),
-                  context.catalog(),
-                  context.presets(),
-                  context.session(),
-                  context.preferences(),
-                  context.ticker(),
-                  Fx.UI),
-              context.clock(),
-              dialogs,
-              () -> go(Destination.SETTINGS));
+      case JOBS -> {
+        jobsView =
+            new JobsView(
+                new JobsModel(
+                    context.jobs(),
+                    context.catalog(),
+                    context.presets(),
+                    context.session(),
+                    context.preferences(),
+                    context.ticker(),
+                    Fx.UI),
+                context.clock(),
+                dialogs,
+                () -> go(Destination.SETTINGS));
+        yield jobsView;
+      }
       case PIPELINES -> {
         pipelinesView =
             new PipelinesView(
@@ -201,6 +207,20 @@ public final class MainWindow {
     go(Destination.PIPELINES);
     if (pipelinesView != null) {
       pipelinesView.select(dagId);
+    }
+  }
+
+  private void triggerPipeline(String dagId) {
+    go(Destination.PIPELINES);
+    if (pipelinesView != null) {
+      pipelinesView.trigger(dagId);
+    }
+  }
+
+  private void openJob(String jobName) {
+    go(Destination.JOBS);
+    if (jobsView != null) {
+      jobsView.select(jobName);
     }
   }
 

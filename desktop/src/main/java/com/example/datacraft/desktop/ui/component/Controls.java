@@ -65,6 +65,65 @@ public final class Controls {
     return row;
   }
 
+  /**
+   * A small "i" that explains on hover: the place for what used to be a sentence under a control.
+   */
+  public static Label info(String explanation) {
+    Label info = new Label();
+    info.setGraphic(Icons.of(Icons.Glyph.INFO, 16));
+    info.getStyleClass().add("info");
+    Tooltip tip = new Tooltip(explanation);
+    tip.setWrapText(true);
+    tip.setMaxWidth(320);
+    tip.setShowDelay(javafx.util.Duration.millis(150));
+    info.setTooltip(tip);
+    info.setAccessibleText(explanation);
+    return info;
+  }
+
+  /**
+   * Makes a graphic act like a button: a primary click or, once it has the focus (Tab), Enter or
+   * Space runs {@code action}.
+   */
+  public static void activatable(Node node, Runnable action) {
+    node.setFocusTraversable(true);
+    node.addEventHandler(
+        javafx.scene.input.MouseEvent.MOUSE_CLICKED,
+        event -> {
+          if (event.getButton() == javafx.scene.input.MouseButton.PRIMARY) {
+            node.requestFocus();
+            action.run();
+          }
+        });
+    node.addEventHandler(
+        javafx.scene.input.KeyEvent.KEY_PRESSED,
+        event -> {
+          if (event.getCode() == javafx.scene.input.KeyCode.ENTER
+              || event.getCode() == javafx.scene.input.KeyCode.SPACE) {
+            action.run();
+            event.consume();
+          }
+        });
+  }
+
+  /** A glyph with a word or two: how the views label a fact without a sentence. */
+  public static Label chip(Icons.Glyph glyph, String text) {
+    Label chip = new Label(text);
+    chip.setGraphic(Icons.of(glyph, 16));
+    chip.getStyleClass().add("chip");
+    return chip;
+  }
+
+  /** A segmented choice with a glyph on each option. */
+  public static <T> HBox segmented(
+      List<T> options, List<String> labels, List<Icons.Glyph> glyphs, ObjectProperty<T> value) {
+    HBox box = segmented(options, labels, value);
+    for (int index = 0; index < glyphs.size(); index++) {
+      ((ToggleButton) box.getChildren().get(index)).setGraphic(Icons.of(glyphs.get(index), 16));
+    }
+    return box;
+  }
+
   /** A segmented choice bound to a property; one button per option. */
   public static <T> HBox segmented(List<T> options, List<String> labels, ObjectProperty<T> value) {
     HBox box = new HBox();

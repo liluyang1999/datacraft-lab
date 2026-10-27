@@ -1,4 +1,5 @@
 # syntax=docker/dockerfile:1
+# check=skip=InvalidDefaultArgInFrom
 #
 # Airflow image for the single-host (Compose) and multi-host (Swarm) deployments. Extends the
 # official Airflow image with:

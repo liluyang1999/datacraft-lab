@@ -1,4 +1,5 @@
 # syntax=docker/dockerfile:1
+# check=skip=InvalidDefaultArgInFrom
 #
 # Optional standalone spark-submit runner (the official Apache Spark image plus the CLI jar), built
 # only with BUILD_SPARK_IMAGE=true. The Compose/Swarm stacks and the DAGs do not use it: the DAGs

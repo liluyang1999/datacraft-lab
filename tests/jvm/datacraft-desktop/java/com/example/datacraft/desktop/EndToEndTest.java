@@ -168,6 +168,31 @@ class EndToEndTest {
     }
 
     @Test
+    void theDagsShapesAreTheChainsTheirFilesDeclare() {
+      // The graph of the pipelines view is drawn from these.
+      Map<String, List<String>> etl = downstream("datacraft_spark_etl");
+      assertEquals(Map.of("csv_to_parquet", List.of("row_count"), "row_count", List.of()), etl);
+      Map<String, List<String>> engine = downstream("datacraft_engine_jobs");
+      assertEquals(Map.of("noop", List.of("echo"), "echo", List.of()), engine);
+      Map<String, List<String>> sftp = downstream("datacraft_sftp_ingest");
+      assertEquals(
+          Map.of(
+              "download",
+              List.of("csv_to_parquet"),
+              "csv_to_parquet",
+              List.of("row_count"),
+              "row_count",
+              List.of()),
+          sftp);
+    }
+
+    private static Map<String, List<String>> downstream(String dagId) {
+      Map<String, List<String>> shape = new java.util.HashMap<>();
+      airflow.tasks(dagId).join().forEach(task -> shape.put(task.taskId(), task.downstream()));
+      return shape;
+    }
+
+    @Test
     void pausingAndResumingIsWhatAirflowThenReports() {
       boolean before = paused(DAG);
       airflow.setPaused(DAG, !before).join();

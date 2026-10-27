@@ -363,7 +363,7 @@ pom's `<modules>`.
 | `datacraft-cli` | 31 | 31 |
 
 `--project desktop` checks the desktop console instead (`desktop/target/surefire-reports`, one
-floor of 76 on both platforms: each runs one of `VaultPlatformTest`'s two platform tests, and
+floor of 86 on both platforms: each runs one of `VaultPlatformTest`'s two platform tests, and
 `verify` never runs the `e2e` tests). The `desktop` job runs it after `verify`.
 
 ## Zero-warning policy

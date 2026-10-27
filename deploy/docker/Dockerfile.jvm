@@ -1,4 +1,5 @@
 # syntax=docker/dockerfile:1
+# check=skip=InvalidDefaultArgInFrom
 #
 # Runtime image for the non-Spark surface: the online HTTP API and lightweight engine jobs.
 # Small (JRE + ~9MB jar). Default command serves the API on all interfaces, port 8080, as the

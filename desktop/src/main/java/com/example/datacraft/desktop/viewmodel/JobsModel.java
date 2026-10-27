@@ -498,6 +498,11 @@ public final class JobsModel implements Visibility {
         .orElse(job.description());
   }
 
+  /** Where a job runs, for its glyph; a job the catalogue does not know is OTHER. */
+  public JobCatalog.Kind kind(JobInfo job) {
+    return catalog.job(job.name()).map(JobCatalog.Entry::kind).orElse(JobCatalog.Kind.OTHER);
+  }
+
   public Optional<JobCatalog.Entry> catalogEntry() {
     return Optional.ofNullable(selected.get()).flatMap(job -> catalog.job(job.name()));
   }

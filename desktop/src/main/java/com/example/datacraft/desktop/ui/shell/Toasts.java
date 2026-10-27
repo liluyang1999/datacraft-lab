@@ -3,7 +3,6 @@ package com.example.datacraft.desktop.ui.shell;
 import com.example.datacraft.desktop.ui.Motion;
 import com.example.datacraft.desktop.ui.component.Controls;
 import com.example.datacraft.desktop.ui.component.Icons;
-import com.example.datacraft.desktop.ui.component.StatusBadge;
 import javafx.animation.PauseTransition;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
@@ -48,13 +47,21 @@ public final class Toasts extends VBox {
   }
 
   private void show(String tone, String text, boolean sticky) {
-    StatusBadge dot = new StatusBadge();
-    dot.set(tone, "");
+    javafx.scene.layout.StackPane glyph =
+        new javafx.scene.layout.StackPane(
+            Icons.of(
+                switch (tone) {
+                  case "success" -> Icons.Glyph.CHECK;
+                  case "failed" -> Icons.Glyph.CROSS;
+                  default -> Icons.Glyph.INFO;
+                },
+                18));
+    glyph.getStyleClass().addAll("toast-glyph", tone);
     Label message = Controls.label(text, "text");
     message.setWrapText(true);
     message.setMaxWidth(300);
     HBox.setHgrow(message, Priority.ALWAYS);
-    HBox toast = new HBox(dot, message);
+    HBox toast = new HBox(glyph, message);
     toast.getStyleClass().add("toast");
     toast.setAccessibleText(text);
     Button close = Controls.iconButton(Icons.close(), "关闭通知", () -> dismiss(toast));

@@ -49,11 +49,37 @@ public final class OverviewModel implements Visibility {
       Instant startedAt,
       Optional<Duration> duration) {}
 
+  /** How the runs on screen ended: the donut of the overview. */
+  public record Mix(int success, int failed, int running, int waiting) {
+    static final Mix NONE = new Mix(0, 0, 0, 0);
+
+    public int total() {
+      return success + failed + running + waiting;
+    }
+
+    /** The share of finished runs that succeeded, 0 to 1, or -1 when none has finished. */
+    public double successShare() {
+      int finished = success + failed;
+      return finished == 0 ? -1 : (double) success / finished;
+    }
+
+    Mix with(RunTone tone) {
+      return switch (tone) {
+        case SUCCESS -> new Mix(success + 1, failed, running, waiting);
+        case FAILED -> new Mix(success, failed + 1, running, waiting);
+        case RUNNING -> new Mix(success, failed, running + 1, waiting);
+        case WAITING -> new Mix(success, failed, running, waiting + 1);
+        case NONE -> this;
+      };
+    }
+  }
+
   /** What one poll brings: the DAG rows (absent when Airflow failed) and the cached job runs. */
   record Data(Optional<List<DagRow>> dags, String airflowProblem, List<RecentRun> jobRuns) {}
 
   private final ObservableList<DagRow> dags = FXCollections.observableArrayList();
   private final ObservableList<RecentItem> recent = FXCollections.observableArrayList();
+  private final ObjectProperty<Mix> mix = new SimpleObjectProperty<>(Mix.NONE);
   private final StringProperty problem = new SimpleStringProperty("");
   private final ObjectProperty<Instant> staleSince = new SimpleObjectProperty<>();
   private final BooleanProperty loaded = new SimpleBooleanProperty(false);
@@ -88,6 +114,7 @@ public final class OverviewModel implements Visibility {
                   connected.set(connection.isPresent());
                   dags.clear();
                   recent.clear();
+                  mix.set(Mix.NONE);
                   loaded.set(false);
                   if (poller.running()) {
                     poller.restart();
@@ -145,6 +172,11 @@ public final class OverviewModel implements Visibility {
                 run.duration()));
       }
     }
+    Mix counted = Mix.NONE;
+    for (RecentItem item : items) {
+      counted = counted.with(item.tone());
+    }
+    mix.set(counted);
     items.sort(Comparator.comparing(RecentItem::startedAt).reversed());
     Lists.reconcile(recent, items.subList(0, Math.min(RECENT, items.size())), RecentItem::key);
     loaded.set(true);
@@ -171,6 +203,11 @@ public final class OverviewModel implements Visibility {
 
   public ObservableList<RecentItem> recent() {
     return recent;
+  }
+
+  /** How every run on screen (each DAG's newest, the recent job runs) ended or stands. */
+  public ReadOnlyObjectProperty<Mix> mix() {
+    return mix;
   }
 
   /** Why Airflow's data is missing or old, or empty when it is current. */

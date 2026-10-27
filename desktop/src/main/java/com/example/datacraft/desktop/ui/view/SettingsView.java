@@ -7,7 +7,8 @@ import com.example.datacraft.desktop.store.Profile;
 import com.example.datacraft.desktop.ui.Motion;
 import com.example.datacraft.desktop.ui.component.Controls;
 import com.example.datacraft.desktop.ui.component.Icons;
-import com.example.datacraft.desktop.ui.component.StatusBadge;
+import com.example.datacraft.desktop.ui.component.Icons.Glyph;
+import com.example.datacraft.desktop.ui.component.StatusRing;
 import com.example.datacraft.desktop.ui.component.Tones;
 import com.example.datacraft.desktop.ui.shell.Dialogs;
 import com.example.datacraft.desktop.ui.shell.Toasts;
@@ -17,10 +18,10 @@ import com.example.datacraft.desktop.viewmodel.SettingsModel;
 import java.util.List;
 import java.util.function.Consumer;
 import javafx.beans.binding.Bindings;
-import javafx.geometry.Pos;
+import javafx.beans.property.ObjectProperty;
 import javafx.scene.Node;
 import javafx.scene.control.Button;
-import javafx.scene.control.CheckBox;
+import javafx.scene.control.ContentDisplay;
 import javafx.scene.control.Label;
 import javafx.scene.control.ListCell;
 import javafx.scene.control.ListView;
@@ -28,10 +29,14 @@ import javafx.scene.control.PasswordField;
 import javafx.scene.control.ScrollPane;
 import javafx.scene.control.Spinner;
 import javafx.scene.control.TextField;
+import javafx.scene.control.ToggleButton;
+import javafx.scene.control.ToggleGroup;
+import javafx.scene.control.Tooltip;
 import javafx.scene.layout.ColumnConstraints;
 import javafx.scene.layout.GridPane;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.Priority;
+import javafx.scene.layout.Region;
 import javafx.scene.layout.VBox;
 
 /** 设置: connections, appearance, refresh, and the local data in ~/.datacraft. */
@@ -125,11 +130,14 @@ public final class SettingsView implements View {
     PasswordField password = new PasswordField();
     password.textProperty().bindBidirectional(model.airflowPassword());
     password.setPromptText("Airflow 口令");
-    CheckBox remember = new CheckBox("在本机加密保存令牌与口令");
+    ToggleButton remember = Controls.toggleSwitch("加密保存令牌与口令", on -> {});
     remember.selectedProperty().bindBidirectional(model.remember());
-    Label rememberHint =
-        Controls.label("不保存时，令牌与口令只在本次运行中使用。加密方式：" + model.vaultDescription() + "。", "caption");
-    rememberHint.setWrapText(true);
+    HBox rememberRow =
+        Controls.row(
+            10,
+            remember,
+            Controls.label("加密保存", ""),
+            Controls.info("令牌与口令在本机加密保存（" + model.vaultDescription() + "）。关闭时只在本次运行中使用，不写入磁盘。"));
 
     GridPane form = new GridPane();
     form.setHgap(16);
@@ -145,7 +153,7 @@ public final class SettingsView implements View {
     form.addRow(line++, fieldLabel("Airflow 地址"), airflowUrl);
     form.addRow(line++, fieldLabel("用户名"), user);
     form.addRow(line++, fieldLabel("口令"), password);
-    form.add(new VBox(4, remember, rememberHint), 1, line++);
+    form.add(rememberRow, 1, line++);
 
     Label error = Controls.label("", "notice", "failed");
     error.setWrapText(true);
@@ -166,6 +174,7 @@ public final class SettingsView implements View {
                                 () -> toasts.success("已保存连接 " + saved.name()))),
             "primary");
     Button test = Controls.button("测试连接", model::test, "");
+    test.setGraphic(Icons.of(Glyph.LINK, 16));
     Button connect =
         Controls.button(
             "使用此连接",
@@ -203,36 +212,40 @@ public final class SettingsView implements View {
     test.disableProperty().bind(model.busy());
     HBox buttons = Controls.row(12, save, test, connect, Controls.grow(), delete);
 
-    VBox testResult = new VBox(6);
+    HBox testResult = new HBox(24);
     model.testResult().addListener((property, before, result) -> showTest(testResult, result));
 
     VBox right = new VBox(16, form, error, buttons, testResult);
     HBox.setHgrow(right, Priority.ALWAYS);
     HBox body = new HBox(32, left, right);
-    return new VBox(16, Controls.label("连接", "section-title"), body);
+    return new VBox(16, OverviewView.heading(Glyph.LINK, "连接"), body);
   }
 
-  private static void showTest(VBox box, TestResult result) {
+  private static void showTest(HBox box, TestResult result) {
     box.getChildren().clear();
     if (result == null) {
       return;
     }
     box.getChildren()
-        .addAll(testLine("引擎 API", result.engine()), testLine("Airflow", result.airflow()));
+        .addAll(
+            testTile("引擎 API", Glyph.ENGINE, result.engine()),
+            testTile("Airflow", Glyph.AIRFLOW, result.airflow()));
   }
 
-  private static Node testLine(String name, BackendStatus status) {
-    StatusBadge badge = new StatusBadge();
-    badge.set(Tones.of(status), name + " " + Labels.status(status));
-    String detail =
-        status.state() == BackendStatus.State.UP
-            ? status.latency().map(Formats::latency).orElse("") + "  " + status.summary()
-            : status.summary();
-    Label text = Controls.label(detail, "secondary");
-    text.setWrapText(true);
-    HBox line = Controls.row(12, badge, text);
-    line.setAlignment(Pos.TOP_LEFT);
-    return line;
+  /** One backend's answer to the test: its ring, its name and latency; the details on hover. */
+  private static Node testTile(String name, Glyph glyph, BackendStatus status) {
+    StatusRing ring = new StatusRing(36, 3, Icons.of(glyph, 16));
+    ring.set(Tones.of(status), name + " " + Labels.status(status));
+    boolean up = status.state() == BackendStatus.State.UP;
+    Label title = Controls.label(name, "name");
+    Label detail =
+        Controls.label(
+            up ? status.latency().map(Formats::latency).orElse("") : Labels.status(status),
+            up ? "latin" : "text-failed");
+    HBox tile = Controls.row(10, ring, new VBox(2, title, detail));
+    tile.getStyleClass().add("test-tile");
+    Tooltip.install(tile, new Tooltip(status.summary()));
+    return tile;
   }
 
   private static TextField field(javafx.beans.property.StringProperty value, String prompt) {
@@ -249,19 +262,57 @@ public final class SettingsView implements View {
   // ---------- appearance and refresh ----------
 
   private Node appearance() {
-    HBox theme =
-        Controls.segmented(
-            List.of(Preferences.Theme.LIGHT, Preferences.Theme.DARK, Preferences.Theme.SYSTEM),
-            List.of("浅色", "深色", "跟随系统"),
-            model.theme());
-    CheckBox reduced = new CheckBox("减少动效");
+    HBox theme = themeTiles(model.theme());
+    ToggleButton reduced = Controls.toggleSwitch("减少动效", on -> {});
     reduced.selectedProperty().bindBidirectional(model.reducedMotion());
     reduced.selectedProperty().addListener((property, before, now) -> Motion.reduced(now));
-    Label hint = Controls.label("视图切换、侧滑面板与通知改为直接出现。", "caption");
+    HBox motion =
+        Controls.row(
+            10,
+            reduced,
+            Controls.label("减少动效", ""),
+            Controls.info("视图切换、侧滑面板、通知与图表改为直接出现，运行中的圈不再转动。"));
     GridPane grid = settingsGrid();
     grid.addRow(0, fieldLabel("主题"), theme);
-    grid.addRow(1, fieldLabel("动效"), new VBox(4, reduced, hint));
-    return new VBox(16, Controls.label("外观", "section-title"), grid);
+    grid.addRow(1, fieldLabel("动效"), motion);
+    return new VBox(16, OverviewView.heading(Glyph.SUN, "外观"), grid);
+  }
+
+  /** Three small windows to pick from: light, dark, and half of each for "follow the system". */
+  private static HBox themeTiles(ObjectProperty<Preferences.Theme> value) {
+    List<Preferences.Theme> themes =
+        List.of(Preferences.Theme.LIGHT, Preferences.Theme.DARK, Preferences.Theme.SYSTEM);
+    List<String> names = List.of("浅色", "深色", "跟随系统");
+    List<String> previews = List.of("light", "dark", "system");
+    ToggleGroup group = new ToggleGroup();
+    HBox tiles = new HBox(12);
+    for (int index = 0; index < themes.size(); index++) {
+      Preferences.Theme theme = themes.get(index);
+      Region preview = new Region();
+      preview.getStyleClass().addAll("theme-preview", previews.get(index));
+      ToggleButton tile = new ToggleButton(names.get(index));
+      tile.getStyleClass().add("theme-tile");
+      tile.setGraphic(preview);
+      tile.setContentDisplay(ContentDisplay.TOP);
+      tile.setToggleGroup(group);
+      tile.setUserData(theme);
+      tile.setSelected(theme == value.get());
+      tiles.getChildren().add(tile);
+    }
+    group
+        .selectedToggleProperty()
+        .addListener(
+            (property, before, selected) -> {
+              if (selected == null) {
+                before.setSelected(true);
+              } else {
+                value.set((Preferences.Theme) selected.getUserData());
+              }
+            });
+    value.addListener(
+        (property, before, now) ->
+            group.getToggles().forEach(toggle -> toggle.setSelected(now == toggle.getUserData())));
+    return tiles;
   }
 
   private Node refreshSection() {
@@ -269,34 +320,36 @@ public final class SettingsView implements View {
         Controls.segmented(
             List.of(Preferences.Refresh.STANDARD, Preferences.Refresh.SAVER),
             List.of("标准", "节能"),
+            List.of(Glyph.BOLT, Glyph.LEAF),
             model.refresh());
-    Label hint = Controls.label("", "caption");
-    hint.textProperty()
-        .bind(
-            Bindings.createStringBinding(
-                () ->
-                    model.refresh().get() == Preferences.Refresh.STANDARD
-                        ? "健康检查每 5 秒一次，流水线每 10 秒刷新。"
-                        : "健康检查每 15 秒一次，其余刷新也放慢到三分之一。",
-                model.refresh()));
     Spinner<Integer> timeout = new Spinner<>(1, 24 * 60, model.runTimeout().get());
     timeout.setEditable(true);
     timeout.setPrefWidth(110);
     timeout.valueProperty().addListener((property, before, now) -> model.runTimeout().set(now));
-    Label minutes = Controls.label("分钟。超过后停止等待结果，作业在引擎上继续运行。", "caption");
-    minutes.setWrapText(true);
     GridPane grid = settingsGrid();
-    grid.addRow(0, fieldLabel("刷新频率"), new VBox(4, mode, hint));
-    grid.addRow(1, fieldLabel("作业等待上限"), Controls.row(8, timeout, minutes));
-    return new VBox(16, Controls.label("刷新", "section-title"), grid);
+    grid.addRow(
+        0,
+        fieldLabel("刷新频率"),
+        Controls.row(10, mode, Controls.info("标准：健康检查每 5 秒一次，流水线每 10 秒刷新。节能：都放慢到三分之一。")));
+    grid.addRow(
+        1,
+        fieldLabel("等待上限"),
+        Controls.row(
+            10,
+            timeout,
+            Controls.label("分钟", "secondary"),
+            Controls.info("运行作业时最多等这么久；超过后停止等待结果，作业在引擎上继续运行。")));
+    return new VBox(16, OverviewView.heading(Glyph.REFRESH, "刷新"), grid);
   }
 
   private Node localData(Dialogs dialogs, Toasts toasts, Consumer<java.nio.file.Path> openFolder) {
     TextField location = new TextField(model.dataLocation().toString());
     location.setEditable(false);
     location.getStyleClass().add("latin");
-    Button open = Controls.button("打开文件夹", () -> openFolder.accept(model.dataLocation()), "");
-    Label size = Controls.label("", "");
+    Button open =
+        Controls.iconButton(
+            Icons.of(Glyph.FOLDER), "打开文件夹", () -> openFolder.accept(model.dataLocation()));
+    Label size = Controls.label("", "figure-small", "latin");
     size.textProperty().bind(model.dataSize());
     Button clear =
         Controls.button(
@@ -310,15 +363,14 @@ public final class SettingsView implements View {
               }
             },
             "danger");
-    Label what = Controls.label("这里只保存设置、连接配置、参数预设与缓存，不保存任何业务数据。", "caption");
-    what.setWrapText(true);
+    clear.setGraphic(Icons.of(Glyph.TRASH, 16));
     GridPane grid = settingsGrid();
-    HBox locationRow = Controls.row(8, location, open);
+    HBox locationRow =
+        Controls.row(8, location, open, Controls.info("这里只保存设置、连接配置、参数预设与缓存，不保存任何业务数据。"));
     HBox.setHgrow(location, Priority.ALWAYS);
     grid.addRow(0, fieldLabel("位置"), locationRow);
     grid.addRow(1, fieldLabel("占用"), Controls.row(12, size, clear));
-    grid.add(what, 1, 2);
-    return new VBox(16, Controls.label("本机数据", "section-title"), grid);
+    return new VBox(16, OverviewView.heading(Glyph.DATABASE, "本机数据"), grid);
   }
 
   private static GridPane settingsGrid() {
