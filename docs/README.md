@@ -76,7 +76,7 @@ the build when the module depends on a project module outside this list. Every m
 
 ## Quick start
 
-You need JDK 25.0.4.1 or newer, which the build enforces; the Maven Wrapper downloads Maven 3.10.0
+You need JDK 25.0.5 or newer, which the build enforces; the Maven Wrapper downloads Maven 3.10.0
 on first use. The [development guide](guides/development.md) lists every prerequisite.
 
 Run the full gate, then run jobs from the shaded jar:

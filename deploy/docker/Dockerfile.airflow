@@ -2,7 +2,7 @@
 #
 # Airflow image for the single-host (Compose) and multi-host (Swarm) deployments. Extends the
 # official Airflow image with:
-#   * a JRE 25 (to run the non-Spark CLI jar)                      -> copied from eclipse-temurin
+#   * a JRE 25 (to run the non-Spark CLI jar)                      -> the pinned Temurin release
 #   * pyspark (provides spark-submit + the Spark runtime)          -> pinned to the JVM Spark version
 #   * the datacraft-cli jar and the DAGs
 #
@@ -11,11 +11,12 @@
 # also needs data paths the driver and every executor can reach (docs/guides/airflow.md).
 # No DAG or service runs the separate datacraft/spark image.
 
-# No default: build-images.sh passes the locally built builder. A bare name here would resolve to
-# docker.io/datacraft/*, a Docker Hub namespace this project does not own.
+# No default for either: build-images.sh passes the locally built builder and datacraft/jre, the
+# official JRE image with the pinned Temurin release of Dockerfile.temurin. A bare name here would
+# resolve to docker.io/datacraft/*, a Docker Hub namespace this project does not own.
 ARG JAR_IMAGE
 ARG AIRFLOW_IMAGE=apache/airflow:3.3.2
-ARG JRE_IMAGE=eclipse-temurin:25-jre
+ARG JRE_IMAGE
 
 FROM ${JAR_IMAGE} AS jar
 FROM ${JRE_IMAGE} AS jre

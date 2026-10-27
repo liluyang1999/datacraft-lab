@@ -100,20 +100,28 @@ job.
 Jackson 3 exists as a new major line with new packages, while Spark stays on Jackson 2.
 
 **Decision.** Build and run on JDK 25: `java.version` 25 drives javac's `release` and scalac's
-`-release`, the Enforcer requires `[25.0.4.1,)` (the July/August 2026 security fixes; Spark 4.2.0
-deprecates Java 25 releases older than 25.0.3), and every image runs a Java 25 runtime. Pin
+`-release`, the Enforcer requires `[25.0.5,)` (the October 2026 security fixes; Spark 4.2.0
+deprecates Java 25 releases older than 25.0.3), and every image runs one Temurin 25 release, pinned
+by version and SHA-256 in `deploy/docker/Dockerfile.temurin`. Pin
 `spark.version` 4.2.0 and `scala.version` 2.13.18 together. Stay on Jackson 2 (`jackson.version`
 2.22.4 through the BOM), and fail the build if a `jackson-core` older than 2.22.3 or a
 `jackson-databind` older than 2.22.4, the releases that fix the published advisories, enters it.
 
 **Consequences.**
 
-- Builders and runtimes need JDK 25: the builder image is `maven:3.10.0-eclipse-temurin-25`, the
-  optional Spark image is the `java25` variant, and `cicd/images/smoke-images.sh` requires the
-  images' JRE to be at least 25.0.4.1.
-- A JDK older than 25.0.4.1 fails the build instead of warning. The floor was a warning while the
-  workstation JDK lagged; it became a requirement once the workstation, CI's `setup-java` and the
-  builder image all resolved to 25.0.4.1, and a new security update raises it again.
+- Builders and runtimes need JDK 25: the builder image starts from `maven:3.10.0-eclipse-temurin-25`,
+  the optional Spark image is the `java25` variant, and every image has its Java replaced by the
+  pinned Temurin release. `cicd/images/smoke-images.sh` requires the builder and the three runtime
+  images to run exactly that release, at least the floor.
+- The images do not take Java from the official images. Those images lag a security release:
+  Temurin 25.0.5+8 came out on 2026-10-22, and on 2026-10-27 `eclipse-temurin:25-jre` and the Maven
+  image still shipped 25.0.4.1+1, waiting for other architectures. A pinned release with its four
+  checksums (JRE and JDK, amd64 and arm64) does not wait, and BuildKit refuses an archive whose
+  SHA-256 differs. The cost is a pin to bump: `cicd/security/check_temurin.py` fails the weekly
+  advisory run while Adoptium has a newer Temurin 25 release.
+- A JDK older than 25.0.5 fails the build instead of warning. The floor rises with each security
+  update once the workstation and CI's `setup-java` resolve to it and the Temurin pin carries it; a
+  test keeps the Enforcer's floor and the image floor of `smoke-images.sh` equal and at most the pin.
 - Scala and Spark move together: a Spark upgrade that changes its Scala version changes
   `scala.version` with it.
 - Moving the API's JSON writer to Jackson 3 would not remove Jackson 2, which Spark needs and

@@ -30,7 +30,7 @@ datacraft-lab/
 │   ├── airflow/      constrained Airflow install and security floor
 │   ├── lint/         pinned ShellCheck, shell syntax and ShellCheck, pinned actions
 │   ├── stacks/       Compose and Swarm definitions
-│   ├── security/     advisory check of the pinned versions
+│   ├── security/     advisory checks of the pinned versions and the Temurin pin
 │   └── images/       image build and smoke test, Compose stack smoke test, Swarm rehearsal
 ├── modules/                           JVM source modules, grouped by responsibility
 │   ├── core/         datacraft-common, datacraft-config, datacraft-engine
@@ -182,7 +182,9 @@ configuration merges manifests, notices, licenses and service files is described
 [Packaging](build-and-quality.md#packaging).
 
 The jar is built once in a builder image (`deploy/docker/Dockerfile.build`) and copied into the
-runtime images:
+runtime images. Every image runs the Temurin release pinned in `deploy/docker/Dockerfile.temurin`
+(version and SHA-256), put on top of the official Maven and JRE images as `datacraft/maven` and
+`datacraft/jre`, so a security release does not wait for the official images:
 
 - `datacraft/jvm`: a Java 25 JRE and the jar; serves the API as uid 10001, with the jar
   root-owned.
@@ -190,7 +192,7 @@ runtime images:
   `spark-submit`), the jar and the DAGs; its Python packages follow the Airflow constraints except
   for the fixed releases in `orchestration/airflow/security-overrides.txt`.
 - `datacraft/spark` (optional, built only with `BUILD_SPARK_IMAGE=true`): the official Spark 4.2.0
-  Java 25 image with its Java replaced by the same freshly pulled Temurin JRE, plus the jar, with
+  Java 25 image with its Java replaced by the same pinned Temurin JRE, plus the jar, with
   job paths confined to `/opt/datacraft/data`. No stack or DAG uses it; CI builds it and runs a
   conversion in it.
 
@@ -252,7 +254,7 @@ All JVM code uses base package `com.example.datacraft` plus the module name (`.c
 The parent POM owns every version and the compiler, formatter, Checkstyle, Enforcer and test
 configuration; module POMs declare only their dependencies, their boundary rule and module-specific
 plugins. `./mvnw verify` (Maven 3.10.0 through the wrapper) runs the Enforcer rules (JDK
-25.0.4.1+, Maven 3.9+, pinned plugins, no
+25.0.5+, Maven 3.9+, pinned plugins, no
 POM repositories, no vulnerable Jackson, module boundaries), javac with `-Xlint:all` and scalac with
 `-Werror` (any warning fails), Spotless, Checkstyle, the JUnit and ScalaTest suites and the shaded
 package. GitHub Actions on `ubuntu-24.04` is the authoritative gate: on top of `verify` it runs

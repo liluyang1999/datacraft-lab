@@ -17,7 +17,8 @@ reports when a pinned version turns out to be vulnerable either. This check asks
 
 A scheduled workflow runs it, so a new advisory appears as a failed run and no bot has to open pull
 requests. Not covered: transitive dependencies, which Spark and the Airflow constraints file pin,
-and the base images.
+and the base images; the Java of the images is a pinned Temurin release that
+cicd/security/check_temurin.py checks against Adoptium instead.
 
 OSV matches versions itself for Maven, PyPI and npm. For GitHub Actions it only lists advisories, so
 their version ranges are evaluated here, as the OSV schema describes; that needs the full release

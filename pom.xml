@@ -352,11 +352,12 @@
                         </goals>
                         <configuration>
                             <rules>
-                                <!-- 25.0.4.1 is the out-of-band update for the OpenJDK advisory of 2026-08-18;
-                                     CI (setup-java) and the builder image resolve to it or newer. -->
+                                <!-- 25.0.5 is the release of the Critical Patch Update of 2026-10-20;
+                                     CI (setup-java) resolves to it or newer, and the builder image runs
+                                     the Temurin release pinned in deploy/docker/Dockerfile.temurin. -->
                                 <requireJavaVersion>
-                                    <version>[25.0.4.1,)</version>
-                                    <message>datacraft-lab builds with JDK 25.0.4.1 or newer and targets Java 25 bytecode: 25.0.4.1 carries the July/August 2026 security fixes, and Spark 4.2.0 deprecates Java 25 releases older than 25.0.3.</message>
+                                    <version>[25.0.5,)</version>
+                                    <message>datacraft-lab builds with JDK 25.0.5 or newer and targets Java 25 bytecode: 25.0.5 carries the October 2026 security fixes, and Spark 4.2.0 deprecates Java 25 releases older than 25.0.3.</message>
                                 </requireJavaVersion>
                                 <requireMavenVersion>
                                     <version>[3.9.0,)</version>

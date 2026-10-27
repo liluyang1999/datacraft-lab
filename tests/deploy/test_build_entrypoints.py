@@ -25,10 +25,12 @@ class BuildEntrypointTests(unittest.TestCase):
                           wrapper_properties()["distributionUrl"])
         if match is None:
             self.fail("distributionUrl must name an apache-maven-X.Y.Z-bin.zip")
-        dockerfile = (ROOT / "deploy" / "docker" / "Dockerfile.build").read_text(encoding="utf-8")
-        image = re.search(r"^ARG MAVEN_IMAGE=(\S+)$", dockerfile, re.MULTILINE)
+        # The official Maven image is the base of datacraft/maven (the pinned Temurin JDK on top),
+        # which the builder image starts from; build-images.sh names it.
+        script = (ROOT / "deploy" / "scripts" / "build-images.sh").read_text(encoding="utf-8")
+        image = re.search(r'^MAVEN_IMAGE="\$\{MAVEN_IMAGE:-(\S+)\}"$', script, re.MULTILINE)
         if image is None:
-            self.fail("Dockerfile.build must declare an ARG MAVEN_IMAGE default")
+            self.fail("build-images.sh must default MAVEN_IMAGE to the official Maven image")
         self.assertTrue(image.group(1).startswith(f"maven:{match.group(1)}-eclipse-temurin-25"),
                         f"{image.group(1)} does not match wrapper Maven {match.group(1)}")
 

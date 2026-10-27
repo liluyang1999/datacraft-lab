@@ -7,21 +7,22 @@
 # The java25 variant is required: the jar targets Java 25 bytecode, so the Spark runtime must be
 # Java 25 too. Spark 4.2.0 supports Java 17/21/25.
 
-# No default: build-images.sh passes the locally built builder. A bare name here would resolve to
-# docker.io/datacraft/*, a Docker Hub namespace this project does not own.
+# No default for either: build-images.sh passes the locally built builder and datacraft/jre, the
+# official JRE image with the pinned Temurin release of Dockerfile.temurin. A bare name here would
+# resolve to docker.io/datacraft/*, a Docker Hub namespace this project does not own.
 ARG JAR_IMAGE
 ARG SPARK_IMAGE=apache/spark:4.2.0-scala2.13-java25-python3-ubuntu
-ARG JRE_IMAGE=eclipse-temurin:25-jre
+ARG JRE_IMAGE
 
 FROM ${JAR_IMAGE} AS jar
 FROM ${JRE_IMAGE} AS jre
 
 FROM ${SPARK_IMAGE}
 USER root
-# --- JRE 25 (the freshly pulled one the other images run) ---
+# --- JRE 25 (the pinned Temurin release the other images run) ---
 # The Spark image is rebuilt less often than Java is patched: on 2026-10-11 it carried 25.0.3,
-# below the 25.0.4.1 the build requires. Its runtime is removed first, so that no file of the old
-# one is left among the new.
+# below the floor of the build at the time. Its runtime is removed first, so that no file of the
+# old one is left among the new.
 RUN rm -rf /opt/java/openjdk
 COPY --from=jre /opt/java/openjdk /opt/java/openjdk
 ENV JAVA_HOME=/opt/java/openjdk

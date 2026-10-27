@@ -28,11 +28,17 @@ certifi 与 urllib3，Airflow 镜像因此在约束安装之后另装
 
 需要 Docker Engine、Docker Compose v2（支持 `up --wait`）、Bash 和 Python 3。镜像内包含 Java 25 运行时、
 Spark 和 Airflow；不要求在云主机上额外安装 Maven、JDK 或 Airflow。构建时要能访问 Docker Hub：
-`build-images.sh` 每次先拉取基础镜像（Maven 构建镜像、`eclipse-temurin:25-jre`、`apache/airflow:3.3.2`），
-使重建的镜像带上这些标签当前的 JDK 与系统补丁。registry 偶尔会断开一次请求，所以显式拉取的三个基础镜像
-（JRE、Airflow、Spark）每个最多尝试三次，间隔 10 秒和 20 秒，三次都失败才退出；`MAVEN_IMAGE`、`JRE_IMAGE`、
-`AIRFLOW_IMAGE`、`SPARK_IMAGE` 可改用其他基础镜像。CI 的 `cicd/images/smoke-images.sh` 检查两个运行镜像的 JRE
-与新拉取的 `JRE_IMAGE` 一致，且版本不低于 25.0.4.1；可选的 Spark 镜像同样检查。
+`build-images.sh` 每次先拉取基础镜像（`maven:3.10.0-eclipse-temurin-25`、`eclipse-temurin:25-jre`、
+`apache/airflow:3.3.2`，构建 Spark 镜像时还有 `apache/spark`），使重建的镜像带上这些标签当前的系统补丁；
+registry 偶尔会断开一次请求，所以每个基础镜像最多尝试拉取三次，间隔 10 秒和 20 秒，三次都失败才退出。
+`MAVEN_IMAGE`、`JRE_IMAGE`、`AIRFLOW_IMAGE`、`SPARK_IMAGE` 可改用其他基础镜像。
+
+所有镜像的 Java 不取自官方镜像，而是 `deploy/docker/Dockerfile.temurin` 固定的 Temurin 版本（目前 25.0.5+8，
+2026 年 10 月的安全更新）：脚本先在官方 Maven 与 JRE 镜像之上换入这个版本，得到 `datacraft/maven` 与
+`datacraft/jre`，其余镜像都在这两个之上构建。官方镜像跟进安全更新可能要晚几天（25.0.5 发布五天后官方镜像
+仍是 25.0.4.1），固定版本不必等它。压缩包从 Adoptium 的发布页下载，BuildKit 校验 SHA-256，与固定值不符
+就拒绝构建；每周的公告工作流会在 Adoptium 出现更新的版本、或者固定的校验和与官方公布的不一致时失败。
+CI 的 `cicd/images/smoke-images.sh` 检查构建镜像与三个运行镜像的 Java 都是这个固定版本，且不低于 25.0.5。
 
 只用 `bash deploy/scripts/build-images.sh` 构建镜像。`Dockerfile.jvm`、`Dockerfile.airflow`、
 `Dockerfile.spark` 的 `JAR_IMAGE` 没有默认值，由脚本传入本机构建的 `datacraft/jar-builder:latest`；
@@ -42,8 +48,7 @@ Spark 和 Airflow；不要求在云主机上额外安装 Maven、JDK 或 Airflow
 `Dockerfile.spark` 是可选的独立 spark-submit 镜像，只有设置 `BUILD_SPARK_IMAGE=true` 时脚本才构建它
 （基础镜像约 740 MB）；两个栈和 DAG 都不使用它（DAG 在 Airflow 镜像里运行 spark-submit）。它与其他镜像
 一样把 `DATACRAFT_DATA_ROOT` 设为 `/opt/datacraft/data`，转换作业的路径须在该目录内，数据卷挂到那里；
-它的 Java 也换成与其他镜像相同的、构建时新拉取的 Temurin JRE（官方 Spark 镜像自带的是 25.0.3，低于
-构建要求的 25.0.4.1）。CI 的 `smoke-images.sh` 会构建它，并以它的非 root 用户在数据目录内完成一次转换和
+它的 Java 也换成与其他镜像相同的固定 Temurin 版本（2026-10-11 官方 Spark 镜像自带的还是 25.0.3）。CI 的 `smoke-images.sh` 会构建它，并以它的非 root 用户在数据目录内完成一次转换和
 计数、拒绝一次目录外的输出。
 
 构建或演练之后，`docker images` 里会出现下面这些名字。真正被部署使用的只有 Airflow 一类（官方镜像、
@@ -55,7 +60,8 @@ Spark 和 Airflow；不要求在云主机上额外安装 Maven、JDK 或 Airflow
 | `postgres:18` | 官方 | 两种部署的 Airflow 元数据库 | 保留 |
 | `redis:8` | 官方 | 只有 Swarm 部署使用（Celery broker） | 只用 Compose 时可删除 |
 | `apache/spark:4.2.0-scala2.13-java25-python3-ubuntu` | 官方 | 可选的 `datacraft/spark` 的基础镜像，自带 Python 3 | 不构建 Spark 镜像时可删除 |
-| `maven:3.10.0-eclipse-temurin-25`、`eclipse-temurin:25-jre` | 官方 | 只在构建时使用：编译 jar，提供复制进各镜像的 JRE | 构建完成即可删除 |
+| `maven:3.10.0-eclipse-temurin-25`、`eclipse-temurin:25-jre` | 官方 | 只在构建时使用：`datacraft/maven` 与 `datacraft/jre` 的基础镜像 | 构建完成即可删除 |
+| `datacraft/maven`、`datacraft/jre` | 本机构建 | 只在构建时使用：官方镜像换入固定的 Temurin 版本，前者编译 jar，后者提供各镜像的 Java | 构建完成即可删除 |
 | `datacraft/jar-builder` | 本机构建 | 只在构建时使用：其余镜像从它复制 jar | 构建完成即可删除 |
 | `datacraft/airflow`、`datacraft/jvm` | 本机构建 | 两种部署实际运行的镜像：Airflow 各服务，JVM API | 部署期间保留 |
 | `datacraft/spark` | 本机构建，可选 | 独立的 spark-submit 镜像，没有部署使用它 | 不用即可删除 |
@@ -67,7 +73,8 @@ statsd、pgbouncer 与 git-sync 没有使用，仓库也没有 Helm 或 Kubernet
 
 ```bash
 docker image rm datacraft/airflow:latest datacraft/jvm:latest datacraft/spark:latest \
-  datacraft/jar-builder:latest maven:3.10.0-eclipse-temurin-25 eclipse-temurin:25-jre registry:3
+  datacraft/jar-builder:latest datacraft/maven:latest datacraft/jre:latest \
+  maven:3.10.0-eclipse-temurin-25 eclipse-temurin:25-jre registry:3
 docker builder prune --all --force
 ```
 
@@ -436,7 +443,7 @@ Airflow 3.3.2 流程、ShellCheck、Compose/Swarm 解析与缺失密钥拒绝、
 单节点 Swarm 上的部署与升级演练。
 工作流只负责编排，每项检查都是 `cicd/` 下的脚本或 `tests/` 下的测试入口，也可以在本机运行；其中
 `cicd/stacks/check-stack-files.sh` 需要 Docker，并且在 `deploy/compose/.env` 已存在时拒绝运行，以免覆盖真实密钥。
-镜像检查（`cicd/images/smoke-images.sh`）还包括 JRE ≥ 25.0.4.1、Airflow ≥ 3.3.2、FAB ≥ 3.9.0、
+镜像检查（`cicd/images/smoke-images.sh`）还包括各镜像的 Java 为固定的 Temurin 版本且 ≥ 25.0.5、Airflow ≥ 3.3.2、FAB ≥ 3.9.0、
 `security-overrides.txt` 里的 certifi 与 urllib3 版本，以及
 API 镜像没有令牌时拒绝启动、不带令牌的请求得到 401、以非 root 运行、数据挂载只读。
 `cicd/images/smoke-compose.sh` 仅限隔离 CI，会销毁其专用测试项目的数据卷，拒绝覆盖已有 `.env`；它还确认
@@ -475,7 +482,7 @@ Windows 的 Docker Desktop 没有为 WSL 发行版启用集成时，可以在一
 `$PWD` 做绑定挂载。2026-10-11 就是这样在本机的 Docker Desktop 上跑通了全部四个脚本。首次构建要下载
 Maven 依赖、pyspark（450 MB）和 Spark 基础镜像（740 MB），慢速网络上以小时计；之后的构建复用镜像层。
 
-本地构建需要 JDK 25.0.4.1 及以上（含 2026 年 7、8 月的安全修复），更低的版本会被 Enforcer 直接拒绝。
+本地构建需要 JDK 25.0.5 及以上（含 2026 年 10 月的安全修复），更低的版本会被 Enforcer 直接拒绝。
 开发环境、构建命令与 `cicd/` 脚本的本地用法见[开发指南](development.md)。
 
 在 Windows 上本地运行 JVM 测试：NIO Selector 需要在临时目录创建 AF_UNIX 套接字，部分 Windows 用户

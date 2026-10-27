@@ -1,0 +1,64 @@
+# syntax=docker/dockerfile:1
+#
+# The Java every image runs: an official base image with its Java replaced by a Temurin release
+# pinned by version and SHA-256. The official eclipse-temurin and maven images can lag a security
+# release by days (Temurin 25.0.5+8 came out on 2026-10-22; on 2026-10-27 both images still shipped
+# 25.0.4.1+1), and the images must not wait for them. BuildKit downloads each archive from
+# Adoptium's release page and refuses it unless its SHA-256 equals the pin (ADD --checksum).
+#
+# Two targets on the same pin, both built by deploy/scripts/build-images.sh:
+#   jre  on eclipse-temurin:25-jre             -> datacraft/jre, the Java of the runtime images
+#   jdk  on maven:3.10.0-eclipse-temurin-25    -> datacraft/maven, the base of the jar builder
+# Only the archive of the target and platform being built is downloaded (amd64 or arm64).
+#
+# A newer release: change TEMURIN_VERSION, TEMURIN_FILE and the four checksums together, taking
+# them from https://api.adoptium.net (each one is also on the release page as <file>.sha256.txt).
+# cicd/security/check_temurin.py fails every week while a newer Temurin 25 release exists, and
+# whenever a checksum here differs from the one Adoptium publishes.
+
+ARG TARGETARCH
+# No default: build-images.sh passes the official base of each target.
+ARG BASE_IMAGE
+ARG TEMURIN_VERSION=25.0.5+8
+ARG TEMURIN_FILE=25.0.5_8
+ARG TEMURIN_JRE_AMD64_SHA256=6fac98f0c8202efc3135a9e9e42aa61963ec42d1c5cbb40caf231e7b14a24ef6
+ARG TEMURIN_JRE_ARM64_SHA256=963931723891302ebb2687178532c3d793d71e2577cd058061c7efb396140a86
+ARG TEMURIN_JDK_AMD64_SHA256=68982529869257d0ee6b824ec5aa270ff8b118bb438670da0b97ebdab178d7fb
+ARG TEMURIN_JDK_ARM64_SHA256=bb5b2ded252f21c6090cf780b0a408ad0d83bbb557e702955643557f13231880
+
+FROM scratch AS jre-amd64
+ARG TEMURIN_VERSION TEMURIN_FILE TEMURIN_JRE_AMD64_SHA256
+ADD --checksum=sha256:${TEMURIN_JRE_AMD64_SHA256} https://github.com/adoptium/temurin25-binaries/releases/download/jdk-${TEMURIN_VERSION}/OpenJDK25U-jre_x64_linux_hotspot_${TEMURIN_FILE}.tar.gz /temurin.tar.gz
+
+FROM scratch AS jre-arm64
+ARG TEMURIN_VERSION TEMURIN_FILE TEMURIN_JRE_ARM64_SHA256
+ADD --checksum=sha256:${TEMURIN_JRE_ARM64_SHA256} https://github.com/adoptium/temurin25-binaries/releases/download/jdk-${TEMURIN_VERSION}/OpenJDK25U-jre_aarch64_linux_hotspot_${TEMURIN_FILE}.tar.gz /temurin.tar.gz
+
+FROM scratch AS jdk-amd64
+ARG TEMURIN_VERSION TEMURIN_FILE TEMURIN_JDK_AMD64_SHA256
+ADD --checksum=sha256:${TEMURIN_JDK_AMD64_SHA256} https://github.com/adoptium/temurin25-binaries/releases/download/jdk-${TEMURIN_VERSION}/OpenJDK25U-jdk_x64_linux_hotspot_${TEMURIN_FILE}.tar.gz /temurin.tar.gz
+
+FROM scratch AS jdk-arm64
+ARG TEMURIN_VERSION TEMURIN_FILE TEMURIN_JDK_ARM64_SHA256
+ADD --checksum=sha256:${TEMURIN_JDK_ARM64_SHA256} https://github.com/adoptium/temurin25-binaries/releases/download/jdk-${TEMURIN_VERSION}/OpenJDK25U-jdk_aarch64_linux_hotspot_${TEMURIN_FILE}.tar.gz /temurin.tar.gz
+
+FROM jre-${TARGETARCH} AS jre-archive
+FROM jdk-${TARGETARCH} AS jdk-archive
+
+FROM ${BASE_IMAGE} AS jre
+ARG TEMURIN_VERSION
+COPY --from=jre-archive /temurin.tar.gz /tmp/temurin.tar.gz
+# The base's own Java goes first, so that no file of the old release stays among the new.
+RUN rm -rf /opt/java/openjdk && mkdir -p /opt/java/openjdk \
+    && tar -xzf /tmp/temurin.tar.gz -C /opt/java/openjdk --strip-components=1 --no-same-owner \
+    && rm /tmp/temurin.tar.gz && ldconfig && java -version
+# The official image names its own release here; it would otherwise still say the old one.
+ENV JAVA_VERSION=jdk-${TEMURIN_VERSION}
+
+FROM ${BASE_IMAGE} AS jdk
+ARG TEMURIN_VERSION
+COPY --from=jdk-archive /temurin.tar.gz /tmp/temurin.tar.gz
+RUN rm -rf /opt/java/openjdk && mkdir -p /opt/java/openjdk \
+    && tar -xzf /tmp/temurin.tar.gz -C /opt/java/openjdk --strip-components=1 --no-same-owner \
+    && rm /tmp/temurin.tar.gz && ldconfig && java -version && javac -version
+ENV JAVA_VERSION=jdk-${TEMURIN_VERSION}

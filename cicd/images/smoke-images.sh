@@ -50,19 +50,24 @@ docker run --rm --entrypoint sh datacraft/jar-builder:latest -c \
   'test ! -e /workspace/backups/ci-probe.dump && test ! -e /workspace/.env' ||
   fail "The build context leaked backups/ or .env into datacraft/jar-builder."
 
-# Every runtime image carries the freshly pulled Temurin JRE, at or above the documented floor.
-jre_image="${JRE_IMAGE:-eclipse-temurin:25-jre}"
-jre_release() { # <image> <key>: one value from the JRE's release file
+# Every image runs the Temurin release pinned in deploy/docker/Dockerfile.temurin, which is at or
+# above the floor the Enforcer also requires (a test keeps the two floors equal).
+java_floor=25.0.5
+pinned=$(sed -n 's/^ARG TEMURIN_VERSION=//p' deploy/docker/Dockerfile.temurin)
+[[ -n "$pinned" ]] || fail "deploy/docker/Dockerfile.temurin pins no TEMURIN_VERSION."
+jre_release() { # <image> <key>: one value from the Java release file of the image
   docker run --rm --entrypoint sed "$1" -n "s/^$2=\"\\(.*\\)\"\$/\\1/p" /opt/java/openjdk/release
 }
-base_version=$(jre_release "$jre_image" JAVA_VERSION)
-base_runtime=$(jre_release "$jre_image" JAVA_RUNTIME_VERSION)
-[[ -n "$base_version" && -n "$base_runtime" ]] || fail "Cannot read the Java version of $jre_image."
-printf '%s\n' 25.0.4.1 "$base_version" | sort -V -C || fail "$jre_image ships Java $base_version, below 25.0.4.1."
-for image in datacraft/jvm:latest datacraft/airflow:latest datacraft/spark:latest; do
+base_version=$(jre_release datacraft/jre:latest JAVA_VERSION)
+base_runtime=$(jre_release datacraft/jre:latest JAVA_RUNTIME_VERSION)
+[[ "$base_runtime" == "$pinned-LTS" ]] ||
+  fail "datacraft/jre runs Java '$base_runtime', not the pinned Temurin $pinned."
+printf '%s\n' "$java_floor" "$base_version" | sort -V -C ||
+  fail "The pinned Temurin $pinned is below the Java floor $java_floor."
+for image in datacraft/jar-builder:latest datacraft/jvm:latest datacraft/airflow:latest datacraft/spark:latest; do
   image_runtime=$(jre_release "$image" JAVA_RUNTIME_VERSION)
   [[ "$image_runtime" == "$base_runtime" ]] ||
-    fail "$image runs Java '$image_runtime', but the freshly pulled $jre_image has '$base_runtime'."
+    fail "$image runs Java '$image_runtime', not the pinned Temurin '$base_runtime'."
 done
 
 # The image serves on all interfaces, so without a token it must refuse to start at all. A server

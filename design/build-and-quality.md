@@ -185,12 +185,13 @@ on a violation. Scala sources are covered by scalac (`-Xlint`, `-Werror`) and sc
 maven-enforcer-plugin runs two executions, both at `validate`:
 
 1. **`enforce-build-environment`** (root, inherited by every module):
-   - `requireJavaVersion [25.0.4.1,)`: "datacraft-lab builds with JDK 25.0.4.1 or newer and targets
-     Java 25 bytecode: 25.0.4.1 carries the July/August 2026 security fixes, and Spark 4.2.0
-     deprecates Java 25 releases older than 25.0.3." 25.0.4.1 is the out-of-band update for the
-     OpenJDK vulnerability advisory of 2026-08-18; CI's `setup-java` and the builder image resolve
-     to it or newer. The rule compares the fourth version component: `[25.0.4.2,)` rejects
-     25.0.4.1.
+   - `requireJavaVersion [25.0.5,)`: "datacraft-lab builds with JDK 25.0.5 or newer and targets
+     Java 25 bytecode: 25.0.5 carries the October 2026 security fixes, and Spark 4.2.0 deprecates
+     Java 25 releases older than 25.0.3." 25.0.5 is the release of Oracle's Critical Patch Update
+     of 2026-10-20; CI's `setup-java` resolves to it or newer, and the builder image runs the
+     Temurin release pinned in `deploy/docker/Dockerfile.temurin`. The rule compares a fourth
+     version component (`[25.0.4.2,)` rejects 25.0.4.1) and accepts Oracle's five-part versions
+     such as 25.0.5.0.3.
    - `requireMavenVersion [3.9.0,)`.
    - `requirePluginVersions` for every plugin up to the `clean`, `deploy` and `site` phases, with
      `LATEST`, `RELEASE` and SNAPSHOT versions banned.
@@ -390,8 +391,10 @@ laptop experiments without `spark-submit`. CI checks the shaded jar in the `buil
   unreachable or, like `maven.java.net`, served an expired certificate, so a clean build depended
   on servers the project does not use. With the option Maven resolves as 3.9 did. Both versions
   compute the same class path, in the same order, for every module.
-- The builder image `deploy/docker/Dockerfile.build` uses `maven:3.10.0-eclipse-temurin-25`, the
-  wrapper's Maven version; a test in `tests/deploy` keeps the two equal, and another one requires
+- The builder image `deploy/docker/Dockerfile.build` starts from `datacraft/maven`: the official
+  `maven:3.10.0-eclipse-temurin-25` image (the wrapper's Maven version) with the pinned Temurin JDK
+  of `deploy/docker/Dockerfile.temurin`. `build-images.sh` names the official image, and a test in
+  `tests/deploy` keeps its Maven version equal to the wrapper's, and another one requires
   the image to copy `.mvn/` before its first Maven run, so the option above applies there too. It
   builds from the Docker build context, not from the checkout:
   `cicd/build/check-image-build.sh` runs its Maven command in a copy of that context.
@@ -491,7 +494,7 @@ compose]`, so it does not start while a cheaper gate is failing.
 | `dags`: Airflow contracts and real pipelines (3.3.2) | Python 3.13, the version the `apache/airflow:3.3.2` image runs; `cicd/airflow/install-airflow.sh`: `apache-airflow==3.3.2` and the providers under the official `constraints-3.3.2` file for the running Python (the script derives the version, as `Dockerfile.airflow` does, and a test in `tests/docs` keeps it from being fixed), `pip check`, then pyspark 4.2.0, then the fixed releases of `orchestration/airflow/security-overrides.txt` over the constrained ones and `pip check` again; `cicd/airflow/check_security_floor.py`: apache-airflow 3.3.2, FAB provider 3.9.0 and every release of the overrides file at least; `tests/orchestration`; `tests/smoke/airflow_runtime_smoke.py` against the jar built by `build`, with pyspark 4.2.0's `spark-submit`. |
 | `scripts`: Script, documentation and type checks | `cicd/lint/check-actions-pinned.sh`; Python 3.13 and Node 24; `cicd/lint/install-shellcheck.sh`: ShellCheck 0.11.0 from the PyPI package `shellcheck-py`, so the result does not depend on the runner image; `cicd/lint/check-shell-scripts.sh`: `bash -n` and ShellCheck on every `*.sh` git knows (tracked or not yet ignored), with sourced files followed and every finding fatal; `tests/deploy`, `tests/ci` and `tests/docs`; `node --test tests/docs/cloud-costs.test.cjs`; pyright 1.1.414 with `--warnings`. |
 | `compose`: Compose / Swarm file validation | `cicd/stacks/check-stack-files.sh`: `docker compose config` and `docker stack config` with test-only secrets; for each required secret, the API token and for the stack the Redis password included, interpolation must fail when it is missing (for the Compose file's database password, whose placeholder the copied `.env` carries, from a copy of that file without the line). Nothing is built or deployed; the script refuses to run while `deploy/compose/.env` exists, because it writes that file from `.env.example`. |
-| `containers`: Build and smoke-test runtime images | Runs after `build`, `scripts` and `compose`. `cicd/images/smoke-images.sh`: builds the images, the optional `datacraft/spark` among them; the build context must exclude `.env` and `backups/`; the three runtime images carry the freshly pulled Temurin JRE, at least 25.0.4.1; the Spark image converts and counts a file inside its data directory as its non-root user and refuses an output outside it; the API image refuses to start without `DATACRAFT_API_TOKEN`, and with one it answers 401 to a `/jobs` request without or with a wrong token; it runs as non-root, cannot modify its jar and answers `spark-version` with HTTP 500 FAILED; `pip check` and `cicd/airflow/check_security_floor.py` inside the Airflow image; a fresh data volume is writable by an Airflow task and read-only for the API; the one-shot initializer, started as both stacks start it, migrates a database and creates the admin under `AIRFLOW_UID=1000`; the real pipelines inside the image, a GBK file converted with `encoding=GBK` among them, and the SFTP pipeline refused through a connection that verifies no host key. `cicd/images/smoke-compose.sh`: the full Compose stack with generated secrets, the generated API token opening `datacraft-api` on its loopback port, all three image-baked DAGs registered, a triggered `datacraft_engine_jobs` run through the scheduler and LocalExecutor, and a `pg_dump` backup restored into a separate database that must contain the successful run; a failure reports the service logs, the task logs and the container states before the stack is removed. `cicd/images/smoke-swarm.sh`: the Swarm stack on a swarm of one node, deployed from a loopback registry by `swarm-deploy.sh` and `airflow-init.sh`; every long-running service running its current tasks (healthy where it has a health check); `datacraft-api` without a published port, answering its token only on the overlay network; the generated admin signing in through the routing mesh; the data volume writable for a worker and read-only for the API; a `datacraft_engine_jobs` run through Redis and a Celery worker; then an upgrade to a second tag, which must run the initializer again, replace every Airflow task, keep the earlier run and run the DAG again. When it ends it leaves the swarm and removes the stack, its volumes, the registry and the image names it created, and it fails when a volume stays behind. It does not cover more than one node; two nodes were tried once by hand (decision 14). |
+| `containers`: Build and smoke-test runtime images | Runs after `build`, `scripts` and `compose`. `cicd/images/smoke-images.sh`: builds the images, the optional `datacraft/spark` among them; the build context must exclude `.env` and `backups/`; the builder and the three runtime images run the Temurin release pinned in `Dockerfile.temurin`, at least 25.0.5; the Spark image converts and counts a file inside its data directory as its non-root user and refuses an output outside it; the API image refuses to start without `DATACRAFT_API_TOKEN`, and with one it answers 401 to a `/jobs` request without or with a wrong token; it runs as non-root, cannot modify its jar and answers `spark-version` with HTTP 500 FAILED; `pip check` and `cicd/airflow/check_security_floor.py` inside the Airflow image; a fresh data volume is writable by an Airflow task and read-only for the API; the one-shot initializer, started as both stacks start it, migrates a database and creates the admin under `AIRFLOW_UID=1000`; the real pipelines inside the image, a GBK file converted with `encoding=GBK` among them, and the SFTP pipeline refused through a connection that verifies no host key. `cicd/images/smoke-compose.sh`: the full Compose stack with generated secrets, the generated API token opening `datacraft-api` on its loopback port, all three image-baked DAGs registered, a triggered `datacraft_engine_jobs` run through the scheduler and LocalExecutor, and a `pg_dump` backup restored into a separate database that must contain the successful run; a failure reports the service logs, the task logs and the container states before the stack is removed. `cicd/images/smoke-swarm.sh`: the Swarm stack on a swarm of one node, deployed from a loopback registry by `swarm-deploy.sh` and `airflow-init.sh`; every long-running service running its current tasks (healthy where it has a health check); `datacraft-api` without a published port, answering its token only on the overlay network; the generated admin signing in through the routing mesh; the data volume writable for a worker and read-only for the API; a `datacraft_engine_jobs` run through Redis and a Celery worker; then an upgrade to a second tag, which must run the initializer again, replace every Airflow task, keep the earlier run and run the DAG again. When it ends it leaves the swarm and removes the stack, its volumes, the registry and the image names it created, and it fails when a volume stays behind. It does not cover more than one node; two nodes were tried once by hand (decision 14). |
 
 Checks of the shaded jar in the `build` job:
 
@@ -554,8 +557,14 @@ and on a push that changes a file which pins a version:
   links), and 2 that OSV could not be asked, so a check that did not run never counts as a pass.
 
 It does not see transitive dependencies, which Spark and the Airflow constraints file pin, or the
-base images. No bot opens pull requests: a failed scheduled run is the signal, and the fix is an
-ordinary commit that raises the pin (decision 13 in [decisions.md](decisions.md)).
+base images. The Java of the images is not taken from a base image but pinned in
+`deploy/docker/Dockerfile.temurin`, and a second step of the same workflow,
+[`cicd/security/check_temurin.py`](../cicd/security/check_temurin.py), asks Adoptium about it: a
+newer Temurin 25 GA release fails the run, and so does a pinned checksum that differs from the
+one Adoptium publishes for the archive (BuildKit would refuse that archive anyway). It exits 2
+when Adoptium could not be asked, and runs even when the OSV step failed. No bot opens pull
+requests: a failed scheduled run is the signal, and the fix is an ordinary commit that raises the
+pin (decision 13 in [decisions.md](decisions.md)).
 
 ## Zero-warning policy
 
@@ -568,7 +577,7 @@ zero:
 | javac | `-Xlint:all`, `failOnWarning` | the build fails |
 | scalac | `-deprecation -feature -unchecked -Xlint -Werror` | the build fails |
 | Formatting and imports | Spotless `check`, Checkstyle | the build fails |
-| Build environment, plugin versions, dependencies | Enforcer rules | the build fails, including on a JDK older than 25.0.4.1 |
+| Build environment, plugin versions, dependencies | Enforcer rules | the build fails, including on a JDK older than 25.0.5 |
 | Shading | manifests filtered, NOTICE merged, one LICENSE, services merged, no `module-info.class` | configuration; CI checks the manifest and `module-info.class` |
 | JVM warnings in the Maven JVM | `.mvn/jvm.config` | configuration |
 | Resolver warnings about third-party repositories | prefix discovery switched off in `.mvn/maven.config` | configuration; a test in `tests/deploy` keeps the option and the builder image's copy of `.mvn/` |
@@ -579,7 +588,7 @@ zero:
 | Shell | ShellCheck 0.11.0 over every shell script git knows, following sourced files; every finding fails, style notes included | CI (`cicd/lint/install-shellcheck.sh` installs that release); `make lint` |
 | Pipeline logic | a `run:` step is one command; logic lives in `cicd/`; every step runs through `cicd/step.py` | `tests/ci/test_workflow.py` |
 
-A clean `./mvnw verify` on JDK 25.0.4.1 prints no Maven or JVM warning at all.
+A clean `./mvnw verify` on JDK 25.0.5 prints no Maven or JVM warning at all.
 
 ## Related documents
 

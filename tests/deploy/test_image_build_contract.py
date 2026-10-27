@@ -42,6 +42,20 @@ def dockerfile(call):
     return Path(call[call.index("-f") + 1]).name
 
 
+def target(call):
+    return call[call.index("--target") + 1] if "--target" in call else None
+
+
+def temurin_args():
+    return arg_defaults("Dockerfile.temurin")
+
+
+# The images this project builds itself: never pulled, never looked up on docker.io.
+LOCAL = ("datacraft/",)
+BUILD_ORDER = [("Dockerfile.temurin", "jdk"), ("Dockerfile.temurin", "jre"), ("Dockerfile.build", None),
+               *((name, None) for name in RUNTIME_DOCKERFILES)]
+
+
 class ImageBuildContractTests(unittest.TestCase):
     def run_build(self, status=0, **env):
         with tempfile.TemporaryDirectory() as directory:
@@ -72,54 +86,101 @@ class ImageBuildContractTests(unittest.TestCase):
             self.assertRegex(text, r"(?m)^ARG JAR_IMAGE$", name)
             self.assertRegex(text, r"(?m)^FROM \$\{JAR_IMAGE\} AS jar$", name)
 
-    def test_only_the_builder_pulls_during_build_and_every_public_base_is_refreshed_first(self):
+    def test_no_build_pulls_and_every_public_base_is_pulled_first(self):
         calls = self.run_build(BUILD_SPARK_IMAGE="true")
         builds = [call for call in calls if call[:1] == ["build"]]
-        self.assertEqual(["Dockerfile.build", *RUNTIME_DOCKERFILES], [dockerfile(call) for call in builds])
-        self.assertIn("--pull", builds[0])
-        for call in builds[1:]:
+        self.assertEqual(BUILD_ORDER, [(dockerfile(call), target(call)) for call in builds])
+        for call in builds:
+            # --pull would look the local images up on docker.io, a namespace this project does not
+            # own; the public bases are pulled explicitly instead, each with retries.
             self.assertNotIn("--pull", call, dockerfile(call))
-            self.assertEqual("datacraft/jar-builder:latest", build_args(call)["JAR_IMAGE"])
-            # Every public base of this build was pulled before it.
             pulled = {c[1] for c in calls[:calls.index(call)] if c[:1] == ["pull"]}
             for key, value in build_args(call).items():
-                if key != "JAR_IMAGE":
+                if not value.startswith(LOCAL):
                     self.assertIn(value, pulled, f"{dockerfile(call)} {key}")
-        self.assertNotIn("MAVEN_IMAGE", build_args(builds[0]))
+        self.assertFalse([call for call in calls if call[:1] == ["pull"] and call[1].startswith(LOCAL)])
+        for call in builds[3:]:
+            self.assertEqual("datacraft/jar-builder:latest", build_args(call)["JAR_IMAGE"])
 
     def test_script_defaults_equal_the_dockerfile_defaults(self):
         calls = self.run_build(BUILD_SPARK_IMAGE="true")
         for call in calls:
-            if call[:1] == ["build"] and dockerfile(call) != "Dockerfile.build":
+            if call[:1] == ["build"] and dockerfile(call) != "Dockerfile.temurin":
                 defaults = arg_defaults(dockerfile(call))
                 for key, value in build_args(call).items():
-                    if key != "JAR_IMAGE":
+                    if not value.startswith(LOCAL):
                         self.assertEqual(defaults[key], value, f"{dockerfile(call)} {key}")
 
     def test_overridden_bases_are_used(self):
         calls = self.run_build(MAVEN_IMAGE="maven:test", JRE_IMAGE="jre:test", AIRFLOW_IMAGE="airflow:test")
-        builds = {dockerfile(call): build_args(call) for call in calls if call[:1] == ["build"]}
-        self.assertEqual("maven:test", builds["Dockerfile.build"]["MAVEN_IMAGE"])
-        self.assertEqual("jre:test", builds["Dockerfile.jvm"]["JRE_IMAGE"])
-        self.assertEqual({"jre:test", "airflow:test"},
-                         {builds["Dockerfile.airflow"]["JRE_IMAGE"], builds["Dockerfile.airflow"]["AIRFLOW_IMAGE"]})
-        self.assertNotIn("Dockerfile.spark", builds)
-        self.assertIn(["pull", "airflow:test"], calls)
+        builds = {(dockerfile(call), target(call)): build_args(call) for call in calls if call[:1] == ["build"]}
+        # The overrides name the official bases; the pinned Temurin release goes on top of them.
+        self.assertEqual("maven:test", builds[("Dockerfile.temurin", "jdk")]["BASE_IMAGE"])
+        self.assertEqual("jre:test", builds[("Dockerfile.temurin", "jre")]["BASE_IMAGE"])
+        self.assertEqual("airflow:test", builds[("Dockerfile.airflow", None)]["AIRFLOW_IMAGE"])
+        self.assertNotIn(("Dockerfile.spark", None), builds)
+        for image in ("maven:test", "jre:test", "airflow:test"):
+            self.assertIn(["pull", image], calls)
+
+    def test_the_temurin_pin_names_one_release_with_a_checksum_for_each_archive(self):
+        text = (DOCKERFILES / "Dockerfile.temurin").read_text(encoding="utf-8")
+        args = temurin_args()
+        version = args["TEMURIN_VERSION"]
+        self.assertRegex(version, r"^25\.\d+\.\d+(\.\d+)?\+\d+$")
+        self.assertEqual(version.replace("+", "_"), args["TEMURIN_FILE"])
+        checksums = {key: value for key, value in args.items() if key.endswith("_SHA256")}
+        self.assertEqual({f"TEMURIN_{kind}_{arch}_SHA256" for kind in ("JRE", "JDK") for arch in ("AMD64", "ARM64")},
+                         set(checksums))
+        for key, value in checksums.items():
+            self.assertRegex(value, r"^[0-9a-f]{64}$", key)
+        self.assertEqual(4, len(set(checksums.values())))
+        self.assertNotIn("BASE_IMAGE", args)
+        for kind, arch, platform in (("jre", "amd64", "x64"), ("jre", "arm64", "aarch64"),
+                                     ("jdk", "amd64", "x64"), ("jdk", "arm64", "aarch64")):
+            with self.subTest(archive=f"{kind}-{arch}"):
+                stage = re.search(rf"(?ms)^FROM scratch AS {kind}-{arch}$(.*?)(?=^FROM )", text)
+                assert stage is not None, f"no stage {kind}-{arch}"
+                self.assertIn(f"ADD --checksum=sha256:${{TEMURIN_{kind.upper()}_{arch.upper()}_SHA256}} "
+                              "https://github.com/adoptium/temurin25-binaries/releases/download/"
+                              f"jdk-${{TEMURIN_VERSION}}/OpenJDK25U-{kind}_{platform}_linux_hotspot_"
+                              "${TEMURIN_FILE}.tar.gz /temurin.tar.gz", stage.group(1))
+        for kind in ("jre", "jdk"):
+            with self.subTest(target=kind):
+                stage = re.search(rf"(?ms)^FROM \$\{{BASE_IMAGE\}} AS {kind}$(.*?)(?=^FROM |\Z)", text)
+                assert stage is not None, f"no target {kind}"
+                body = stage.group(1)
+                self.assertIn(f"COPY --from={kind}-archive /temurin.tar.gz /tmp/temurin.tar.gz", body)
+                # The base's own Java goes first, so that no file of the old release stays among the new.
+                self.assertLess(body.index("rm -rf /opt/java/openjdk"), body.index("tar -xzf /tmp/temurin.tar.gz"))
+                self.assertIn("ENV JAVA_VERSION=jdk-${TEMURIN_VERSION}", body)
+
+    def test_the_java_floors_are_one_release_the_pin_meets(self):
+        pom = (DEPLOY.parent / "pom.xml").read_text(encoding="utf-8")
+        smoke = (DEPLOY.parent / "cicd" / "images" / "smoke-images.sh").read_text(encoding="utf-8")
+        enforcer = re.search(r"<requireJavaVersion>\s*<version>\[([0-9.]+),\)</version>", pom)
+        image = re.search(r"(?m)^java_floor=([0-9.]+)$", smoke)
+        assert enforcer is not None and image is not None, "a Java floor is missing"
+        self.assertEqual(enforcer.group(1), image.group(1))
+
+        def release(value):
+            return tuple(int(part) for part in re.findall(r"\d+", value.split("+")[0]))
+
+        self.assertGreaterEqual(release(temurin_args()["TEMURIN_VERSION"]), release(enforcer.group(1)))
 
     def test_a_failed_pull_is_retried_before_the_build_goes_on(self):
         # Docker Hub drops a token request now and then ("failed to fetch anonymous token ... EOF"),
         # which once stopped a local build that a plain rerun then finished.
         calls = self.run_build(FAILING_PULL="apache/airflow:3.3.2", PULL_FAILURES="2")
         self.assertEqual(3, calls.count(["pull", "apache/airflow:3.3.2"]))
-        built = [dockerfile(call) for call in calls if call[:1] == ["build"]]
-        self.assertEqual(["Dockerfile.build", "Dockerfile.jvm", "Dockerfile.airflow"], built)
+        built = [(dockerfile(call), target(call)) for call in calls if call[:1] == ["build"]]
+        self.assertEqual(BUILD_ORDER[:5], built)
         self.assertIn("apache/airflow:3.3.2", self.stderr)
 
     def test_a_pull_that_keeps_failing_stops_the_build(self):
         calls = self.run_build(status=1, FAILING_PULL="apache/airflow:3.3.2", PULL_FAILURES="99")
         self.assertEqual(3, calls.count(["pull", "apache/airflow:3.3.2"]))
-        built = [dockerfile(call) for call in calls if call[:1] == ["build"]]
-        self.assertEqual(["Dockerfile.build", "Dockerfile.jvm"], built)
+        built = [(dockerfile(call), target(call)) for call in calls if call[:1] == ["build"]]
+        self.assertEqual(BUILD_ORDER[:4], built)
         self.assertIn("apache/airflow:3.3.2", self.stderr)
 
     def test_airflow_base_carries_the_fab_security_fixes(self):
@@ -150,17 +211,20 @@ class ImageBuildContractTests(unittest.TestCase):
         self.assertRegex(spark, r"(?m)^RUN mkdir -p /opt/datacraft/data ")
         self.assertRegex(spark, r"(?m)^\s+DATACRAFT_DATA_ROOT=/opt/datacraft/data$")
 
-    def test_every_runtime_image_takes_its_java_from_the_same_jre_image(self):
-        # The Spark base image is rebuilt less often than Java is patched: it carried 25.0.3 while
-        # the build required 25.0.4.1. Each image therefore copies the runtime of JRE_IMAGE, which
-        # the script pulls before it builds.
+    def test_every_image_takes_its_java_from_the_pinned_temurin_release(self):
+        # The official images lag security releases (25.0.5 on 2026-10-27, five days after its
+        # release), and the Spark base image lags further (25.0.3 on 2026-10-11). Every image
+        # therefore runs the pinned release that Dockerfile.temurin puts on top of the official base.
         calls = self.run_build(BUILD_SPARK_IMAGE="true", JRE_IMAGE="jre:test")
         builds = {dockerfile(call): build_args(call) for call in calls if call[:1] == ["build"]}
+        self.assertEqual("datacraft/maven:latest", builds["Dockerfile.build"]["MAVEN_IMAGE"])
+        self.assertRegex((DOCKERFILES / "Dockerfile.build").read_text(encoding="utf-8"), r"(?m)^ARG MAVEN_IMAGE$")
         for name in RUNTIME_DOCKERFILES:
             with self.subTest(dockerfile=name):
-                self.assertEqual("jre:test", builds[name]["JRE_IMAGE"])
+                self.assertEqual("datacraft/jre:latest", builds[name]["JRE_IMAGE"])
                 text = (DOCKERFILES / name).read_text(encoding="utf-8")
-                self.assertEqual("eclipse-temurin:25-jre", arg_defaults(name)["JRE_IMAGE"])
+                self.assertNotIn("JRE_IMAGE", arg_defaults(name))
+                self.assertRegex(text, r"(?m)^ARG JRE_IMAGE$")
                 self.assertRegex(text, r"(?m)^FROM \$\{JRE_IMAGE\}( AS jre)?$")
         spark = (DOCKERFILES / "Dockerfile.spark").read_text(encoding="utf-8").splitlines()
         # Removed before the copy: a COPY onto the old runtime would leave its other files in place.

@@ -6,10 +6,10 @@ is covered in [the usage guide](usage.md); the reasoning behind the build rules 
 
 ## Prerequisites
 
-- **JDK 25.0.4.1 or newer.** The build targets Java 25 bytecode, and the Enforcer fails it on an
-  older JDK: "datacraft-lab builds with JDK 25.0.4.1 or newer and targets Java 25 bytecode:
-  25.0.4.1 carries the July/August 2026 security fixes, and Spark 4.2.0 deprecates Java 25 releases
-  older than 25.0.3." On Windows, set `$env:JAVA_HOME` (for example `C:\path\to\jdk-25`) if Maven
+- **JDK 25.0.5 or newer.** The build targets Java 25 bytecode, and the Enforcer fails it on an
+  older JDK: "datacraft-lab builds with JDK 25.0.5 or newer and targets Java 25 bytecode: 25.0.5
+  carries the October 2026 security fixes, and Spark 4.2.0 deprecates Java 25 releases older than
+  25.0.3." On Windows, set `$env:JAVA_HOME` (for example `C:\path\to\jdk-25`) if Maven
   does not find it.
 - **Maven, through the wrapper.** `./mvnw` (Linux, macOS, WSL) and `mvnw.cmd` (Windows; it runs its
   logic in PowerShell) are Maven Wrapper 3.3.4 scripts; no wrapper jar is committed. On first use
@@ -215,7 +215,7 @@ steps of the `containers` job and live with the pipeline scripts in `cicd/images
 | Script | Needs | What it proves | CI job |
 | --- | --- | --- | --- |
 | `tests/smoke/airflow_runtime_smoke.py --jar <jar>` | The Airflow environment plus `pyspark==4.2.0`, Java 25, Bash | Runs the three DAGs for real against the packaged CLI, local Spark and a temporary local SFTP server, including a GBK file converted with `encoding=GBK`, and then requires a run of the SFTP DAG through a connection that verifies no host key to fail before it downloads anything; all state lives in a temporary directory | `dags`, and inside the Airflow image in `smoke-images.sh` |
-| `cicd/images/smoke-images.sh` | Docker | Builds the images, the optional `datacraft/spark` among them; checks that the JRE is at least 25.0.4.1 and the same in all three runtime images, the API image (no start without a token, health, 401 without the token, non-root user, read-only jar, a Spark job answering 500 FAILED), the Airflow image's dependency and security floors (`cicd/airflow/check_security_floor.py`, run inside the image), the shared data volume's permissions, a conversion and a count inside the Spark image's data directory and the refusal of an output outside it, and the stacks' one-shot initializer under UID 1000; then runs the Airflow smoke test inside the Airflow image | `containers` |
+| `cicd/images/smoke-images.sh` | Docker | Builds the images, the optional `datacraft/spark` among them; checks that the builder and the three runtime images run the Temurin release pinned in `deploy/docker/Dockerfile.temurin`, at least 25.0.5, the API image (no start without a token, health, 401 without the token, non-root user, read-only jar, a Spark job answering 500 FAILED), the Airflow image's dependency and security floors (`cicd/airflow/check_security_floor.py`, run inside the image), the shared data volume's permissions, a conversion and a count inside the Spark image's data directory and the refusal of an output outside it, and the stacks' one-shot initializer under UID 1000; then runs the Airflow smoke test inside the Airflow image | `containers` |
 | `cicd/images/smoke-compose.sh` | Docker, the images, `CI=true` | Starts the Compose stack with fresh secrets, checks the admin login and that the generated API token opens `datacraft-api`, waits for all three image-baked DAGs to be registered, runs the engine DAG through the scheduler, and restores a metadata backup into a separate database; then removes the stack and its volumes. When it fails it prints the service logs, the task logs and the container states before it removes the stack | `containers` |
 | `cicd/images/smoke-swarm.sh` | Docker outside any swarm, the images, `CI=true` | Rehearses the documented Swarm deployment on a swarm of one node: a loopback registry, both images under an exact tag, `swarm-deploy.sh` and `airflow-init.sh`; requires every service to run (healthy where it has a health check), the engine API to answer its token only and only on the overlay network, the generated admin to sign in through the routing mesh, and the engine DAG to run through Redis and a Celery worker; then deploys a second tag and requires the initializer to run again, the idle worker to stop, the earlier run to survive and the DAG to run again. Leaves the swarm and removes the stack, its volumes, the registry and the names it gave the images, and fails when a volume stays. One node says nothing about placement or failover | `containers` |
 
@@ -330,8 +330,12 @@ manages, Airflow, pyspark, the FAB provider floor, the fixed releases of
 workflows) and asks [OSV](https://osv.dev) about each. It exits `1` and prints one `::error::` line
 per affected pin when a pinned version has an advisory, and `2` when OSV could not be asked, so a
 dead check never looks like a pass. `--list` prints the pins without asking anything. Transitive
-dependencies and the base images are outside its reach. Nothing opens pull requests: a failed run
-is the signal, and raising the pin is a normal commit.
+dependencies and the base images are outside its reach. A second step,
+`python3 -B cicd/security/check_temurin.py`, asks Adoptium about the Temurin release that every image
+runs: it fails while a newer Temurin 25 release exists, or when a checksum pinned in
+`deploy/docker/Dockerfile.temurin` differs from the one Adoptium publishes, and exits `2` when
+Adoptium could not be asked. Nothing opens pull requests: a failed run is the signal, and raising
+the pin is a normal commit.
 
 ### Test-count floors
 
@@ -365,7 +369,7 @@ pom's `<modules>`.
 - pyright stays at zero errors and zero warnings (see [Type checking](#type-checking)).
 - ShellCheck 0.11.0 reports nothing at all, style notes included, for any shell script
   (`make lint`).
-- A local `./mvnw verify` on JDK 25.0.4.1 prints no Maven or JVM warning at all; an older JDK fails
+- A local `./mvnw verify` on JDK 25.0.5 prints no Maven or JVM warning at all; an older JDK fails
   the Enforcer instead of warning.
 
 The reasons and the rest of the build rules are in
@@ -377,7 +381,7 @@ The reasons and the rest of the build rules are in
   wrapper downloads the `.tar.gz` distribution, whose checksum cannot match the pinned zip. Install
   `unzip` and run it again. Without `sha256sum` or `shasum` it stops with "Checksum validation was
   requested but neither 'sha256sum' or 'shasum' are available."
-- **`validate` fails on `requireJavaVersion`**: the JDK is older than 25.0.4.1. Install 25.0.4.1
+- **`validate` fails on `requireJavaVersion`**: the JDK is older than 25.0.5. Install 25.0.5
   or newer and point `JAVA_HOME` at it.
 - **`validate` fails on `enforce-module-boundaries`**: a new dependency crosses a module boundary.
   The message ends in `(design/architecture.md, "Module responsibilities")`; see

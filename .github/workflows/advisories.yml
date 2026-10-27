@@ -1,9 +1,9 @@
 name: Advisories
 
 # Every dependency and action is pinned, so a pin that becomes vulnerable stays in place until
-# someone notices. This workflow asks OSV about each pinned version once a week, and whenever a
-# file that pins something changes; a new advisory shows up as a failed run. Nothing here opens
-# pull requests or commits.
+# someone notices. This workflow asks OSV about each pinned version, and Adoptium about the pinned
+# Temurin release, once a week and whenever a file that pins something changes; a new advisory or
+# a newer Temurin release shows up as a failed run. Nothing here opens pull requests or commits.
 on:
   schedule:
     # Mondays, off the hour: scheduled runs queue longest at the top of an hour.
@@ -19,6 +19,7 @@ on:
       - cicd/security/**
       - cicd/step.py
       - orchestration/airflow/security-overrides.txt
+      - deploy/docker/Dockerfile.temurin
   workflow_dispatch:
 
 permissions:
@@ -39,3 +40,9 @@ jobs:
 
       - name: Ask OSV about every pinned dependency and action
         run: python3 -B cicd/security/check_advisories.py
+
+      # The Java of every image: a newer Temurin release or a wrong checksum fails the run. It runs
+      # whatever the OSV step found, so one stale pin does not hide the other.
+      - name: Ask Adoptium whether the pinned Temurin release is the newest
+        if: success() || failure()
+        run: python3 -B cicd/security/check_temurin.py

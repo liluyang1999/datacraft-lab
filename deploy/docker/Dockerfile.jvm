@@ -10,10 +10,11 @@
 # there read-only, and Docker seeds an empty volume from whichever image mounts it first: this image
 # must leave that to the Airflow image, whose copy of the directory is group-writable for tasks.
 
-# No default: build-images.sh passes the locally built builder. A bare name here would resolve to
-# docker.io/datacraft/*, a Docker Hub namespace this project does not own.
+# No default for either: build-images.sh passes the locally built builder and datacraft/jre, the
+# official JRE image with the pinned Temurin release of Dockerfile.temurin. A bare name here would
+# resolve to docker.io/datacraft/*, a Docker Hub namespace this project does not own.
 ARG JAR_IMAGE
-ARG JRE_IMAGE=eclipse-temurin:25-jre
+ARG JRE_IMAGE
 
 FROM ${JAR_IMAGE} AS jar
 

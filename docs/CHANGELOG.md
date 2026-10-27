@@ -6,6 +6,52 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Java 25.0.5 everywhere: a pinned Temurin release (2026-10-27)
+
+The last version defect of the previous round: the October 2026 security update of Java was in the
+build but not in the images, because the official `eclipse-temurin` and `maven` images still
+shipped 25.0.4.1+1 five days after Temurin 25.0.5+8 came out (their update waits for other
+architectures; on 2026-10-27 `eclipse-temurin:25-jre` was re-pushed with a new Ubuntu layer and the
+same Java). The images no longer wait for them. Items marked **BREAKING** need action.
+
+#### Security
+- **BREAKING:** the build requires JDK 25.0.5 or newer (`requireJavaVersion [25.0.5,)`), the release
+  of Oracle's Critical Patch Update of 2026-10-20 (39 fixes that list 25.0.4.1 as affected, among
+  them CVE-2026-91453 in the JDK HTTP server the API uses). A build on 25.0.4.1 now stops at
+  `validate` with "datacraft-lab builds with JDK 25.0.5 or newer ...". Oracle's five-part versions
+  such as 25.0.5.0.3 pass.
+- Every image runs Temurin 25.0.5+8, pinned in the new `deploy/docker/Dockerfile.temurin` by version
+  and by the SHA-256 of its four archives (JRE and JDK, amd64 and arm64, checked against Adoptium's
+  API and release page). BuildKit downloads the archive from Adoptium's release page and refuses
+  it when the checksum differs (`ADD --checksum`; a wrong checksum ends the build with "digest
+  mismatch", tried locally). `build-images.sh` first builds `datacraft/maven` (the official Maven
+  image with the pinned JDK) and `datacraft/jre` (the official JRE image with the pinned JRE); the
+  builder starts from the first, the three runtime images take their Java from the second. The
+  new release also drops `emSign ECC Root CA - G3`, whose intermediate CAs have compromised keys,
+  from the Java trust store; 25.0.4.1 still trusted it.
+- `cicd/security/check_temurin.py`, a second step of the advisory workflow, fails while Adoptium has
+  a newer Temurin 25 release than the pin, and when a pinned checksum differs from the one Adoptium
+  publishes. It runs even when the OSV step failed, and on a push that changes the pin.
+
+#### Changed
+- `build-images.sh` pulls every public base explicitly, with its retries, the Maven image included,
+  and no build uses `--pull` any more: each one starts from a local `datacraft/*` image, which
+  `--pull` would look up on docker.io. `MAVEN_IMAGE` and `JRE_IMAGE` now name the official bases
+  under the pinned Java; `Dockerfile.build` and the runtime Dockerfiles have no default for their
+  base, like `JAR_IMAGE`.
+- `smoke-images.sh` requires the builder and the three runtime images to run exactly the pinned
+  release, and that release to be at least 25.0.5; a test keeps that floor equal to the
+  Enforcer's and at most the pin.
+- Two more images are left after a build, `datacraft/maven` and `datacraft/jre`; the deployment
+  guide's table and cleanup commands list them.
+
+#### Added
+- Tests: the pin names one release with a checksum for each archive, each target removes the base's
+  Java before it unpacks the new one and sets `JAVA_VERSION`, no build uses `--pull` and every
+  public base is pulled first, the Java floors agree (`tests/deploy`); the Temurin check against a
+  stubbed Adoptium: current, newer release, wrong checksum, unreachable, unreadable pin
+  (`tests/ci/test_check_temurin.py`).
+
 ### Version defects, the October Java update and a third review of every module (2026-10-26)
 
 The workstation moved to Oracle JDK 25.0.5.0.3 and Docker Desktop 4.96.3 (Engine 29.9.2, Compose
