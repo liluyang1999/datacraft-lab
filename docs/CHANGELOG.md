@@ -47,6 +47,9 @@ All notable changes to this project are documented here. The format follows
   shared-runner spikes remain documented; added diagnostics do not establish that their cause is fixed.
 - UI latency tests wait for actual rendering before measuring warmed navigation, while a separate
   first-render gate covers the initial visit to every view; existing warmed budgets are unchanged.
+- AOT training recognizes incomplete virtual-thread event diagnostics only when the same output
+  confirms that exact class is a JFR exclusion. All diagnostics remain visible, unconfirmed or
+  erroneous classes still fail, and normal cached starts retain strict warning checks.
 - Reproduction, measurements, native checks and delivery evidence are recorded in
   [desktop round L8](desktop/loop/log.md#l8-启动与原生无障碍专项2026-10-28).
 

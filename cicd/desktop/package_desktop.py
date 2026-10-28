@@ -54,7 +54,13 @@ BAD_DIAGNOSTIC = re.compile(r"Exception in thread|\b(?:WARNING|SEVERE|ERROR)[: ]
 # warning (including these) during normal cached starts. See systemDictionaryShared.cpp in JDK 25.
 AOT_EXCLUSION = re.compile(
     r"^\[\d+\.\d+s\]\[warning\]\[aot\] Skipping "
-    r"(?:jdk/internal/event/[\w$]+: JFR event class|jdk/proxy\d+/\$Proxy\d+: Unsupported location)$")
+    r"(?:(?P<event>jdk/internal/event/[\w$]+): JFR event class|jdk/proxy\d+/\$Proxy\d+: Unsupported location)$")
+# JDK 25 can also report these events as incomplete while assembling the cache.
+# Accept that reason only when this same training output confirms the same class is a JFR
+# exclusion; arbitrary incomplete classes, error states and normal-start warnings still fail.
+AOT_INCOMPLETE_EVENT = re.compile(
+    r"^\[\d+\.\d+s\]\[warning\]\[aot\] Skipping "
+    r"(jdk/internal/event/VirtualThread(?:Start|End)Event): Not in loaded state$")
 PATCH_MARKER = "META-INF/datacraft-javafx-patch.properties"
 
 
@@ -100,12 +106,22 @@ def run(command, env=None, timeout=600, diagnostics=False, aot_training=False, c
     output = completed.stdout + completed.stderr
     checked = output
     if diagnostics and aot_training:
-        exclusions = [line for line in output.splitlines() if AOT_EXCLUSION.fullmatch(line)]
+        lines = output.splitlines()
+        excluded_events = {match.group("event") for line in lines
+                           if (match := AOT_EXCLUSION.fullmatch(line)) and match.group("event")}
+        exclusions = []
+        unexpected = []
+        for line in lines:
+            incomplete = AOT_INCOMPLETE_EVENT.fullmatch(line)
+            if (AOT_EXCLUSION.fullmatch(line)
+                    or (incomplete and incomplete.group(1) in excluded_events)):
+                exclusions.append(line)
+            else:
+                unexpected.append(line)
         if exclusions:
             print("JVM AOT training exclusions (these classes remain uncached):\n"
                   + "\n".join(exclusions), flush=True)
-        checked = "\n".join(line for line in output.splitlines()
-                            if not AOT_EXCLUSION.fullmatch(line))
+        checked = "\n".join(unexpected)
     if diagnostics and BAD_DIAGNOSTIC.search(checked):
         raise Failed(f"{Path(command[0]).name} logged an error or warning:\n{output}")
     return output if diagnostics else completed.stdout

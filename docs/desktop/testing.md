@@ -76,5 +76,7 @@ Windows 的受限运行环境若在进入测试前报 `Unable to establish loopb
   `--enable-native-access=javafx.graphics,ALL-UNNAMED` 显式授权）；界面测试把 JavaFX 记录的警告当作失败。
 - 每个窗口测试结束时还核对 FX 线程未捕获的异常；原生回调或事件异常会让 JUnit 失败，不能只打印到标准错误。
 - 构建的 AOT 训练保留 HotSpot 对 JFR 事件类及动态 JDK 代理的已知排除提示；这些类不进入缓存。
-  仅识别完整匹配的两类信息，其他训练警告失败。正常缓存启动仍拒绝全部警告，并确认实际使用 AOT。
-  原因见 [OpenJDK 25 的缓存排除实现](https://github.com/openjdk/jdk25u/blob/master/src/hotspot/share/classfile/systemDictionaryShared.cpp)。
+  仅识别完整匹配的信息；虚拟线程 Start / End 事件的 `Not in loaded state` 只有在同一训练日志
+  确认同一个类也因 `JFR event class` 排除时才接受。未配对、其他类、错误状态及其他训练警告失败，
+  所有排除仍完整输出。正常缓存启动仍拒绝全部警告，并确认实际使用 AOT。
+  原因见 [OpenJDK 25 的缓存排除实现](https://github.com/openjdk/jdk/blob/jdk-25-ga/src/hotspot/share/classfile/systemDictionaryShared.cpp#L235-L280)。

@@ -229,6 +229,32 @@ class CacheTests(unittest.TestCase):
                     with self.assertRaises(packaging.Failed):
                         packaging.run(["launcher"], diagnostics=True, aot_training=True)
 
+    def test_training_accepts_an_incomplete_event_only_with_its_jfr_exclusion(self):
+        for name in ("VirtualThreadStartEvent", "VirtualThreadEndEvent"):
+            with self.subTest(name=name):
+                output = (f"[2.852s][warning][aot] Skipping jdk/internal/event/{name}: Not in loaded state\n"
+                          f"[2.852s][warning][aot] Skipping jdk/internal/event/{name}: JFR event class\n")
+                result = subprocess.CompletedProcess(["launcher"], 0, output, "")
+                with mock.patch.object(packaging.subprocess, "run", return_value=result):
+                    with self.assertRaises(packaging.Failed):
+                        packaging.run(["launcher"], diagnostics=True)
+                    with mock.patch("builtins.print") as printed:
+                        self.assertEqual(output, packaging.run(["launcher"], diagnostics=True, aot_training=True))
+                        self.assertIn(output.strip(), printed.call_args.args[0])
+
+    def test_training_does_not_hide_unconfirmed_or_failed_event_loading(self):
+        confirmed = "[2.852s][warning][aot] Skipping jdk/internal/event/VirtualThreadEndEvent: JFR event class\n"
+        for output in (
+                "[2.852s][warning][aot] Skipping jdk/internal/event/VirtualThreadEndEvent: Not in loaded state\n",
+                confirmed + "[2.852s][warning][aot] Skipping jdk/internal/event/VirtualThreadStartEvent: Not in loaded state\n",
+                confirmed + "[2.852s][warning][aot] Skipping app/Broken: Not in loaded state\n",
+                confirmed + "[2.852s][warning][aot] Skipping jdk/internal/event/VirtualThreadEndEvent: In error state\n"):
+            with self.subTest(output=output):
+                result = subprocess.CompletedProcess(["launcher"], 0, output, "")
+                with mock.patch.object(packaging.subprocess, "run", return_value=result):
+                    with self.assertRaises(packaging.Failed):
+                        packaging.run(["launcher"], diagnostics=True, aot_training=True)
+
     def test_a_reused_profile_cannot_reuse_an_earlier_first_frame(self):
         with tempfile.TemporaryDirectory() as directory:
             home = Path(directory) / "home"

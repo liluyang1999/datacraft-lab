@@ -315,7 +315,7 @@
     <div class="kpi"><dt>后端 Maven 模块</dt><dd class="v">8</dd><dd class="d">4 个职责分组，依赖范围由构建强制</dd></div>
     <div class="kpi"><dt>可调度作业</dt><dd class="v">7</dd><dd class="d">纯 JVM 2 · Spark 3 · 内置 2</dd></div>
     <div class="kpi"><dt>JVM 测试用例</dt><dd class="v">445</dd><dd class="d">后端 317 · 桌面 128（含端到端 11）；按平台与标签分组执行，结果见 4.4</dd></div>
-    <div class="kpi"><dt>Python 与 Node 测试</dt><dd class="v">259</dd><dd class="d">部署 71 · CI/CD 145 · 文档 16 · DAG 21 · 计算器 6</dd></div>
+    <div class="kpi"><dt>Python 与 Node 测试</dt><dd class="v">261</dd><dd class="d">部署 71 · CI/CD 147 · 文档 16 · DAG 21 · 计算器 6</dd></div>
     <div class="kpi"><dt>项目源码检查问题</dt><dd class="v">0</dd><dd class="d">源码编译、pyright、ShellCheck 无诊断；第三方首次编译提示另见 4.4</dd></div>
     <div class="kpi"><dt>综合评分</dt><dd class="v">4.4<small>/ 5</small></dd><dd class="d">13 个维度，新增桌面控制台；2026-09-25 审计前为 3.2</dd></div>
     <div class="kpi"><dt>常开月费</dt><dd class="v">$10.15</dd><dd class="d">腾讯云 Lighthouse 2 核 / 8 GB / 80 GB</dd></div>
@@ -350,14 +350,14 @@
 
 <section id="summary" aria-labelledby="h-summary">
   <h2 id="h-summary">一、执行摘要</h2>
-  <p><strong>总体结论：</strong>L8 已修复 Windows 原生无障碍生命周期异常，并在 Windows、Linux 最终各 20 次原生缓存启动中全部达到 1.5 s 预算。两平台完整桌面门禁通过，远端 CI 的本轮结果见 4.5；测量条件和密集 UIA 读取的性能边界见 4.4、第八章。CLI、HTTP API 与 Airflow 共用同一个 <code>DataJob</code> 契约和执行引擎，失败语义统一；8 个 Maven 模块按职责分为 core、io、processing、interfaces 四组，越界依赖在构建的 <code>validate</code> 阶段即失败；质量门禁拒绝项目源码编译、类型检查或 Shell 检查警告，CI/CD 逻辑集中在 <code>cicd/</code>，可以脱离 GitHub Actions 在本机复现；流水线步骤的失败原因写入公开注解；Compose 栈与 Swarm 栈在 L7 本机及远端 CI 中均实际部署过；所有镜像运行按版本与校验和固定的 Temurin 25.0.5。桌面控制台“数艺工坊”在一个窗口里查看与操作两个后台，它只是客户端，默认后端构建不包含桌面工程。</p>
+  <p><strong>总体结论：</strong>L8 的窗口、动效及 Windows 原生无障碍修复通过两平台完整门禁。启动稳定性尚未关闭：先前三组 20 次缓存启动全部达标，最新本机复测仍有 3 次超时、最大 2614 ms；完整失败样本保留，未放宽 1.5 s 预算。远端 CI 的逐提交结果见 4.5，测量条件与密集 UIA 读取的性能边界见 4.4、第八章。CLI、HTTP API 与 Airflow 共用同一个 <code>DataJob</code> 契约和执行引擎，失败语义统一；8 个 Maven 模块按职责分为 core、io、processing、interfaces 四组，越界依赖在构建的 <code>validate</code> 阶段即失败；质量门禁拒绝项目源码编译、类型检查或 Shell 检查警告，CI/CD 逻辑集中在 <code>cicd/</code>，可以脱离 GitHub Actions 在本机复现；流水线步骤的失败原因写入公开注解；Compose 栈与 Swarm 栈在 L7 本机及远端 CI 中均实际部署过；所有镜像运行按版本与校验和固定的 Temurin 25.0.5。桌面控制台“数艺工坊”在一个窗口里查看与操作两个后台，它只是客户端，默认后端构建不包含桌面工程。</p>
   <div class="split">
     <div class="box">
       <span class="box-label">主要优势</span>
       <ul>
         <li>一个契约、一个引擎、三种入口，新作业注册一次即可在 CLI、API 与 Airflow 中使用（第三章）。</li>
         <li>模块边界、JDK 版本下限与零警告由构建强制，而不是靠约定（3.2、4.3）。</li>
-        <li>317 项后端 JVM 测试、128 项桌面测试（含 11 项端到端）与 259 项脚本、文档、DAG 测试。平台测试和端到端测试分组执行；默认门禁下限为 Linux 后端 310、Windows 后端 300，桌面 Linux 114、Windows 116 项（4.2、4.4）。</li>
+        <li>317 项后端 JVM 测试、128 项桌面测试（含 11 项端到端）与 261 项脚本、文档、DAG 测试。平台测试和端到端测试分组执行；默认门禁下限为 Linux 后端 310、Windows 后端 300，桌面 Linux 114、Windows 116 项（4.2、4.4）。</li>
         <li>桌面控制台“数艺工坊”（JavaFX 25）：本机数据只在 <code>~/.datacraft</code> 的 SQLite 里，令牌与口令加密保存；界面测试覆盖每个视图的两种主题与 FX 线程的停顿，端到端测试对真实的引擎 API 与 Compose 部署通过（3.7）。</li>
       </ul>
     </div>
@@ -754,7 +754,7 @@
     <thead><tr><th>其他套件</th><th>位置</th><th class="num">数量</th><th>运行环境</th></tr></thead>
     <tbody>
       <tr><td>部署脚本与模板</td><td><code>tests/deploy</code></td><td class="num">71</td><td>Python 标准库；用 bash 运行部署脚本的用例需要 POSIX（Linux 或 WSL）</td></tr>
-      <tr><td>CI/CD 脚本、工作流结构与构建设置</td><td><code>tests/ci</code></td><td class="num">145</td><td>Python 标准库；25 项需要 POSIX 的 bash 或管道，1 项验证 Windows 原生 Bash 选择；按平台执行</td></tr>
+      <tr><td>CI/CD 脚本、工作流结构与构建设置</td><td><code>tests/ci</code></td><td class="num">147</td><td>Python 标准库；25 项需要 POSIX 的 bash 或管道，1 项验证 Windows 原生 Bash 选择；按平台执行</td></tr>
       <tr><td>文档一致性</td><td><code>tests/docs/test_docs_consistency.py</code></td><td class="num">16</td><td>Python 标准库</td></tr>
       <tr><td>费用计算器</td><td><code>tests/docs/cloud-costs.test.cjs</code></td><td class="num">6</td><td>Node</td></tr>
       <tr><td>DAG 契约与安全下限</td><td><code>tests/orchestration</code></td><td class="num">21</td><td>Airflow 3.3.2（安全下限的 4 项只需要 <code>packaging</code>）</td></tr>
@@ -796,7 +796,7 @@
     <li><code>7d508b7</code> 的三组 20 次原生缓存启动均 ≤ 1500 ms，且每次确认 AOT 生效：本机 Windows 1042–1164 ms（中位数 1110.5）；CI Windows 559–927 ms（600）；CI Linux 990–1111 ms（1035）。全部样本见 L8；不清空操作系统文件缓存，不承诺任意后台负载下的磁盘冷启动。</li>
     <li>Windows 原生包验证中文输入及选区、五页导航、浅深主题、最大化与恢复、正常退出，0 未捕获异常。最新密集 UIA 读取有 37 条耗时告警，单独保留为性能边界；两平台独立导航与长日志门禁通过。</li>
     <li>初始外框优先占工作区的约 90%，上限 1280 × 800；越界窗口重新约束到显示器，最大化保留正常尺寸。853 × 560 窄窗自动收起侧栏，关键按钮与后台名称完整可读；快速切换会结束旧淡入并恢复缓存策略。</li>
-    <li>共享 Windows CI 的上一轮曾因两次早期启动尖峰失败，未删除样本或放宽预算；新增入口与 CPU 诊断，不能把增加日志写成消除了尖峰。当前通过的样本与环境边界见 <a href="../desktop/performance.md">流畅度</a>。</li>
+    <li>共享 Windows CI 曾因两次早期启动尖峰失败；最新本机 20 次复测也有 3 次超时（2036 / 2614 / 1590 ms），启动稳定性仍未关闭。未删除样本或放宽预算；新增入口与 CPU 诊断不能被当作消除尖峰的修复。完整样本与环境边界见 <a href="../desktop/performance.md">流畅度</a>。</li>
   </ul>
   <details>
   <summary>L7 全面复核与补修的历史记录（2026-10-28）</summary>
@@ -871,6 +871,7 @@
     </tbody>
   </table>
   </div>
+  <p><strong>最终文档提交也实跑：</strong><code>d4bea26</code> / <a href="https://github.com/liluyang1999/datacraft-lab/actions/runs/40659186625">40659186625</a> 的六项作业通过；Windows 116 项通过，但训练时 JVM 对同一虚拟线程事件先后报告加载状态与 JFR 排除，打包诊断门禁拒绝，因此尚无该轮 Windows 启动样本。已补配对与拒绝路径回归，未重跑掩盖失败；补修后的远端结果按最终提交单独核对。公告检查 <a href="https://github.com/liluyang1999/datacraft-lab/actions/runs/40659246738">40659246738</a> 成功。</p>
   <p><strong>更正：</strong>v4.0 写的是“GitHub Actions 额度不足，推送不会触发 CI”，并据此把 CI 记为“未运行”。这个前提是错的：09-26 的两次推送都触发了运行，<code>containers</code> 作业两次都失败，而当时没有去看。失败的原因是上一轮自己引入的（附录 E.1）：根 POM 给 Surefire 显式设置了 <code>&lt;skip&gt;</code>，它取代了构建镜像所依赖的 <code>-Dmaven.test.skip=true</code>，而 Docker 构建上下文里没有 <code>tests/</code>。作业日志需要仓库权限才能下载，所以根因是在本机用一份按 <code>.dockerignore</code> 过滤的仓库副本复现的：旧配置同样以 “No tests to run!” 失败，修复后通过。</p>
   <p><strong>本机与 CI 两边都运行容器阶段：</strong>本机证据见 4.4，CI 的状态、步骤、日志和注解按提交分别核对。上表保留 L7 与 L8 的失败和后续成功结果；L8 中间修复轮次的完整过程见循环记录。后续纯文档收尾提交不改变上述代码、依赖与工作流，其实际运行状态在 <a href="https://github.com/liluyang1999/datacraft-lab/actions?query=branch%3Amain">main 的 Actions 页面</a>单独核对。</p>
 </section>
@@ -1156,7 +1157,7 @@ bash deploy/scripts/compose-up.sh                # 预检机密与端口后启�
       <tr><td><span class="tag info">P3</span></td><td>API 对慢请求没有时限</td><td>JDK HTTP 服务器默认不限制请求到达的时间：发不完请求头的连接一直占着套接字与虚拟线程，足够多时会耗尽文件描述符或内存。只设 <code>sun.net.httpserver.maxReqTime</code> 不够：请求带有处理器不读的请求体时，计时要到响应写完才停，长作业会被切断。端口只能从回环、Swarm 覆盖网络或隧道到达</td><td>在处理器里先读完（有上限的）请求体，再设置 <code>maxReqTime</code> 与 <code>jdk.httpserver.maxConnections</code>，并用一个故意发不完请求头的测试验证</td></tr>
       <tr><td><span class="tag info">P3</span></td><td>Temurin 固定版本要手动提高</td><td>镜像的 Java 不再随官方镜像更新：Temurin 发布新版本后，要改 <code>Dockerfile.temurin</code> 的版本与四个校验和并重新构建镜像，在此之前镜像停在旧版本；只固定了 amd64 与 arm64 的归档</td><td>公告工作流每周核对，出现新版本时失败；收到失败当天提高固定版本、重新构建并部署</td></tr>
       <tr><td><span class="tag info">P3</span></td><td>桌面控制台的限度</td><td>只生成应用目录，没有安装包与代码签名；AOT 缓存按时间戳核对 jar，复制应用目录要保留时间戳；连接远程后台要靠 SSH 隧道或 TLS 网关；本轮 14 张 Linux CI 截图的中文显示已核对；历史主题切换测量最慢约 75 ms；本轮实际门禁与性能边界见 4.4</td><td>需要分发给别人时再做安装包与签名；远程主机沿用 API 的边界，经 SSH 隧道访问</td></tr>
-      <tr><td><span class="tag info">P3</span></td><td>桌面启动测量边界</td><td>L8 最终两平台各 20 次缓存启动全部 ≤ 1.5 s；本机 Windows 最大 1164 ms、CI Windows 927 ms、CI Linux 1111 ms。之前共享 CI 曾有 2074 / 1929 ms 早期尖峰，其具体系统成因尚未确定。未清空 OS 文件缓存；无缓存的构建训练不计作正常启动</td><td>保留严格 20 次预算门禁、实际 AOT 使用检查与完整样本；目标机器仍需按自身环境验收</td></tr>
+      <tr><td><span class="tag warn">P2</span></td><td>桌面启动稳定性未闭环</td><td>先前三组 20 次缓存启动达标，最新本机复测仍有 3 次超时、最大 2614 ms；共享 CI 历史上有 2074 / 1929 ms 早期尖峰，具体系统成因尚未确定。CPU 与类初始化诊断未能再次复现尖峰，不能代替失败门禁。未清空 OS 文件缓存；无缓存训练不计作正常启动</td><td>保留严格 20 次预算门禁、实际 AOT 使用检查与完整样本；目标机器仍需按自身环境验收</td></tr>
       <tr><td><span class="tag info">P3</span></td><td>JavaFX 私有修补维护与 UIA 性能边界</td><td>已稳定复现并修复旧文本范围访问已释放处理器的空指针，活动对象异常仍传播。两项真实 Windows 生命周期回归及原生交互通过；密集 UIA 读取仍会触发 50 ms 耗时告警</td><td>升级 JavaFX 必须复核上游与工件哈希；上游修复后先跑原始模块回归再移除补丁。证据见 <a href="../desktop/javafx-patch.md">修补说明</a>与 L8</td></tr>
       <tr><td><span class="tag info">路线图</span></td><td>功能扩展</td><td>—</td><td>真实主机上的多节点演练与共享存储，可重复的两节点脚本；更多纯 JVM 作业与流式 CSV 解析；配置化作业目录；对象存储版 <code>StorageService</code>（S3A）；docker secrets；云端、ARM 与真实 SFTP 服务器验收；桌面控制台的安装包与经 SSH 隧道自动连接远程主机</td></tr>
     </tbody>
