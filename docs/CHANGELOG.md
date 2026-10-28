@@ -31,9 +31,13 @@ All notable changes to this project are documented here. The format follows
   limits. Its initial heap no longer grows with the workstation's RAM.
 - The real-backend window test prepares its own successful DAG run and restores the pause state;
   it no longer depends on another test running first. Pause checks also restore state on failure.
+- Cancelling a job wait records the terminal event exactly once before notifying result observers;
+  the record no longer depends on a completion stage that cancellation itself can skip.
+- Linux CI installs Chinese fonts and the accessibility bus, then runs each desktop command in a
+  private D-Bus session. The previous runner produced missing glyphs and an AT-SPI service warning.
 
 #### Verification
-- Regression coverage and the desktop execution floor are now 97 tests per platform. The review
+- Regression coverage and the desktop execution floor are now 98 tests per platform. The review
   evidence, platform results and remaining external gates are recorded in
   [desktop round L7](desktop/loop/log.md#l7-全面复核与边界打磨2026-10-28).
 - Development, architecture, UI, performance, testing and CI documentation use the same complete

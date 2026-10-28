@@ -4,6 +4,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import com.example.datacraft.desktop.api.EngineModels.JobResult;
 import com.example.datacraft.desktop.api.EngineModels.JobStatus;
 import com.example.datacraft.desktop.api.HttpTransport;
 import com.example.datacraft.desktop.api.StubServer;
@@ -19,12 +20,15 @@ import com.example.datacraft.desktop.store.SecretVault;
 import java.nio.file.Path;
 import java.time.Clock;
 import java.time.Duration;
+import java.time.Instant;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicReference;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -175,6 +179,28 @@ class JobServiceTest {
     } finally {
       release.countDown();
     }
+  }
+
+  @Test
+  void cancellationIsRecordedOnceBeforeResultObserversAreNotified() {
+    var request = new CompletableFuture<JobResult>();
+    var handle =
+        jobs.track(
+            session.current().orElseThrow().profile().id(),
+            "noop",
+            Map.of(),
+            Instant.now(),
+            request);
+    AtomicReference<List<Entry>> observed = new AtomicReference<>();
+    handle.result().whenComplete((result, failure) -> observed.set(logged()));
+
+    handle.stopWaiting();
+    handle.stopWaiting();
+    assertTrue(handle.result().isCancelled());
+    assertTrue(request.isCancelled(), "stopping the wait also aborts the request");
+    assertEquals("已停止等待作业 noop", observed.get().getFirst().text());
+    assertEquals(2, logged().size(), "one start and one stop, even when cancelled twice");
+    assertTrue(jobs.recent(null, 10).join().isEmpty());
   }
 
   @Test

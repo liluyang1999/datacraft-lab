@@ -66,7 +66,7 @@ MODULE_DIRS = {
 # of VaultPlatformTest's two platform tests and `verify` never runs the e2e-tagged ones, so the
 # floor is the same on both.
 DESKTOP_DIRS = {"datacraft-desktop": "desktop"}
-DESKTOP_FLOORS = {"datacraft-desktop": 97}
+DESKTOP_FLOORS = {"datacraft-desktop": 98}
 
 # What --project selects: the module directories, the floors per platform, and the notice's title.
 PROJECTS = {

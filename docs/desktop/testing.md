@@ -16,14 +16,18 @@
 测试代码在 `tests/jvm/datacraft-desktop/java/`（仓库的测试都在 `tests/` 下）。单元到界面测试由
 `./mvnw -Pdesktop -pl :datacraft-desktop -am verify` 运行；这个可选反应堆同时运行父工程，
 因此包含位于 `tests/jvm/` 下的测试源码格式检查，默认后端反应堆仍不构建桌面。CI 的 `desktop` 作业在 Xvfb 下运行它，用
-`cicd/build/check_test_counts.py --project desktop` 核对实际执行的测试不少于 97 项（两个平台相同：各自只运行
+`cicd/build/check_test_counts.py --project desktop` 核对实际执行的测试不少于 98 项（两个平台相同：各自只运行
 `VaultPlatformTest` 里本平台的一项，`verify` 不运行 `e2e` 测试），通过时把数目写成公开注解；再运行打包脚本，
 并把界面截图作为构件保存。
+
+Ubuntu CI 先运行 `cicd/desktop/prepare-linux.sh`，补齐 `fonts-noto-cjk`、`at-spi2-core` 与 `dbus-daemon`；
+验证和打包均在 `dbus-run-session -- xvfb-run --auto-servernum` 下启动，保留无障碍能力且不会留下会话总线。
 
 本轮新增的回归覆盖：已排到界面队列的旧轮询不能覆盖暂停操作；切换连接会清空日志与续读状态；
 成功响应必须为 JSON 对象，空白或非对象响应不能伪装成正常的空结果；HTTP 错误即使没有正文也保留状态码；
 最小窗口宽度下，流水线操作可见且页面无需横向滚动；打包训练的 JVM 参数在路径含空格时仍是一个参数。
 抽屉关闭过程中重新打开会取消旧动画；较早触发请求的响应不能关闭后来打开的面板；连接切换会关闭旧触发表单。
+作业取消用可控请求复现，要求活动记录先于结果通知、重复取消只记录一次，且实际请求被中断。
 实际执行数与打包结果记在 [L7 循环记录](loop/log.md#l7-全面复核与边界打磨2026-10-28)，下限不是当前测试总数。
 
 ## 端到端

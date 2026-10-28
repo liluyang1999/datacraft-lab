@@ -16,6 +16,7 @@ import java.time.Instant;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.CancellationException;
 import java.util.concurrent.CompletableFuture;
 import java.util.function.Supplier;
 
@@ -77,14 +78,53 @@ public final class JobService {
       return new Handle(jobName, startedAt, notConnected());
     }
     long profileId = connection.get().profile().id();
-    activity.record(Level.INFO, Source.ENGINE, "开始运行作业 " + jobName);
     CompletableFuture<JobResult> request =
         connection.get().engine().run(jobName, sent, runTimeout.get());
-    // The handle completes after the run is recorded, and cancelling it aborts the request.
-    CompletableFuture<JobResult> recorded =
-        request.whenComplete(
-            (value, failure) -> finished(profileId, jobName, sent, startedAt, value, failure));
-    return new Handle(jobName, startedAt, HttpTransport.linked(request, recorded));
+    return track(profileId, jobName, sent, startedAt, request);
+  }
+
+  /** Owns the terminal outcome of a request, independently of how that request is transported. */
+  Handle track(
+      long profileId,
+      String jobName,
+      Map<String, String> sent,
+      Instant startedAt,
+      CompletableFuture<JobResult> request) {
+    activity.record(Level.INFO, Source.ENGINE, "开始运行作业 " + jobName);
+    // Cancelling a dependent whenComplete stage can skip its recording callback. Own the terminal
+    // outcome here, queue its records first, then notify observers and abort the HTTP exchange.
+    var recorded =
+        new CompletableFuture<JobResult>() {
+          private boolean terminal;
+
+          private synchronized boolean finish(JobResult value, Throwable failure) {
+            if (terminal) {
+              return false;
+            }
+            terminal = true;
+            try {
+              finished(profileId, jobName, sent, startedAt, value, failure);
+            } catch (RuntimeException | Error recordingFailure) {
+              if (failure == null) {
+                failure = recordingFailure;
+              } else if (failure != recordingFailure) {
+                failure.addSuppressed(recordingFailure);
+              }
+            }
+            return failure == null ? complete(value) : completeExceptionally(failure);
+          }
+
+          @Override
+          public boolean cancel(boolean mayInterruptIfRunning) {
+            boolean cancelled = finish(null, new CancellationException("stopped waiting"));
+            if (cancelled) {
+              request.cancel(mayInterruptIfRunning);
+            }
+            return cancelled || isCancelled();
+          }
+        };
+    request.whenComplete(recorded::finish);
+    return new Handle(jobName, startedAt, recorded);
   }
 
   /** The cached runs of the active profile, optionally of one job only, newest first. */

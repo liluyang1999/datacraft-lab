@@ -201,8 +201,11 @@ jobs:
 
       # Format, Checkstyle, Enforcer, unit, client, store and UI tests (every view in both themes,
       # no JavaFX warning, no stalled FX thread once warm), then the jar.
+      - name: Prepare fonts and the accessibility bus
+        run: bash cicd/desktop/prepare-linux.sh
+
       - name: Verify the desktop console on a virtual display
-        run: xvfb-run --auto-servernum ./mvnw -B -ntp -Pdesktop -pl :datacraft-desktop -am verify
+        run: dbus-run-session -- xvfb-run --auto-servernum ./mvnw -B -ntp -Pdesktop -pl :datacraft-desktop -am verify
 
       # The desktop suite against its own floor; the passing count becomes a notice.
       - name: Assert the desktop suite executed its tests
@@ -210,7 +213,7 @@ jobs:
 
       # jlink, jpackage, an AOT cache trained by one smoke start, then a second start with it.
       - name: Package the app image and check that it starts
-        run: xvfb-run --auto-servernum python3 -B cicd/desktop/package_desktop.py
+        run: dbus-run-session -- xvfb-run --auto-servernum python3 -B cicd/desktop/package_desktop.py
 
       - name: Upload the UI snapshots
         if: always()
