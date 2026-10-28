@@ -27,11 +27,13 @@
              native access unless it is granted: javafx.graphics for the toolkit, ALL-UNNAMED for
              sqlite-jdbc's JNI library and the DPAPI calls of the secret vault (FFM). -->
         <desktop.javafx.dir>${project.build.directory}/javafx</desktop.javafx.dir>
+        <desktop.javafx.original.dir>${project.build.directory}/javafx-original</desktop.javafx.original.dir>
         <desktop.test.groups></desktop.test.groups>
         <desktop.test.excluded>e2e,${test.excluded.tags}</desktop.test.excluded>
         <desktop.native.access>--enable-native-access=javafx.graphics,ALL-UNNAMED</desktop.native.access>
         <!-- Exercise the same bounded heap as the packaged console, including large-log UI tests. -->
-        <desktop.test.jvm.args>${test.jvm.args} -Xms32m -Xmx256m --module-path ${desktop.javafx.dir} --add-modules javafx.controls ${desktop.native.access} -Ddatacraft.desktop.test=true</desktop.test.jvm.args>
+        <desktop.a11y.test.opens></desktop.a11y.test.opens>
+        <desktop.test.jvm.args>${test.jvm.args} -Xms32m -Xmx256m --module-path ${desktop.javafx.dir} --add-modules javafx.controls ${desktop.native.access} --add-opens javafx.graphics/javafx.scene=ALL-UNNAMED --add-opens javafx.graphics/com.sun.glass.ui=ALL-UNNAMED ${desktop.a11y.test.opens} -Ddatacraft.desktop.test=true</desktop.test.jvm.args>
     </properties>
 
     <dependencies>
@@ -69,14 +71,14 @@
                          packaged app. -->
                     <execution>
                         <id>javafx-module-path</id>
-                        <phase>generate-test-resources</phase>
+                        <phase>generate-resources</phase>
                         <goals>
                             <goal>copy-dependencies</goal>
                         </goals>
                         <configuration>
                             <includeGroupIds>org.openjfx</includeGroupIds>
                             <includeScope>runtime</includeScope>
-                            <outputDirectory>${desktop.javafx.dir}</outputDirectory>
+                            <outputDirectory>${desktop.javafx.original.dir}</outputDirectory>
                             <overWriteIfNewer>true</overWriteIfNewer>
                         </configuration>
                     </execution>
@@ -91,6 +93,26 @@
                             <includeScope>runtime</includeScope>
                             <outputDirectory>${project.build.directory}/lib</outputDirectory>
                             <overWriteIfNewer>true</overWriteIfNewer>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+            <plugin>
+                <groupId>org.codehaus.mojo</groupId>
+                <artifactId>exec-maven-plugin</artifactId>
+                <version>3.6.3</version>
+                <executions>
+                    <execution>
+                        <id>guard-javafx-accessibility</id>
+                        <phase>process-resources</phase>
+                        <goals><goal>exec</goal></goals>
+                        <configuration>
+                            <executable>${java.home}/bin/java</executable>
+                            <arguments>
+                                <argument>${datacraft.root}/cicd/desktop/PatchJavafx.java</argument>
+                                <argument>${desktop.javafx.original.dir}</argument>
+                                <argument>${desktop.javafx.dir}</argument>
+                            </arguments>
                         </configuration>
                     </execution>
                 </executions>
@@ -133,6 +155,8 @@
                 <configuration>
                     <mainClass>${desktop.main.class}</mainClass>
                     <options>
+                        <option>--upgrade-module-path</option>
+                        <option>${desktop.javafx.dir}</option>
                         <option>${desktop.native.access}</option>
                     </options>
                 </configuration>
@@ -158,6 +182,13 @@
     </build>
 
     <profiles>
+        <profile>
+            <id>windows-accessibility-test</id>
+            <activation><os><family>Windows</family></os></activation>
+            <properties>
+                <desktop.a11y.test.opens>--add-opens javafx.graphics/com.sun.glass.ui.win=ALL-UNNAMED</desktop.a11y.test.opens>
+            </properties>
+        </profile>
         <profile>
             <!-- ./mvnw -f desktop/pom.xml -Pe2e test, with the DATACRAFT_E2E_* variables that
                  EndToEndTest describes: only the tests against real backends. -->

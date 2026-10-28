@@ -7,30 +7,36 @@ newer) on PATH or in JAVA_HOME:
    from them plus the JavaFX modules of this platform (desktop/target/javafx).
 2. jpackage builds the app image `desktop/target/dist/DataCraft` around that runtime, with the
    app jar and its libraries on the class path and the icon drawn here (no image file is kept).
-3. The image is started once with `--smoke`, which quits two seconds after the first frame, while
-   the JVM records an AOT cache (JEP 483/514) of the classes that start-up loaded and linked.
-   The launcher is then told to use the cache, which cuts the start-up by about a third.
-4. The image is started once more with `--smoke`, now with the cache, and must exit with 0; its
-   start-up log line is printed.
+3. A disposable `--smoke` training run visits every view in both themes while the JVM records
+   an AOT cache (JEP 483/514). The launcher is then told to use the cache.
+4. Ten fresh-profile and ten reused-profile starts must confirm AOT use, exit without runtime
+   diagnostics, and each reach the first completed layout pulse within 1500 ms. All timing
+   samples are saved in `desktop/target/package/startup.json`, including budget failures.
 
-Both starts use a temporary data directory (DATACRAFT_DESKTOP_HOME), never the user's
+All starts use a temporary data directory (DATACRAFT_DESKTOP_HOME), never the user's
 ~/.datacraft. The app opens a window, so a display is needed: Xvfb on a Linux runner.
 Standard library only.
 
 Usage: python3 -B cicd/desktop/package_desktop.py [--skip-aot] [--root REPOSITORY_ROOT]
-Exit status: 0 when the image is built and starts, 1 when a step fails, 2 when an input is missing.
+Exit status: 0 when the image passes the selected checks, 1 on failure, 2 on missing input.
 """
 
 import argparse
+import hashlib
+import json
 import os
 from pathlib import Path
+import platform
 import re
 import shutil
+import sqlite3
 import stat
 import struct
 import subprocess
 import sys
 import tempfile
+import statistics
+import zipfile
 import zlib
 
 NAME = "DataCraft"
@@ -41,6 +47,15 @@ JVM_OPTIONS = ["-Xms32m", "-Xmx256m", "--enable-native-access=javafx.graphics,AL
 JAVAFX_MODULES = ("javafx.base", "javafx.graphics", "javafx.controls")
 AOT_FILE = "datacraft.aot"
 STARTUP_LINE = re.compile(r"Start-up: first frame at (\d+) ms")
+BAD_DIAGNOSTIC = re.compile(r"Exception in thread|\b(?:WARNING|SEVERE|ERROR)[: ]|\[warning\]|"
+                            r"(?:^|\n)\s*(?:[\w$]+\.)+[\w$]*(?:Exception|Error)(?::|\n|$)")
+# HotSpot deliberately excludes JFR event classes and generated JDK proxies from AOT archives.
+# Accept only these complete training diagnostics; retain them in output, and reject every
+# warning (including these) during normal cached starts. See systemDictionaryShared.cpp in JDK 25.
+AOT_EXCLUSION = re.compile(
+    r"^\[\d+\.\d+s\]\[warning\]\[aot\] Skipping "
+    r"(?:jdk/internal/event/[\w$]+: JFR event class|jdk/proxy\d+/\$Proxy\d+: Unsupported location)$")
+PATCH_MARKER = "META-INF/datacraft-javafx-patch.properties"
 
 
 class Failed(Exception):
@@ -65,14 +80,25 @@ def tool(name):
     return found
 
 
-def run(command, env=None, timeout=600):
+def run(command, env=None, timeout=600, diagnostics=False, aot_training=False):
     """Runs a command; fails with its output when it exits with another status than 0."""
     completed = subprocess.run(command, capture_output=True, text=True, env=env, timeout=timeout,
                                check=False)
     if completed.returncode != 0:
         raise Failed(f"{Path(command[0]).name} exited with {completed.returncode}:\n"
                      f"{completed.stdout}{completed.stderr}".rstrip())
-    return completed.stdout
+    output = completed.stdout + completed.stderr
+    checked = output
+    if diagnostics and aot_training:
+        exclusions = [line for line in output.splitlines() if AOT_EXCLUSION.fullmatch(line)]
+        if exclusions:
+            print("JVM AOT training exclusions (these classes remain uncached):\n"
+                  + "\n".join(exclusions), flush=True)
+        checked = "\n".join(line for line in output.splitlines()
+                            if not AOT_EXCLUSION.fullmatch(line))
+    if diagnostics and BAD_DIAGNOSTIC.search(checked):
+        raise Failed(f"{Path(command[0]).name} logged an error or warning:\n{output}")
+    return output if diagnostics else completed.stdout
 
 
 def app_version(app_jar):
@@ -111,6 +137,20 @@ def jdk_modules(jdeps, app_jar, libraries, javafx):
     if not lines or not re.fullmatch(r"[\w.]+(,[\w.]+)*", lines[-1]):
         raise Failed(f"jdeps printed no module list:\n{output}")
     return sorted(set(lines[-1].split(",")) | set(JAVAFX_MODULES))
+
+
+def verify_javafx_patch(javafx):
+    """Refuse an unguarded package even if a stale/manual build supplied the input jars."""
+    graphics = [path for path in javafx if path.name.startswith("javafx-graphics-")]
+    if len(graphics) != 1:
+        raise Failed("expected exactly one JavaFX graphics module")
+    with zipfile.ZipFile(graphics[0]) as jar:
+        if (PATCH_MARKER not in jar.namelist()
+                or b"patch=accessible-disposal-v1\n" not in jar.read(PATCH_MARKER)):
+            raise Failed("JavaFX disposal guard missing: run the desktop Maven build first")
+        digest = hashlib.sha256(jar.read("com/sun/glass/ui/Accessible.class")).hexdigest()
+        if f"patched.sha256={digest}\n".encode() not in jar.read(PATCH_MARKER):
+            raise Failed("JavaFX disposal guard checksum mismatch: rebuild the desktop modules")
 
 
 def jlink_module_path(jlink, javafx):
@@ -222,27 +262,91 @@ def use_cache(cfg):
     cfg.write_text(updated, encoding="utf-8")
 
 
-def smoke(launcher, work, extra_options=None):
+def smoke(launcher, work, extra_options=None, *, home=None, require_aot=False):
     """Starts the image with --smoke in a fresh data directory; returns its start-up time.
 
     The directory is under the build's own work directory, not the system TEMP: on some Windows
     hosts the AF_UNIX socket files the JDK creates for its NIO pipes cannot be deleted there.
     """
     work.mkdir(parents=True, exist_ok=True)
-    with tempfile.TemporaryDirectory(prefix="home-", dir=work, ignore_cleanup_errors=True) as home:
-        env = dict(os.environ, DATACRAFT_DESKTOP_HOME=home)
-        env.pop("JAVA_TOOL_OPTIONS", None)
-        if extra_options:
-            # The JVM tokenizes this value, independently of subprocess/shell quoting. Protect
-            # paths with spaces (including the AOT output in a checkout such as "My Projects").
-            env["JAVA_TOOL_OPTIONS"] = " ".join(quote_jvm_option(option) for option in extra_options)
-        run([str(launcher), "--smoke"], env=env, timeout=180)
-        log = Path(home) / "logs" / "desktop-0.log"
-        text = log.read_text(encoding="utf-8") if log.is_file() else ""
-        match = STARTUP_LINE.search(text)
-        if match is None:
-            raise Failed(f"the app ran but logged no first frame:\n{text}")
-        return int(match.group(1))
+    if home is None:
+        with tempfile.TemporaryDirectory(prefix="home-", dir=work, ignore_cleanup_errors=True) as fresh:
+            return smoke(launcher, work, extra_options, home=Path(fresh), require_aot=require_aot)
+    home.mkdir(parents=True, exist_ok=True)
+    # FileHandler appends when this profile is reused. Remove only this disposable profile's
+    # previous current log, so an old first-frame line can never satisfy a later start.
+    log = home / "logs" / "desktop-0.log"
+    log.unlink(missing_ok=True)
+    env = dict(os.environ, DATACRAFT_DESKTOP_HOME=str(home))
+    env.pop("JAVA_TOOL_OPTIONS", None)
+    options = list(extra_options or [])
+    if require_aot:
+        options += ["-XX:AOTMode=on", "-Xlog:aot=info"]
+    if options:
+        # The JVM tokenizes this value, independently of subprocess/shell quoting. Protect
+        # paths with spaces (including the AOT output in a checkout such as "My Projects").
+        env["JAVA_TOOL_OPTIONS"] = " ".join(quote_jvm_option(option) for option in options)
+    training = "-Ddatacraft.desktop.aotTraining=true" in options
+    output = run([str(launcher), "--smoke"], env=env, timeout=180, diagnostics=True,
+                 aot_training=training)
+    if require_aot and "Using AOT-linked classes: true" not in output:
+        raise Failed(f"the JVM did not confirm that AOT-linked classes were used:\n{output}")
+    text = log.read_text(encoding="utf-8") if log.is_file() else ""
+    if BAD_DIAGNOSTIC.search(text):
+        raise Failed(f"the app logged a start-up error or warning:\n{text}")
+    if training and "AOT training completed: all five views in both themes" not in text:
+        raise Failed("the AOT training did not visit all five views in both themes")
+    match = STARTUP_LINE.search(text)
+    if match is None:
+        raise Failed(f"the app ran but logged no first frame:\n{text}")
+    return int(match.group(1))
+
+
+def check_startup(launcher, work, samples, budget_ms, require_aot):
+    """Every sample counts, including the first; keep a machine-readable report on failure too."""
+    results = []
+    for mode in ("fresh", "reused"):
+        with tempfile.TemporaryDirectory(prefix="reused-", dir=work,
+                                         ignore_cleanup_errors=True) as reused:
+            for index in range(samples):
+                view, theme = "overview", "SYSTEM"
+                if mode == "reused" and index:
+                    view, theme = restore_startup_view(Path(reused), index)
+                elapsed = smoke(launcher, work, home=Path(reused) if mode == "reused" else None,
+                                require_aot=require_aot)
+                results.append({"profile": mode, "sample": index + 1, "view": view, "theme": theme,
+                                "first_frame_ms": elapsed})
+                print(f"Start-up {mode} {index + 1}/{samples} {view}/{theme}: {elapsed} ms", flush=True)
+    times = [result["first_frame_ms"] for result in results]
+    report = {"platform": platform.platform(), "aot_verified": require_aot,
+              "budget_ms": budget_ms, "samples": results,
+              "median_ms": statistics.median(times), "max_ms": max(times),
+              "within_budget": max(times) <= budget_ms if budget_ms else None}
+    (work / "startup.json").write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")
+    if budget_ms and max(times) > budget_ms:
+        raise Failed(f"start-up budget {budget_ms} ms exceeded: max {max(times)} ms; "
+                     f"all {len(times)} samples are in {work / 'startup.json'}")
+    return report
+
+
+def restore_startup_view(home, index):
+    """Only the disposable benchmark DB, created by a completed app start, is edited."""
+    database = home / "datacraft.db"
+    if not database.is_file():
+        raise Failed("the first start did not create its benchmark database")
+    views = ("overview", "jobs", "pipelines", "activity", "settings")
+    view = views[index % len(views)]
+    theme = "LIGHT" if (index // len(views)) % 2 == 0 else "DARK"
+    connection = sqlite3.connect(database)
+    try:
+        with connection:
+            connection.executemany(
+                "INSERT INTO settings(key, value, updated_at) VALUES(?, ?, 0) "
+                "ON CONFLICT(key) DO UPDATE SET value=excluded.value",
+                [("ui.lastView", view), ("ui.theme", theme)])
+    finally:
+        connection.close()
+    return view, theme
 
 
 def quote_jvm_option(option):
@@ -274,10 +378,11 @@ def make_writable(directory):
                 os.chmod(path, mode | stat.S_IWUSR)
 
 
-def package(root, skip_aot):
+def package(root, skip_aot, startup_samples=10, startup_budget_ms=1500):
     desktop = root / "desktop"
     target = desktop / "target"
     app_jar, libraries, javafx = build_inputs(target)
+    verify_javafx_patch(javafx)
     jdeps, jlink, jpackage = tool("jdeps"), tool("jlink"), tool("jpackage")
     version = app_version(app_jar)
     work = target / "package"
@@ -310,15 +415,19 @@ def package(root, skip_aot):
 
     if not skip_aot:
         cache = cfg.parent / AOT_FILE
-        trained = smoke(launcher, work / "smoke", [f"-XX:AOTCacheOutput={cache}"])
+        trained = smoke(launcher, work / "smoke", [f"-XX:AOTCacheOutput={cache}",
+                                                  "-Ddatacraft.desktop.aotTraining=true"])
         if not cache.is_file():
             raise Failed("the training start did not write the AOT cache")
         print(f"Trained the AOT cache ({cache.stat().st_size // (1024 * 1024)} MB); "
               f"that start reached its first frame at {trained} ms")
         use_cache(cfg)
-    started = smoke(launcher, work / "smoke")
-    print(f"{image} starts: first frame at {started} ms"
-          + ("" if skip_aot else " with the AOT cache"))
+    make_writable(image)
+    make_writable(work)
+    report = check_startup(launcher, work, startup_samples, startup_budget_ms,
+                           require_aot=not skip_aot)
+    print(f"{image} starts: median {report['median_ms']} ms, max {report['max_ms']} ms"
+          + ("" if skip_aot else " with verified AOT-linked classes"))
     make_writable(image)
     make_writable(work)
     return image
@@ -328,9 +437,15 @@ def main(argv=None):
     parser = argparse.ArgumentParser(description=(__doc__ or "").split("\n", 1)[0])
     parser.add_argument("--root", default=".", help="repository root (default: .)")
     parser.add_argument("--skip-aot", action="store_true", help="build the image without an AOT cache")
+    parser.add_argument("--startup-samples", type=int, default=10,
+                        help="starts per fresh/reused profile group (default: 10, all saved views)")
+    parser.add_argument("--startup-budget-ms", type=int, default=1500,
+                        help="maximum allowed first-frame time; 0 measures without a budget")
     args = parser.parse_args(argv)
+    if args.startup_samples < 1 or args.startup_budget_ms < 0:
+        parser.error("startup samples must be positive and the budget must be nonnegative")
     try:
-        package(Path(args.root).resolve(), args.skip_aot)
+        package(Path(args.root).resolve(), args.skip_aot, args.startup_samples, args.startup_budget_ms)
     except Missing as error:
         print(f"::error::{error}")
         return 2

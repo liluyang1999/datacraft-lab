@@ -6,6 +6,28 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Desktop startup and native accessibility (2026-10-28)
+
+#### Fixed
+- Retained Windows UIA text ranges can outlive their JavaFX accessible. A narrowly scoped,
+  hash-checked build patch guards disposed callbacks without hiding live-handler failures or
+  disabling accessibility. Tests, development launch and packaging share the patched modules;
+  [provenance and removal conditions](desktop/javafx-patch.md) are documented.
+- First-frame timing now waits for the first CSS/layout pulse to finish. Icons and connection
+  restoration follow that pulse, and AOT training covers all five views in both themes.
+- HTTP/TLS initialization runs in the background only when the first request needs it. Concurrent
+  first requests share initialization; cancellation, request deadlines and shutdown also cover an
+  unfinished client, and expired requests cannot be sent later.
+- Packaging verifies actual AOT use on every start, fails on runtime diagnostics even with exit
+  code zero, and enforces the 1500 ms budget across ten fresh and ten reused profiles. Reused
+  profiles cannot reuse an earlier log entry, and benchmark database connections close explicitly.
+
+#### Verification
+- Desktop CI now runs on Windows and Linux, with execution floors of 106 and 104 respectively,
+  native Windows lifecycle regressions, and an artifact containing every startup sample.
+- Reproduction, measurements, native checks and delivery evidence are recorded in
+  [desktop round L8](desktop/loop/log.md#l8-启动与原生无障碍专项2026-10-28).
+
 ### Quality review and desktop boundaries (2026-10-28)
 
 #### Fixed

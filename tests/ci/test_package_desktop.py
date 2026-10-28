@@ -5,6 +5,7 @@ tests cover what can go wrong without them.
 """
 
 import importlib.util
+import json
 import os
 from pathlib import Path
 import struct
@@ -12,6 +13,8 @@ import shlex
 import tempfile
 import unittest
 from unittest import mock
+import subprocess
+import zipfile
 import zlib
 
 REPOSITORY = Path(__file__).resolve().parents[2]
@@ -161,15 +164,108 @@ class CacheTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             work = Path(directory)
 
-            def launch(command, env=None, timeout=600):
+            def launch(command, env=None, timeout=600, diagnostics=False, aot_training=False):
                 assert env is not None
                 self.assertEqual([option], shlex.split(env["JAVA_TOOL_OPTIONS"]))
                 log = Path(env["DATACRAFT_DESKTOP_HOME"]) / "logs" / "desktop-0.log"
                 log.parent.mkdir()
                 log.write_text("Start-up: first frame at 100 ms", encoding="utf-8")
+                return ""
 
             with mock.patch.object(packaging, "run", side_effect=launch):
                 self.assertEqual(100, packaging.smoke(Path("launcher"), work, [option]))
+
+    def test_an_uncaught_native_callback_fails_even_when_the_process_exits_zero(self):
+        for error in ('Exception in thread "JavaFX Application Thread" java.lang.NullPointerException',
+                      'java.lang.OutOfMemoryError: Java heap space',
+                      'WARNING: native access is not enabled'):
+            with self.subTest(error=error):
+                result = subprocess.CompletedProcess(["launcher"], 0, "", error)
+                with mock.patch.object(packaging.subprocess, "run", return_value=result):
+                    with self.assertRaisesRegex(packaging.Failed, "logged an error"):
+                        packaging.run(["launcher"], diagnostics=True)
+
+    def test_a_fallback_start_cannot_be_reported_as_using_aot(self):
+        with tempfile.TemporaryDirectory() as directory:
+            with mock.patch.object(packaging, "run", return_value="AOT cache was not used"):
+                with self.assertRaisesRegex(packaging.Failed, "did not confirm"):
+                    packaging.smoke(Path("launcher"), Path(directory), require_aot=True)
+
+    def test_jdk_aot_exclusions_are_visible_and_allowed_only_during_training(self):
+        output = ("[3.157s][warning][aot] Skipping jdk/internal/event/Event: JFR event class\n"
+                  "[3.159s][warning][aot] Skipping jdk/proxy1/$Proxy0: Unsupported location\n")
+        result = subprocess.CompletedProcess(["launcher"], 0, output, "")
+        with mock.patch.object(packaging.subprocess, "run", return_value=result):
+            with self.assertRaises(packaging.Failed):
+                packaging.run(["launcher"], diagnostics=True)
+            with mock.patch("builtins.print") as printed:
+                self.assertEqual(output, packaging.run(["launcher"], diagnostics=True, aot_training=True))
+                self.assertIn(output.strip(), printed.call_args.args[0])
+
+    def test_training_still_rejects_unexpected_warnings_and_exceptions(self):
+        for output in ("[3.157s][warning][aot] Skipping app/Broken: Unsupported location\n",
+                       "[3.157s][warning][aot] Skipping jdk/internal/event/Event: bad version\n",
+                       "java.lang.NullPointerException: missing handler\n"):
+            with self.subTest(output=output):
+                result = subprocess.CompletedProcess(["launcher"], 0, output, "")
+                with mock.patch.object(packaging.subprocess, "run", return_value=result):
+                    with self.assertRaises(packaging.Failed):
+                        packaging.run(["launcher"], diagnostics=True, aot_training=True)
+
+    def test_a_reused_profile_cannot_reuse_an_earlier_first_frame(self):
+        with tempfile.TemporaryDirectory() as directory:
+            home = Path(directory) / "home"
+            log = home / "logs" / "desktop-0.log"
+            log.parent.mkdir(parents=True)
+            log.write_text("Start-up: first frame at 100 ms\n", encoding="utf-8")
+            with mock.patch.object(packaging, "run", return_value=""):
+                with self.assertRaisesRegex(packaging.Failed, "logged no first frame"):
+                    packaging.smoke(Path("launcher"), Path(directory), home=home)
+
+    def test_saved_view_selection_uses_the_real_benchmark_database(self):
+        with tempfile.TemporaryDirectory() as directory:
+            home = Path(directory)
+            database = packaging.sqlite3.connect(home / "datacraft.db")
+            try:
+                database.execute("CREATE TABLE settings(key TEXT PRIMARY KEY, value TEXT, updated_at INTEGER)")
+            finally:
+                database.close()
+            self.assertEqual(("settings", "DARK"), packaging.restore_startup_view(home, 9))
+            database = packaging.sqlite3.connect(home / "datacraft.db")
+            try:
+                values = dict(database.execute("SELECT key, value FROM settings"))
+            finally:
+                database.close()
+            self.assertEqual({"ui.lastView": "settings", "ui.theme": "DARK"}, values)
+
+    def test_every_start_counts_and_a_slow_first_sample_preserves_failure_evidence(self):
+        with tempfile.TemporaryDirectory() as directory:
+            work = Path(directory)
+            with (mock.patch.object(packaging, "smoke", side_effect=[1700, 900, 950, 1000]) as run,
+                  mock.patch.object(packaging, "restore_startup_view", return_value=("jobs", "LIGHT"))):
+                with self.assertRaisesRegex(packaging.Failed, "budget 1500 ms exceeded"):
+                    packaging.check_startup(Path("launcher"), work, 2, 1500, True)
+                self.assertEqual(4, run.call_count)
+            report = json.loads((work / "startup.json").read_text(encoding="utf-8"))
+            self.assertFalse(report["within_budget"])
+            self.assertEqual(1700, report["max_ms"])
+            self.assertEqual([1700, 900, 950, 1000],
+                             [sample["first_frame_ms"] for sample in report["samples"]])
+
+    def test_a_measurement_without_a_budget_does_not_claim_budget_success(self):
+        with tempfile.TemporaryDirectory() as directory:
+            with mock.patch.object(packaging, "smoke", return_value=2000):
+                report = packaging.check_startup(Path("launcher"), Path(directory), 1, 0, False)
+            self.assertIsNone(report["within_budget"])
+            self.assertFalse(report["aot_verified"])
+
+    def test_an_unpatched_javafx_module_cannot_be_packaged(self):
+        with tempfile.TemporaryDirectory() as directory:
+            jar = Path(directory) / "javafx-graphics-25.0.5-win.jar"
+            with zipfile.ZipFile(jar, "w") as archive:
+                archive.writestr("module-info.class", b"module")
+            with self.assertRaisesRegex(packaging.Failed, "disposal guard missing"):
+                packaging.verify_javafx_patch([jar])
 
 
 if __name__ == "__main__":

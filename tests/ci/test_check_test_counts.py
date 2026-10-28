@@ -249,12 +249,13 @@ class DesktopProjectTests(unittest.TestCase):
 
     def test_the_desktop_reports_are_checked_against_the_desktop_floor_alone(self):
         # No backend module has reports here: the desktop job builds only desktop/pom.xml.
-        self.write(self.floor - 1, "com.example.datacraft.desktop.FirstTest")
-        self.write(1, "com.example.datacraft.desktop.SecondTest")
         for platform in ("linux", "windows"):
+            floor = counts.PROJECTS["desktop"][1][platform]["datacraft-desktop"]
+            self.write(floor - 1, "com.example.datacraft.desktop.FirstTest")
+            self.write(1, "com.example.datacraft.desktop.SecondTest")
             status, output = self.check(platform)
             self.assertEqual(0, status, output)
-            self.assertIn(f"datacraft-desktop: executed {self.floor}", output)
+            self.assertIn(f"datacraft-desktop: executed {floor}", output)
             self.assertNotIn("datacraft-api", output)
 
     def test_a_desktop_suite_that_shrank_fails(self):
@@ -282,14 +283,18 @@ class DesktopProjectTests(unittest.TestCase):
         self.assertIn("::error::datacraft-common: no reports directory", output)
         self.assertNotIn("datacraft-desktop", output)
 
-    def test_the_desktop_directory_is_a_maven_project_with_one_floor_for_both_platforms(self):
+    def test_windows_also_requires_the_native_text_range_regression(self):
+        self.write(self.floor)
+        status, output = self.check("windows")
+        self.assertEqual(1, status, output)
+
+    def test_the_desktop_directory_is_a_maven_project_with_platform_floors(self):
         self.assertEqual({"datacraft-desktop": "desktop"}, counts.DESKTOP_DIRS)
         self.assertTrue((REPOSITORY / "desktop" / "pom.xml").is_file())
         pom = ET.parse(REPOSITORY / "desktop" / "pom.xml").getroot()
         self.assertEqual("datacraft-desktop", (pom.findtext("{*}artifactId") or "").strip())
         self.assertGreater(self.floor, 0)
-        # Each platform runs one of VaultPlatformTest's two platform tests.
-        self.assertEqual({"linux": counts.DESKTOP_FLOORS, "windows": counts.DESKTOP_FLOORS},
+        self.assertEqual({"linux": counts.DESKTOP_FLOORS, "windows": counts.DESKTOP_WINDOWS_FLOORS},
                          counts.PROJECTS["desktop"][1])
 
 

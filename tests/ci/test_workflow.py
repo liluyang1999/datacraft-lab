@@ -77,14 +77,17 @@ class WorkflowTests(unittest.TestCase):
         self.assertEqual([], offenders, "move step logic into a script under cicd/")
 
     def test_every_run_step_goes_through_the_step_wrapper(self):
-        # One shell, set once for the whole workflow; a job or a step that named its own would lose
-        # the failure annotations.
+        # A platform-specific Python executable is allowed, but every override must retain the
+        # wrapper and its failure annotations.
         for workflow in workflow_files():
             lines = workflow.read_text(encoding="utf-8").splitlines()
             shells = [(index, match.group(1), match.group(2).strip())
                       for index, line in enumerate(lines) if (match := SHELL.match(line))]
             with self.subTest(workflow=workflow.name):
-                self.assertEqual([STEP_SHELL], [value for _, _, value in shells])
+                self.assertTrue(shells)
+                self.assertEqual(STEP_SHELL, shells[0][2])
+                for _, _, value in shells:
+                    self.assertRegex(value, r"^python3? -B cicd/step\.py bash -e \{0\}$")
                 index, indent, _ = shells[0]
                 self.assertEqual("    ", indent)
                 self.assertEqual(["defaults:", "  run:"], lines[index - 2:index])
@@ -105,7 +108,7 @@ class WorkflowTests(unittest.TestCase):
                     steps = jobs.setdefault(job.group(1), [])
                 elif steps is not None and re.match(r"^\s*(?:-\s+)?uses:\s*actions/checkout@", line):
                     steps.append("checkout")
-                elif steps is not None and RUN.match(line):
+                elif steps is not None and (match := RUN.match(line)) and match.group(1).strip():
                     steps.append("run")
             self.assertTrue(jobs, workflow.name)
             for job_name, order in jobs.items():
@@ -132,8 +135,10 @@ class WorkflowTests(unittest.TestCase):
         self.assertEqual([], missing)
 
     def test_every_cicd_file_is_used_by_the_pipeline(self):
+        # Maven's lifecycle invokes build tools too, including the JavaFX class-file patch.
+        manifests = list(REPOSITORY.glob("*/pom.xml")) + [REPOSITORY / "pom.xml"]
         sources = {path: without_comments(path.read_text(encoding="utf-8"))
-                   for path in workflow_files() + cicd_files()}
+                   for path in workflow_files() + cicd_files() + manifests}
         unused = []
         for path in cicd_files():
             relative = path.relative_to(REPOSITORY).as_posix()
@@ -142,7 +147,7 @@ class WorkflowTests(unittest.TestCase):
             if not any(any(name in text for name in names)
                        for user, text in sources.items() if user != path):
                 unused.append(relative)
-        self.assertEqual([], unused, "files in cicd/ that neither a workflow nor a cicd script uses")
+        self.assertEqual([], unused, "files in cicd/ that no workflow, build manifest or cicd script uses")
 
     def test_a_mention_in_a_comment_is_not_a_use(self):
         text = "# bash cicd/a.sh\n  run: bash cicd/b.sh # not cicd/c.sh\n  - uses: x/y@abc # v1\n"

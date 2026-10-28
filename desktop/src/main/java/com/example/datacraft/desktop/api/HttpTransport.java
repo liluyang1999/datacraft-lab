@@ -20,7 +20,12 @@ import java.util.Map;
 import java.util.concurrent.CancellationException;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
+import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
+import java.util.function.Function;
+import java.util.function.Supplier;
 import java.util.stream.Collectors;
 
 /**
@@ -50,16 +55,48 @@ public final class HttpTransport implements AutoCloseable {
 
   private final ObjectMapper json =
       new ObjectMapper().configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
-  private final HttpClient client;
+  private final ExecutorService executor = Executors.newVirtualThreadPerTaskExecutor();
+  private final Supplier<HttpClient> clientFactory;
+  private CompletableFuture<HttpClient> client;
+  private boolean closed;
 
   public HttpTransport() {
-    this.client =
-        HttpClient.newBuilder()
-            .version(HttpClient.Version.HTTP_1_1)
-            .connectTimeout(CONNECT_TIMEOUT)
-            .followRedirects(HttpClient.Redirect.NEVER)
-            .executor(Executors.newVirtualThreadPerTaskExecutor())
-            .build();
+    this(
+        executor ->
+            HttpClient.newBuilder()
+                .version(HttpClient.Version.HTTP_1_1)
+                .connectTimeout(CONNECT_TIMEOUT)
+                .followRedirects(HttpClient.Redirect.NEVER)
+                .executor(executor)
+                .build());
+  }
+
+  HttpTransport(Function<ExecutorService, HttpClient> factory) {
+    clientFactory = () -> factory.apply(executor);
+  }
+
+  /** TLS and selector initialization are needed only for a request, never for drawing a window. */
+  private synchronized CompletableFuture<HttpClient> client() {
+    if (closed) {
+      return CompletableFuture.failedFuture(new IOException("HTTP transport is closed"));
+    }
+    if (client == null) {
+      CompletableFuture<HttpClient> pending = new CompletableFuture<>();
+      client = pending;
+      executor.execute(
+          () -> {
+            try {
+              HttpClient created = clientFactory.get();
+              if (!pending.complete(created)) {
+                // close() won while the factory was still running. Do not leak its selector thread.
+                created.shutdownNow();
+              }
+            } catch (Throwable failure) {
+              pending.completeExceptionally(failure);
+            }
+          });
+    }
+    return client;
   }
 
   /** A request builder for {@code base + path} with the app's headers and the given time limit. */
@@ -72,14 +109,15 @@ public final class HttpTransport implements AutoCloseable {
   }
 
   /**
-   * Makes cancelling {@code derived} cancel {@code source} too, so that giving up on a result also
-   * aborts the HTTP exchange behind it instead of leaving the connection waiting.
+   * Makes cancellation or a deadline on {@code derived} cancel {@code source} too, so that giving
+   * up on a result also aborts the HTTP exchange behind it instead of leaving the connection
+   * waiting.
    */
   public static <T, U> CompletableFuture<U> linked(
       CompletableFuture<T> source, CompletableFuture<U> derived) {
     derived.whenComplete(
         (value, failure) -> {
-          if (derived.isCancelled()) {
+          if (derived.isCancelled() || hasCause(failure, TimeoutException.class)) {
             source.cancel(true);
           }
         });
@@ -92,8 +130,34 @@ public final class HttpTransport implements AutoCloseable {
    */
   public CompletableFuture<Response> send(HttpRequest request) {
     long started = System.nanoTime();
-    CompletableFuture<HttpResponse<byte[]>> exchange =
-        client.sendAsync(request, HttpResponse.BodyHandlers.ofByteArray());
+    CompletableFuture<HttpResponse<byte[]>> exchange = new CompletableFuture<>();
+    // The deadline includes lazy initialization; an expired waiter must never send later.
+    request.timeout().ifPresent(limit -> exchange.orTimeout(limit.toNanos(), TimeUnit.NANOSECONDS));
+    client()
+        .whenComplete(
+            (ready, failure) -> {
+              if (exchange.isDone()) {
+                return; // Cancellation before initialization must not send a late request.
+              }
+              if (failure != null) {
+                exchange.completeExceptionally(failure);
+                return;
+              }
+              try {
+                var sent = ready.sendAsync(request, HttpResponse.BodyHandlers.ofByteArray());
+                linked(sent, exchange);
+                sent.whenComplete(
+                    (response, error) -> {
+                      if (error == null) {
+                        exchange.complete(response);
+                      } else {
+                        exchange.completeExceptionally(error);
+                      }
+                    });
+              } catch (RuntimeException error) {
+                exchange.completeExceptionally(error);
+              }
+            });
     return linked(
         exchange,
         exchange.handle(
@@ -165,8 +229,8 @@ public final class HttpTransport implements AutoCloseable {
     String reason;
     if (cause instanceof HttpConnectTimeoutException) {
       reason = "连接超时";
-    } else if (cause instanceof HttpTimeoutException) {
-      // Sent, but not answered in time: the server may still be working on it.
+    } else if (cause instanceof HttpTimeoutException || cause instanceof TimeoutException) {
+      // Initialization or the answer exceeded the deadline; a sent request may still run remotely.
       return new ApiException(ApiError.TIMED_OUT, 0, where + "：等待响应超时", cause);
     } else if (hasCause(cause, UnresolvedAddressException.class)
         || hasCause(cause, UnknownHostException.class)) {
@@ -197,6 +261,22 @@ public final class HttpTransport implements AutoCloseable {
 
   @Override
   public void close() {
+    CompletableFuture<HttpClient> pending;
+    synchronized (this) {
+      if (closed) {
+        return;
+      }
+      closed = true;
+      pending = client;
+    }
+    if (pending != null) {
+      pending.thenAccept(HttpTransport::stop);
+      pending.completeExceptionally(new IOException("HTTP transport is closed"));
+    }
+    executor.shutdownNow();
+  }
+
+  private static void stop(HttpClient client) {
     // close() would wait for every exchange in flight, a job run among them (up to its wait limit):
     // closing the window must not keep the process alive, so in-flight requests are cancelled.
     client.shutdownNow();

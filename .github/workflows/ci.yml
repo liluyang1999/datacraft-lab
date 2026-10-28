@@ -185,9 +185,16 @@ jobs:
   desktop:
     # 数艺工坊, the JavaFX desktop console: a Maven project of its own (desktop/pom.xml) that no
     # other job builds. JavaFX needs a display, which xvfb-run provides on the runner.
-    name: Desktop console (JavaFX 25)
-    runs-on: ubuntu-24.04
+    name: Desktop console (JavaFX 25, ${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, windows-2025]
+    runs-on: ${{ matrix.os }}
     timeout-minutes: 25
+    defaults:
+      run:
+        shell: python -B cicd/step.py bash -e {0}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
@@ -202,24 +209,43 @@ jobs:
       # Format, Checkstyle, Enforcer, unit, client, store and UI tests (every view in both themes,
       # no JavaFX warning, no stalled FX thread once warm), then the jar.
       - name: Prepare fonts and the accessibility bus
+        if: runner.os == 'Linux'
         run: bash cicd/desktop/prepare-linux.sh
 
       - name: Verify the desktop console on a virtual display
+        if: runner.os == 'Linux'
         run: dbus-run-session -- xvfb-run --auto-servernum ./mvnw -B -ntp -Pdesktop -pl :datacraft-desktop -am verify
+
+      - name: Verify the desktop console and native UIA lifecycle on Windows
+        if: runner.os == 'Windows'
+        run: ./mvnw -B -ntp -Pdesktop -pl :datacraft-desktop -am verify
 
       # The desktop suite against its own floor; the passing count becomes a notice.
       - name: Assert the desktop suite executed its tests
-        run: python3 -B cicd/build/check_test_counts.py --project desktop
+        run: python -B cicd/build/check_test_counts.py --project desktop
 
-      # jlink, jpackage, an AOT cache trained by one smoke start, then a second start with it.
+      # jlink/jpackage, train every view/theme, then verify AOT and the budget on all 20 starts.
       - name: Package the app image and check that it starts
-        run: dbus-run-session -- xvfb-run --auto-servernum python3 -B cicd/desktop/package_desktop.py
+        if: runner.os == 'Linux'
+        run: dbus-run-session -- xvfb-run --auto-servernum python -B cicd/desktop/package_desktop.py
+
+      - name: Package the Windows app image and check repeated starts
+        if: runner.os == 'Windows'
+        run: python -B cicd/desktop/package_desktop.py
+
+      - name: Upload every startup sample
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: desktop-startup-${{ matrix.os }}
+          path: desktop/target/package/startup.json
+          if-no-files-found: ignore
 
       - name: Upload the UI snapshots
         if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: desktop-ui-snapshots
+          name: desktop-ui-snapshots-${{ matrix.os }}
           path: desktop/target/ui-snapshots
           if-no-files-found: ignore
 
@@ -227,7 +253,7 @@ jobs:
         if: failure()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: surefire-reports-desktop
+          name: surefire-reports-desktop-${{ matrix.os }}
           path: desktop/target/surefire-reports/**
           if-no-files-found: ignore
 

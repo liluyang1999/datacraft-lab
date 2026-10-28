@@ -64,14 +64,15 @@ MODULE_DIRS = {
 # The desktop console (数艺工坊) is outside the default reactor. Its opt-in CI reactor builds only
 # the parent and desktop/pom.xml, then runs this check with --project desktop. Each platform runs one
 # of VaultPlatformTest's two platform tests and `verify` never runs the e2e-tagged ones, so the
-# floor is the same on both.
+# common floor is shared; Windows additionally exercises its retained native text range.
 DESKTOP_DIRS = {"datacraft-desktop": "desktop"}
-DESKTOP_FLOORS = {"datacraft-desktop": 98}
+DESKTOP_FLOORS = {"datacraft-desktop": 104}
+DESKTOP_WINDOWS_FLOORS = {"datacraft-desktop": 106}
 
 # What --project selects: the module directories, the floors per platform, and the notice's title.
 PROJECTS = {
     "backend": (MODULE_DIRS, PLATFORM_FLOORS, "JVM tests"),
-    "desktop": (DESKTOP_DIRS, {"linux": DESKTOP_FLOORS, "windows": DESKTOP_FLOORS},
+    "desktop": (DESKTOP_DIRS, {"linux": DESKTOP_FLOORS, "windows": DESKTOP_WINDOWS_FLOORS},
                 "Desktop console tests"),
 }
 

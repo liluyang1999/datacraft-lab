@@ -102,16 +102,23 @@ Rows 只更新变化的流水线泳道
 ## 启动顺序
 
 1. `Launcher` 确认 Java 不低于 25、JavaFX 可用，否则打印一行原因并退出（退出码 2）。
-2. `Launcher` 初始化 `~/.datacraft` 与日志，另起线程打开 SQLite 并迁移、读入设置、创建 HTTP 客户端与各服务，
+2. `Launcher` 初始化 `~/.datacraft` 与日志，另起线程打开 SQLite 并迁移、读入设置、创建各服务，
    同时启动 JavaFX 工具包；两者大约同时就绪。打不开本机数据（例如结构比应用新）时，窗口只显示原因并退出。
 3. 显示窗口与外壳，进入上次的视图；其余视图首次打开时才创建（懒加载）。
-4. 后台开始健康检查，恢复上次的连接；首个结果到达前，状态显示“正在连接”。
-5. 首帧之后绘制窗口图标；3 s 后启用 `FxWatchdog`。各阶段距 JVM 启动的时间写入日志。
+4. 等待第一个布局脉冲结束，在下一脉冲记录首帧；这个软件计时点不等于显示器的物理呈现时间。
+5. 随后绘制图标、恢复上次连接并启动健康检查；3 s 后启用 `FxWatchdog`。各阶段距 JVM 启动的时间写入日志。
+
+HTTP 客户端及 TLS 仅在首次请求时由后台虚拟线程创建，多个请求共享同一初始化结果。
+初始化前取消不会在客户端就绪后发出过期请求；关闭会拒绝等待者，并关闭迟到的客户端与自有执行器。
+无连接的首帧不再为网络初始化等待；实际连接的第一批请求承担这项开销，界面不阻塞。
 
 ## 打包
 
 `cicd/desktop/package_desktop.py` 在 `package` 之后生成应用目录：jdeps 找出应用与依赖用到的 JDK 模块，
 jlink 生成只含这些模块与本平台 JavaFX 模块的运行时，jpackage 把应用 jar、依赖与运行时做成
-`DataCraft`（Windows 上是 `DataCraft.exe`）。随后以 `--smoke` 启动一次训练 AOT 缓存
-（`-XX:AOTCacheOutput`），把 `-XX:AOTCache=$APPDIR/datacraft.aot` 写进启动器的配置，再启动一次检查。
-CI 的 `desktop` 作业在 Linux 上（Xvfb）执行同样的步骤。
+`DataCraft`（Windows 上是 `DataCraft.exe`）。JavaFX 模块先经过版本与校验和锁定的
+[无障碍生命周期修补](javafx-patch.md)，不修改依赖缓存。
+随后以隔离的 `--smoke` 训练模式遍历五视图及两种主题，生成 AOT 缓存
+（`-XX:AOTCacheOutput`），把 `-XX:AOTCache=$APPDIR/datacraft.aot` 写进启动器的配置。
+最后执行 10 次新配置和 10 次复用配置启动，后者覆盖不同已保存页面和主题；每次都确认 AOT 类实际生效，
+任一次超过 1500 ms 即失败。CI 的 `desktop` 矩阵在 Windows 与 Linux（Xvfb）执行同样的步骤。

@@ -3,8 +3,10 @@ package com.example.datacraft.desktop;
 import com.example.datacraft.desktop.app.AppContext;
 import com.example.datacraft.desktop.app.AppPaths;
 import com.example.datacraft.desktop.app.Logging;
+import com.example.datacraft.desktop.app.Preferences;
 import com.example.datacraft.desktop.ui.FxWatchdog;
 import com.example.datacraft.desktop.ui.shell.MainWindow;
+import com.example.datacraft.desktop.ui.shell.Navigator.Destination;
 import java.nio.file.Path;
 import java.time.Duration;
 import java.time.Instant;
@@ -81,6 +83,10 @@ public final class DesktopApp extends Application {
     mark("window built");
     window.show();
     mark("window shown");
+    afterFirstFrame();
+  }
+
+  private void restoreConnection() {
     context
         .profiles()
         .restore()
@@ -93,7 +99,6 @@ public final class DesktopApp extends Application {
               return java.util.Optional.empty();
             });
     context.monitor().start();
-    afterFirstFrame();
   }
 
   /** The store could not be opened (a newer schema, a locked or damaged file): say so and quit. */
@@ -113,11 +118,23 @@ public final class DesktopApp extends Application {
   /** Things that need not delay the first frame: the window icons and the stall watchdog. */
   private void afterFirstFrame() {
     new AnimationTimer() {
+      private boolean layoutPulsePassed;
+
       @Override
       public void handle(long now) {
+        // AnimationTimer runs BEFORE CSS/layout/render. Let the first pulse finish before
+        // recording readiness or doing optional work (notably generating the window icons).
+        if (!layoutPulsePassed) {
+          layoutPulsePassed = true;
+          return;
+        }
         stop();
         mark("first frame");
-        window.loadIcons();
+        Platform.runLater(
+            () -> {
+              window.loadIcons();
+              restoreConnection();
+            });
         PauseTransition warmUp = new PauseTransition(WARM_UP);
         warmUp.setOnFinished(
             event -> {
@@ -126,10 +143,42 @@ public final class DesktopApp extends Application {
             });
         warmUp.play();
         if (Boolean.getBoolean(SMOKE_PROPERTY)) {
+          if (Boolean.getBoolean("datacraft.desktop.aotTraining")) {
+            trainViews();
+            return;
+          }
           PauseTransition quit = new PauseTransition(javafx.util.Duration.seconds(2));
           quit.setOnFinished(event -> Platform.exit());
           quit.play();
         }
+      }
+    }.start();
+  }
+
+  /** The package's disposable training profile covers every possible restored view and theme. */
+  private void trainViews() {
+    new AnimationTimer() {
+      private int pulses;
+      private int next;
+
+      @Override
+      public void handle(long now) {
+        if (++pulses % 3 != 0) {
+          return;
+        }
+        Destination[] views = Destination.values();
+        if (next == views.length * 2) {
+          stop();
+          LOG.log(
+              System.Logger.Level.INFO, "AOT training completed: all five views in both themes");
+          Platform.exit();
+          return;
+        }
+        context
+            .preferences()
+            .theme(next < views.length ? Preferences.Theme.LIGHT : Preferences.Theme.DARK);
+        window.go(views[next % views.length]);
+        next++;
       }
     }.start();
   }

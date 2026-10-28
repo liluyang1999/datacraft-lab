@@ -38,7 +38,7 @@ Airflow 用户名与口令是其中的 `AIRFLOW_ADMIN_USERNAME` 与 `AIRFLOW_ADM
 ## 打包
 
 `cicd/desktop/package_desktop.py` 把应用做成自带 Java 运行时的应用目录 `desktop/target/dist/DataCraft`
-（Windows 上双击 `DataCraft.exe`），约 116 MB，另含约 45 MB 的 AOT 缓存：
+（Windows 上双击 `DataCraft.exe`），运行时与 AOT 缓存大小随平台及 JDK 改变：
 
 ```bash
 ./mvnw -f desktop/pom.xml -B -ntp package
@@ -48,10 +48,15 @@ Airflow 用户名与口令是其中的 `AIRFLOW_ADMIN_USERNAME` 与 `AIRFLOW_ADM
 python3 -B cicd/desktop/package_desktop.py
 ```
 
-脚本用 jdeps 与 jlink 生成精简运行时，用 jpackage 生成应用目录，然后以 `--smoke`（首帧后 2 秒自动退出）
-启动一次训练 JDK 25 的 AOT 缓存（JEP 483/514），再带着缓存启动一次检查。两次启动都使用 `desktop/target`
-下的临时数据目录，不碰 `~/.datacraft`。AOT 缓存按文件时间戳核对应用的 jar：复制或压缩应用目录时保留
-时间戳即可继续使用；时间戳变化时应用照常运行，只是不用缓存、启动慢约三分之一。
+脚本用 jdeps 与 jlink 生成精简运行时，用 jpackage 生成应用目录，然后以专用 `--smoke` 训练模式
+生成 JDK 25 的 AOT 缓存（JEP 483/514）；训练过程遍历五视图的浅深主题，再执行 20 次普通缓存启动检查，
+包含新建配置及恢复已保存页面。每次均确认 AOT 实际生效，标准错误中的未捕获异常也会让检查失败。
+默认以每次 ≤ 1500 ms 验收，完整样本写到 `desktop/target/package/startup.json`，不丢弃首次启动或慢样本。
+全部启动都使用 `desktop/target` 下的临时数据目录，不碰 `~/.datacraft`。
+AOT 缓存按文件时间戳核对应用的 jar：复制或压缩应用目录时保留时间戳；应用正常运行时允许 JVM 回退，
+但打包检查使用 `AOTMode=on`，回退不能冒充缓存成功。
+诊断机器负载时可传 `--startup-budget-ms 0` 仅记录结果，此模式不代表预算达标，CI 不使用它。
+JavaFX 构建含 [版本锁定的无障碍修补](javafx-patch.md)。
 
 ## 端到端验证
 
@@ -74,5 +79,6 @@ python3 -B cicd/desktop/package_desktop.py
 | [界面设计](ui-design.md) | 视觉概念、色彩、字体、布局、组件、动效与文案 |
 | [接口对接](api-integration.md) | 引擎 API 与 Airflow REST API 的请求、认证、错误与轮询 |
 | [流畅度](performance.md) | 预算、实测、手段与回归 |
+| [JavaFX 修补](javafx-patch.md) | 原生无障碍生命周期、来源、构建校验与移除条件 |
 | [测试](testing.md) | 测试分层、端到端步骤与约定 |
 | [循环工程](loop/README.md) | 每一轮的闭环规则；[计划](loop/plan.md) 与 [记录](loop/log.md) |
