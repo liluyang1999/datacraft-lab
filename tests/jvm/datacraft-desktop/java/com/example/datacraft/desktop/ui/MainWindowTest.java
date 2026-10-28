@@ -8,6 +8,7 @@ import static com.example.datacraft.desktop.ui.FxTesting.snapshot;
 import static com.example.datacraft.desktop.ui.FxTesting.waitUntil;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.example.datacraft.desktop.api.StubServer;
@@ -205,6 +206,12 @@ class MainWindowTest {
 
   @Test
   void everyViewShowsLiveDataInBothThemes() {
+    // The same compiled styles must be present in tests and the packaged app, without a text
+    // fallback.
+    for (String name : List.of("base", "light", "dark")) {
+      assertNotNull(
+          MainWindow.class.getResource("/com/example/datacraft/desktop/theme/" + name + ".bss"));
+    }
     Parent root = root();
     waitUntil("both backends are up", () -> bothUp(root));
 

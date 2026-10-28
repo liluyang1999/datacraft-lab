@@ -115,6 +115,21 @@
                             </arguments>
                         </configuration>
                     </execution>
+                    <execution>
+                        <id>compile-javafx-stylesheets</id>
+                        <phase>process-classes</phase>
+                        <goals><goal>exec</goal></goals>
+                        <configuration>
+                            <executable>${java.home}/bin/java</executable>
+                            <arguments>
+                                <argument>--module-path=${desktop.javafx.dir}</argument>
+                                <argument>--add-modules</argument>
+                                <argument>javafx.graphics</argument>
+                                <argument>${datacraft.root}/cicd/desktop/CompileCss.java</argument>
+                                <argument>${project.build.outputDirectory}/com/example/datacraft/desktop/theme</argument>
+                            </arguments>
+                        </configuration>
+                    </execution>
                 </executions>
             </plugin>
             <plugin>

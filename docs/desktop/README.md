@@ -57,6 +57,9 @@ AOT 缓存按文件时间戳核对应用的 jar：复制或压缩应用目录时
 但打包检查使用 `AOTMode=on`，回退不能冒充缓存成功。
 诊断机器负载时可传 `--startup-budget-ms 0` 仅记录结果，此模式不代表预算达标，CI 不使用它。
 JavaFX 构建含 [版本锁定的无障碍修补](javafx-patch.md)。
+构建还用同一版本 JavaFX 将三份主题 CSS 预编译为 `.bss`，保留 CSS 源文件。
+[JavaFX 会优先加载相邻的二进制样式](https://github.com/openjdk/jfx/blob/jfx25/modules/javafx.graphics/src/main/java/com/sun/javafx/css/StyleManager.java)，
+减少首屏解析；编译错误会阻止构建，完整界面门禁使用相同的生成资源。
 
 ## 端到端验证
 

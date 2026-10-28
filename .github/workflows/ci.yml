@@ -218,7 +218,7 @@ jobs:
 
       - name: Verify the desktop console and native UIA lifecycle on Windows
         if: runner.os == 'Windows'
-        run: ./mvnw -B -ntp -Pdesktop -pl :datacraft-desktop -am verify
+        run: ./mvnw -B -ntp -Pdesktop -pl :datacraft-desktop -am verify -Dprism.verbose=true
 
       # The desktop suite against its own floor; the passing count becomes a notice.
       - name: Assert the desktop suite executed its tests
