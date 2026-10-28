@@ -44,6 +44,11 @@ Ubuntu CI 先运行 `cicd/desktop/prepare-linux.sh`，补齐 `fonts-noto-cjk`、
 测试仅应指向可写的测试部署；运行会保留测试 DAG 记录，暂停状态在成功或失败后均恢复。
 完整桌面门禁使用与打包程序相同的 32 MiB 初始堆、256 MiB 最大堆，包含大日志与动效检查。
 
+Windows 的受限运行环境若在进入测试前报 `Unable to establish loopback connection`，先检查完整原因。
+本轮可用只含 JDK 的 `Selector.open()` 复现 `UnixDomainSockets.connect0` 的 `Invalid argument: connect`，
+普通 TCP 监听正常；仅把测试子进程的 `TEMP` / `TMP` 指向项目内专用临时目录后，选择器、HTTP 服务和
+真实引擎测试均通过。无需更改系统设置或关闭安全能力；这类启动失败不算测试通过，诊断和清理记录见 L7。
+
 每次的结果记在 [循环记录](loop/log.md)。
 
 ## 约定
