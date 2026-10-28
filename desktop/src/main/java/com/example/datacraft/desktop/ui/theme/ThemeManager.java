@@ -7,21 +7,22 @@ import java.util.Objects;
 import javafx.application.ColorScheme;
 import javafx.application.Platform;
 import javafx.beans.property.SimpleBooleanProperty;
+import javafx.css.PseudoClass;
 import javafx.scene.Parent;
 import javafx.scene.Scene;
 
 /**
  * Applies the light or dark theme. Both theme files stay loaded; the dark tokens apply under the
- * root's "dark" style class, so switching toggles that class and neither replaces a stylesheet nor
- * creates a node (measured: about half the restyling time of swapping the theme file). "跟随系统"
- * follows the platform's colour scheme as it changes.
+ * root's "dark" pseudo-class. A state transition updates the palette without changing selector
+ * membership and rematching every base style. "跟随系统" follows the platform's colour scheme as it
+ * changes.
  */
 public final class ThemeManager {
 
   static final String BASE = stylesheet("base.css");
   static final String LIGHT = stylesheet("light.css");
   static final String DARK = stylesheet("dark.css");
-  static final String DARK_CLASS = "dark";
+  private static final PseudoClass DARK_STATE = PseudoClass.getPseudoClass("dark");
 
   private final Preferences preferences;
   private final SimpleBooleanProperty dark = new SimpleBooleanProperty(false);
@@ -51,7 +52,7 @@ public final class ThemeManager {
     style(scene.getRoot());
   }
 
-  /** The root of a scene (or a dialog pane): the UI font and the current theme's class. */
+  /** The root of a scene (or a dialog pane): the UI font and the current theme's state. */
   public void style(Parent root) {
     root.setStyle("-fx-font-family: \"" + fontFamily + "\";");
     mark(root);
@@ -81,12 +82,7 @@ public final class ThemeManager {
   }
 
   private void mark(Parent root) {
-    boolean marked = root.getStyleClass().contains(DARK_CLASS);
-    if (dark.get() && !marked) {
-      root.getStyleClass().add(DARK_CLASS);
-    } else if (!dark.get() && marked) {
-      root.getStyleClass().remove(DARK_CLASS);
-    }
+    root.pseudoClassStateChanged(DARK_STATE, dark.get());
   }
 
   private boolean resolveDark() {

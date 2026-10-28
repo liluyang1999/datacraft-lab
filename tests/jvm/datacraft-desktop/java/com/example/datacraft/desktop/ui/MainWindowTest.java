@@ -17,6 +17,7 @@ import com.example.datacraft.desktop.app.AppPaths;
 import com.example.datacraft.desktop.app.Preferences;
 import com.example.datacraft.desktop.service.FakeBackends;
 import com.example.datacraft.desktop.store.Profile;
+import com.example.datacraft.desktop.ui.component.LogPager;
 import com.example.datacraft.desktop.ui.component.RunBars;
 import com.example.datacraft.desktop.ui.component.RunMark;
 import com.example.datacraft.desktop.ui.component.StatusRing;
@@ -26,6 +27,7 @@ import com.example.datacraft.desktop.ui.shell.Drawer;
 import com.example.datacraft.desktop.ui.shell.MainWindow;
 import com.example.datacraft.desktop.ui.shell.Navigator.Destination;
 import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 import java.util.concurrent.CountDownLatch;
@@ -304,7 +306,13 @@ class MainWindowTest {
 
     Scene scene = scene();
     context.preferences().theme(Preferences.Theme.DARK);
-    waitUntil("the dark theme is applied", () -> scene.getRoot().getStyleClass().contains("dark"));
+    waitUntil(
+        "the dark theme is applied",
+        () ->
+            scene
+                .getRoot()
+                .getPseudoClassStates()
+                .contains(javafx.css.PseudoClass.getPseudoClass("dark")));
     for (Destination destination :
         List.of(
             Destination.OVERVIEW,
@@ -790,7 +798,14 @@ class MainWindowTest {
     assertEquals(
         expected,
         onFx(() -> List.of(stage.getX(), stage.getY(), stage.getWidth(), stage.getHeight())));
-    assertTrue(onFx(() -> stage.getScene().getRoot().getStyleClass().contains("dark")));
+    assertTrue(
+        onFx(
+            () ->
+                stage
+                    .getScene()
+                    .getRoot()
+                    .getPseudoClassStates()
+                    .contains(javafx.css.PseudoClass.getPseudoClass("dark"))));
   }
 
   @Test
@@ -802,32 +817,60 @@ class MainWindowTest {
         "the newest engine-jobs run's tasks are on their cards",
         () -> card(root, FakeBackends.LONG_LOG_TASK).isPresent());
     onFx(() -> card(root, FakeBackends.LONG_LOG_TASK).orElseThrow().fireEvent(click()));
-    @SuppressWarnings("unchecked")
-    javafx.scene.control.ListView<String> lines =
-        (javafx.scene.control.ListView<String>)
-            onFx(
-                () ->
-                    find(root, javafx.scene.control.ListView.class).stream()
-                        .filter(list -> list.getStyleClass().contains("log-view"))
-                        .findFirst()
-                        .orElseThrow());
-    waitUntil(
-        "the whole log is read", () -> lines.getItems().size() == FakeBackends.LONG_LOG_LINES);
+    LogPager pager = onFx(() -> find(root, LogPager.class).getFirst());
+    var lines = pager.lines();
+    waitUntil("the whole log is read", () -> pager.lineCount() == FakeBackends.LONG_LOG_LINES);
     settle();
     FxWatchdog watchdog = new FxWatchdog(50);
     onFx(watchdog::start);
     try {
-      for (int line = 0; line < FakeBackends.LONG_LOG_LINES; line += 40) {
-        int target = line;
-        onFx(() -> lines.scrollTo(target));
+      onFx(() -> button(pager, "首页").fire());
+      List<String> visited = new ArrayList<>();
+      while (visited.size() < FakeBackends.LONG_LOG_LINES) {
+        List<String> page = onFx(() -> List.copyOf(lines.getItems()));
+        assertFalse(page.isEmpty(), "a loaded log page must make progress");
+        assertTrue(page.size() <= 100, "native accessibility traversal must be bounded");
+        visited.addAll(page);
+        for (int line = 0; line < page.size(); line += 40) {
+          int target = line;
+          onFx(() -> lines.scrollTo(target));
+          settle();
+        }
+        if (onFx(() -> button(pager, "下一页").isDisabled())) {
+          break;
+        }
+        onFx(() -> button(pager, "下一页").fire());
         settle();
       }
-      onFx(() -> lines.scrollTo(0));
+      assertEquals(FakeBackends.LONG_LOG_LINES, visited.size());
+      assertTrue(onFx(() -> button(pager, "下一页").isDisabled()));
+      for (int line = 0; line < visited.size(); line++) {
+        assertTrue(
+            visited
+                .get(line)
+                .endsWith(
+                    "Spark stage "
+                        + line / 50
+                        + " task "
+                        + line % 50
+                        + " finished in "
+                        + (line % 13 + 2)
+                        + " ms"),
+            "missing or reordered log line " + line);
+      }
+      onFx(() -> button(pager, "首页").fire());
       settle();
     } finally {
       watchdog.stop();
     }
     assertTrue(watchdog.stalls().isEmpty(), "stalls: " + watchdog.stalls());
+  }
+
+  private static Button button(Parent root, String text) {
+    return find(root, Button.class).stream()
+        .filter(button -> text.equals(button.getText()))
+        .findFirst()
+        .orElseThrow();
   }
 
   @Test

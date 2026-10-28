@@ -1,6 +1,7 @@
 package com.example.datacraft.desktop.ui;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
@@ -122,6 +123,60 @@ class AccessibilityLifecycleTest {
   }
 
   private record Fixture(Stage stage, StackPane host, TextArea text, Object accessible) {}
+
+  @Test
+  @Tag("windows-only")
+  void unsupportedWindowsPropertiesReturnEmptyInsteadOfProviderErrors() {
+    FxTesting.onFx(
+        () -> {
+          TextArea text = new TextArea("可访问文本");
+          Stage stage = new Stage();
+          stage.setScene(new Scene(new StackPane(text), 400, 200));
+          stage.show();
+          Object accessible = invoke(Node.class, text, "getAccessible");
+          Method property = method(accessible.getClass(), "GetPropertyValue", int.class);
+          try {
+            // The native bridge maps null to E_FAIL, but UIA requires S_OK + VT_EMPTY for
+            // unsupported properties. Culture, ClassName and future IDs must all be harmless.
+            for (int id : new int[] {30015, 30012, Integer.MAX_VALUE}) {
+              Object variant = property.invoke(accessible, id);
+              assertNotNull(variant, "unsupported property " + id + " must not signal E_FAIL");
+              var kind = variant.getClass().getDeclaredField("vt");
+              kind.setAccessible(true);
+              assertEquals((short) 0, kind.getShort(variant));
+            }
+            Object controlType = property.invoke(accessible, 30003);
+            var value = controlType.getClass().getDeclaredField("lVal");
+            value.setAccessible(true);
+            assertEquals(50004, value.getInt(controlType)); // UIA_EditControlTypeId
+            Accessible peer = (Accessible) accessible;
+            Accessible.EventHandler originalHandler = peer.getEventHandler();
+            peer.setEventHandler(
+                new Accessible.EventHandler() {
+                  @Override
+                  public Object getAttribute(AccessibleAttribute attribute, Object... parameters) {
+                    throw new IllegalStateException("live property failure");
+                  }
+                });
+            try {
+              var failure =
+                  assertThrows(
+                      java.lang.reflect.InvocationTargetException.class,
+                      () -> property.invoke(accessible, 30003));
+              assertEquals("live property failure", failure.getCause().getMessage());
+            } finally {
+              peer.setEventHandler(originalHandler);
+            }
+            invoke(Node.class, text, "releaseAccessible");
+            // A disposed provider remains a failure, rather than masquerading as a live peer.
+            assertNull(property.invoke(accessible, 30003));
+          } finally {
+            stage.close();
+          }
+          return null;
+        });
+    FxTesting.assertHealthy();
+  }
 
   @Test
   @Tag("windows-only")

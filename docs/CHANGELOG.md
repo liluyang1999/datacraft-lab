@@ -13,6 +13,9 @@ All notable changes to this project are documented here. The format follows
   hash-checked build patch guards disposed callbacks without hiding live-handler failures or
   disabling accessibility. Tests, development launch and packaging share the patched modules;
   [provenance and removal conditions](desktop/javafx-patch.md) are documented.
+- Unsupported Windows UIA properties return an empty variant from live peers, as required by
+  `GetPropertyValue`, instead of triggering native provider-error diagnostics. Disposed peers and
+  live callback exceptions retain their failure behavior; packaging verifies the Windows patch.
 - First-frame timing now waits for the first CSS/layout pulse to finish. Icons and connection
   restoration follow that pulse, and AOT training covers all five views in both themes.
 - HTTP/TLS initialization runs in the background only when the first request needs it. Concurrent
@@ -24,8 +27,14 @@ All notable changes to this project are documented here. The format follows
   benchmark database connections close explicitly.
 - Theme stylesheets are precompiled with the same JavaFX version and validated on load, reducing
   parsing on startup while preserving the source CSS and existing visual checks.
+- Theme changes use a root pseudo-class state instead of changing style-class membership, avoiding
+  a full base-selector rematch. The existing 100 ms theme budget remains enforced after a Windows
+  CI run exposed a 106 ms font-layout stall.
 - The drawer caches its static shadow surface; log scrolling reuses the blurred bitmap, while
   size and theme changes invalidate it normally.
+- Logs expose at most 100 lines per page to bound native accessibility traversal as well as visual
+  rendering. All retained lines remain reachable; new lines follow the last page without resetting
+  an earlier page's selection. Closing the drawer detaches its source listener.
 - On Windows, the CI step wrapper resolves Bash from the installed Git distribution, avoiding
   an accidental launch of the system WSL entry point while preserving exit codes and annotations.
 - jpackage receives UTF-8 argument files, preserving Chinese metadata and paths when the Windows
@@ -45,7 +54,7 @@ All notable changes to this project are documented here. The format follows
   and existing UI latency budgets still apply; CPU-heavy client additions require reevaluation.
 
 #### Verification
-- Desktop CI now runs on Windows and Linux, with execution floors of 116 and 114 respectively,
+- Desktop CI now runs on Windows and Linux, with execution floors of 120 and 117 respectively,
   native Windows lifecycle regressions, and an artifact containing every startup sample.
 - Startup diagnostics include early launcher phases and cumulative process CPU time. Historical
   shared-runner spikes remain documented; added diagnostics do not establish that their cause is fixed.

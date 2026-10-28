@@ -1,9 +1,9 @@
 /*
  * 数艺工坊 dark theme: a blue-tinted night, not near-black with one neon accent. Both theme files
- * are always loaded; these tokens apply while the scene root carries the "dark" style class, so a
- * theme switch changes one class instead of the scene's stylesheet list.
+ * are always loaded; these tokens depend on the root's "dark" pseudo-class, so a theme switch
+ * updates CSS state without rematching the whole tree's base selectors.
  */
-.root.dark {
+.root:dark {
     -dc-bg-top: #0E1822;
     -dc-bg-bottom: #0B141C;
     -dc-surface: #15232F;

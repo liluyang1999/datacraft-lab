@@ -72,7 +72,8 @@ public final class FxWatchdog {
   }
 
   private void record(long waited, List<StackTraceElement> where) {
-    Stall stall = new Stall(waited, where.subList(0, Math.min(12, where.size())));
+    // CSS and skin frames can hide the native accessibility caller in a short stack.
+    Stall stall = new Stall(waited, where.subList(0, Math.min(48, where.size())));
     synchronized (stalls) {
       stalls.add(stall);
     }

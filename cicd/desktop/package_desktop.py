@@ -174,11 +174,18 @@ def verify_javafx_patch(javafx):
         raise Failed("expected exactly one JavaFX graphics module")
     with zipfile.ZipFile(graphics[0]) as jar:
         if (PATCH_MARKER not in jar.namelist()
-                or b"patch=accessible-disposal-v1\n" not in jar.read(PATCH_MARKER)):
-            raise Failed("JavaFX disposal guard missing: run the desktop Maven build first")
+                or b"patch=accessible-contracts-v2\n" not in jar.read(PATCH_MARKER)):
+            raise Failed("JavaFX accessibility patch missing: run the desktop Maven build first")
         digest = hashlib.sha256(jar.read("com/sun/glass/ui/Accessible.class")).hexdigest()
         if f"patched.sha256={digest}\n".encode() not in jar.read(PATCH_MARKER):
             raise Failed("JavaFX disposal guard checksum mismatch: rebuild the desktop modules")
+        if re.search(r"-win(?:-aarch64)?\.jar$", graphics[0].name):
+            entry = "com/sun/glass/ui/win/WinAccessible.class"
+            if entry not in jar.namelist():
+                raise Failed("JavaFX Windows property patch missing: rebuild the desktop modules")
+            digest = hashlib.sha256(jar.read(entry)).hexdigest()
+            if f"windows.patched.sha256={digest}\n".encode() not in jar.read(PATCH_MARKER):
+                raise Failed("JavaFX Windows property checksum mismatch: rebuild the desktop modules")
 
 
 def jlink_module_path(jlink, javafx):

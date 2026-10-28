@@ -40,7 +40,7 @@
 | `desktop.viewmodel` | `StatusModel`、`OverviewModel`、`JobsModel`、`PipelinesModel`、`ActivityModel`、`SettingsModel`；`DagRow`、`Labels`（状态与类型的中文名）、`Visibility` |
 | `desktop.ui.shell` | `MainWindow`、`Navigator`（视图切换与懒加载）、`Sidebar`、`TopBar`、`Toasts`、`Drawer`（侧滑面板）、`Dialogs`、`AppIcon` |
 | `desktop.ui.view` | 五个视图，各自只做布局与绑定；`Segments`（运行柱的高度、提示与选择键） |
-| `desktop.ui.component` | 图形：`StatusRing`（状态环）、`Donut`（结果构成）、`RunBars`（运行柱）、`TimeStrip`（最近运行的时间线）、`TaskGraph` 与 `GraphLayout`（DAG 图及其纯函数布局）、`RunMark`（勾与叉）、`BusyRing`（等待中的转圈）；表单与布局：`ParamEditor`、`EmptyState`、`Rows`（短列表的就地更新）、`Controls`（含提示用的 ⓘ 与标签片）、`Icons`（`Glyph` 枚举的线条图标）、`Tones` |
+| `desktop.ui.component` | 图形：`StatusRing`（状态环）、`Donut`（结果构成）、`RunBars`（运行柱）、`TimeStrip`（最近运行的时间线）、`TaskGraph` 与 `GraphLayout`（DAG 图及其纯函数布局）、`RunMark`（勾与叉）、`BusyRing`（等待中的转圈）；日志：`LogPager`（每页 100 行、末页跟随、关闭释放监听）；表单与布局：`ParamEditor`、`EmptyState`、`Rows`（短列表的就地更新）、`Controls`（含提示用的 ⓘ 与标签片）、`Icons`（`Glyph` 枚举的线条图标）、`Tones` |
 | `desktop.ui.theme` | `ThemeManager`（浅色、深色、跟随系统）、`Fonts`（中文用系统字体，数字用内置 Barlow）；样式表 `base.css`、`light.css`、`dark.css` |
 | `desktop.ui` | `Motion`（全部动效与“减少动效”）、`FxWatchdog`（FX 线程停顿监测） |
 | `desktop.util` | `Fx`（FX 线程的执行器）、`Latest`（只移交最新值）、`Lists`（按主键就地更新）、`Maps`（保序、可含 null 的不可变副本）、`Formats` |
@@ -121,7 +121,7 @@ HTTP 客户端及 TLS 仅在首次请求时由后台虚拟线程创建，多个�
 `cicd/desktop/package_desktop.py` 在 `package` 之后生成应用目录：jdeps 找出应用与依赖用到的 JDK 模块，
 jlink 生成只含这些模块与本平台 JavaFX 模块的运行时，jpackage 把应用 jar、依赖与运行时做成
 `DataCraft`（Windows 上是 `DataCraft.exe`）。JavaFX 模块先经过版本与校验和锁定的
-[无障碍生命周期修补](javafx-patch.md)，不修改依赖缓存。
+[无障碍生命周期与 Windows 属性契约修补](javafx-patch.md)，不修改依赖缓存。
 平台 jar 内的原生库还需独立安装到 JavaFX 的 JRT 加载位置：Windows `runtime/bin/javafx`，
 Linux `lib/runtime/lib`。jlink 只保留 jar 资源，不会完成这一步；缺失时 JavaFX 会解压和校验
 用户缓存。脚本拒绝越界条目、重复库和运行时文件覆盖，jpackage 复制后按源 jar 的 SHA-256

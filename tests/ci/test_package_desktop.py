@@ -403,8 +403,35 @@ class CacheTests(unittest.TestCase):
             jar = Path(directory) / "javafx-graphics-25.0.5-win.jar"
             with zipfile.ZipFile(jar, "w") as archive:
                 archive.writestr("module-info.class", b"module")
-            with self.assertRaisesRegex(packaging.Failed, "disposal guard missing"):
+            with self.assertRaisesRegex(packaging.Failed, "accessibility patch missing"):
                 packaging.verify_javafx_patch([jar])
+
+    def test_a_stale_or_incomplete_windows_patch_cannot_be_packaged(self):
+        common = b"guarded Accessible"
+        windows = b"contract-correct WinAccessible"
+        common_hash = hashlib.sha256(common).hexdigest()
+        windows_hash = hashlib.sha256(windows).hexdigest()
+        marker = (f"patch=accessible-contracts-v2\npatched.sha256={common_hash}\n"
+                  f"windows.patched.sha256={windows_hash}\n")
+        with tempfile.TemporaryDirectory() as directory:
+            jar = Path(directory) / "javafx-graphics-25.0.5-win.jar"
+            for label, properties, body in (
+                ("old", marker.replace("accessible-contracts-v2", "accessible-disposal-v1"), windows),
+                ("missing", marker, None),
+                ("modified", marker, b"unpatched Windows class"),
+                ("valid", marker, windows),
+            ):
+                with self.subTest(label=label):
+                    with zipfile.ZipFile(jar, "w") as archive:
+                        archive.writestr(packaging.PATCH_MARKER, properties)
+                        archive.writestr("com/sun/glass/ui/Accessible.class", common)
+                        if body is not None:
+                            archive.writestr("com/sun/glass/ui/win/WinAccessible.class", body)
+                    if label == "valid":
+                        packaging.verify_javafx_patch([jar])
+                    else:
+                        with self.assertRaises(packaging.Failed):
+                            packaging.verify_javafx_patch([jar])
 
 
 if __name__ == "__main__":

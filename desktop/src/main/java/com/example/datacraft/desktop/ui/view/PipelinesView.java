@@ -8,6 +8,7 @@ import com.example.datacraft.desktop.ui.component.Controls;
 import com.example.datacraft.desktop.ui.component.EmptyState;
 import com.example.datacraft.desktop.ui.component.Icons;
 import com.example.datacraft.desktop.ui.component.Icons.Glyph;
+import com.example.datacraft.desktop.ui.component.LogPager;
 import com.example.datacraft.desktop.ui.component.ParamEditor;
 import com.example.datacraft.desktop.ui.component.Rows;
 import com.example.datacraft.desktop.ui.component.RunBars;
@@ -35,8 +36,6 @@ import javafx.geometry.Pos;
 import javafx.scene.Node;
 import javafx.scene.control.Button;
 import javafx.scene.control.Label;
-import javafx.scene.control.ListCell;
-import javafx.scene.control.ListView;
 import javafx.scene.control.ScrollPane;
 import javafx.scene.control.TextArea;
 import javafx.scene.control.TextField;
@@ -425,17 +424,7 @@ public final class PipelinesView implements View {
   private void openLog(TaskInstance task) {
     drawer.release();
     model.openLog(task);
-    ListView<String> lines = new ListView<>(model.logLines());
-    lines.getStyleClass().add("log-view");
-    lines.setCellFactory(
-        view ->
-            new ListCell<>() {
-              @Override
-              protected void updateItem(String line, boolean empty) {
-                super.updateItem(line, empty);
-                setText(empty ? null : line);
-              }
-            });
+    LogPager lines = new LogPager(model.logLines());
     Label status = Controls.label("", "caption");
     status
         .textProperty()
@@ -451,15 +440,6 @@ public final class PipelinesView implements View {
     more.disableProperty().bind(model.logLoading());
     Label problem = notice(model.logProblem().isNotEmpty());
     problem.textProperty().bind(model.logProblem());
-    // Follow the end while new lines arrive, as a terminal does. The model's list outlives this
-    // drawer, so the listener goes when the drawer closes.
-    ListChangeListener<String> follow =
-        change -> {
-          if (!lines.getItems().isEmpty()) {
-            lines.scrollTo(lines.getItems().size() - 1);
-          }
-        };
-    model.logLines().addListener(follow);
     VBox body = new VBox(12, problem, lines, Controls.row(12, status, Controls.grow(), more));
     VBox.setVgrow(lines, Priority.ALWAYS);
     body.setAlignment(Pos.TOP_LEFT);
@@ -468,7 +448,7 @@ public final class PipelinesView implements View {
         task.taskId() + " 的日志" + (attempt > 1 ? " · 第 " + attempt + " 次尝试" : ""),
         body,
         () -> {
-          model.logLines().removeListener(follow);
+          lines.close();
           model.closeLog();
         });
   }
