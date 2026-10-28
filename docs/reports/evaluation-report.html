@@ -386,7 +386,7 @@
       <tr><td>Airflow 运行环境</td><td>Airflow 3.3.2、官方 constraints 与安全修订、pyspark 4.2.0</td><td><span class="tag info">本轮复核</span> 在本轮镜像内检查 DAG 契约、三条真实流水线及依赖安全下限；结果见 4.4</td></tr>
       <tr><td>本机 Docker</td><td>Docker 29.9.2；本轮专用 Docker-in-Docker 引擎</td><td><span class="tag info">隔离演练</span> 镜像、Compose、单节点 Swarm 部署与升级、备份恢复在专用引擎运行；共享引擎的 Swarm 状态与其他项目卷保持不变</td></tr>
       <tr><td>L7 历史 CI</td><td>GitHub Actions / ubuntu-24.04</td><td><span class="tag ok">全部通过</span> 补修提交 <code>882dbfa</code> 的 <a href="https://github.com/liluyang1999/datacraft-lab/actions/runs/40628141047">40628141047</a> 六个作业成功，含后端 310 项、桌面 98 项、真实流水线、备份恢复和单节点 Swarm 升级；公告检查 <a href="https://github.com/liluyang1999/datacraft-lab/actions/runs/40628141207">40628141207</a> 成功</td></tr>
-      <tr><td>L8 代码定稿 CI</td><td><code>7d508b7</code> / <a href="https://github.com/liluyang1999/datacraft-lab/actions/runs/40651996212">40651996212</a></td><td><span class="tag ok">全部通过</span> 七个作业成功，含两平台桌面、后端 310 项、脚本与文档、真实流水线、四个镜像、Compose 备份恢复与单节点 Swarm 升级；具体结果见 4.5</td></tr>
+      <tr><td>L8 补修 CI</td><td><code>9a4208d</code> / <a href="https://github.com/liluyang1999/datacraft-lab/actions/runs/40662454175">40662454175</a></td><td><span class="tag ok">全部通过</span> 七个作业成功，含两平台桌面、后端 310 项、脚本与文档、真实流水线、四个镜像、Compose 备份恢复与单节点 Swarm 升级；具体结果见 4.5</td></tr>
       <tr><td>依赖版本与公告</td><td>OSV 与 Adoptium 官方接口</td><td><span class="tag ok">2026-10-28 核对</span> 32 个固定版本没有已知 OSV 公告；Temurin 25.0.5+8 是当前 Temurin 25 最新版，四个校验和一致；依赖版本保持锁定，JavaFX 私有修补另记录来源</td></tr>
       <tr><td>云平台价格</td><td>各厂商官方价格页、价格 API 与计费文档</td><td><span class="tag info">快照</span> 2026-09-19 核验，本轮未重新核价（<a href="pricing-evidence.md">价格依据</a>）</td></tr>
     </tbody>
@@ -871,7 +871,8 @@
     </tbody>
   </table>
   </div>
-  <p><strong>最终文档提交也实跑：</strong><code>d4bea26</code> / <a href="https://github.com/liluyang1999/datacraft-lab/actions/runs/40659186625">40659186625</a> 的六项作业通过；Windows 116 项通过，但训练时 JVM 对同一虚拟线程事件先后报告加载状态与 JFR 排除，打包诊断门禁拒绝，因此尚无该轮 Windows 启动样本。已补配对与拒绝路径回归，未重跑掩盖失败；补修后的远端结果按最终提交单独核对。公告检查 <a href="https://github.com/liluyang1999/datacraft-lab/actions/runs/40659246738">40659246738</a> 成功。</p>
+  <p><strong>最终文档提交也实跑：</strong><code>d4bea26</code> / <a href="https://github.com/liluyang1999/datacraft-lab/actions/runs/40659186625">40659186625</a> 的六项作业通过；Windows 116 项通过，但训练时 JVM 对同一虚拟线程事件先后报告加载状态与 JFR 排除，打包诊断门禁拒绝，因此尚无该轮 Windows 启动样本。已补配对与拒绝路径回归，未重跑掩盖失败。公告检查 <a href="https://github.com/liluyang1999/datacraft-lab/actions/runs/40659246738">40659246738</a> 成功。</p>
+  <p><strong>AOT 分类补修：</strong><code>9a4208d</code> / <a href="https://github.com/liluyang1999/datacraft-lab/actions/runs/40662454175">40662454175</a> 七项作业全部成功；Windows 116 项与 Linux 114 项，20 次启动分别为 562–801 ms / 1198–1330 ms，全部确认 AOT。CI 工具 147 项、后端 310 项、脚本与文档、真实流水线及四个镜像通过；Compose 备份恢复与单节点 Swarm 升级通过（100 s），保留旧记录并完成新运行。公告检查 <a href="https://github.com/liluyang1999/datacraft-lab/actions/runs/40662839453">40662839453</a> 通过。该次远端通过不替代本机失败样本；本机 WPR 因权限返回 <code>0xc5585011</code>，未启动录制，需在具备性能追踪权限的 Windows 管理员会话继续定位。</p>
   <p><strong>更正：</strong>v4.0 写的是“GitHub Actions 额度不足，推送不会触发 CI”，并据此把 CI 记为“未运行”。这个前提是错的：09-26 的两次推送都触发了运行，<code>containers</code> 作业两次都失败，而当时没有去看。失败的原因是上一轮自己引入的（附录 E.1）：根 POM 给 Surefire 显式设置了 <code>&lt;skip&gt;</code>，它取代了构建镜像所依赖的 <code>-Dmaven.test.skip=true</code>，而 Docker 构建上下文里没有 <code>tests/</code>。作业日志需要仓库权限才能下载，所以根因是在本机用一份按 <code>.dockerignore</code> 过滤的仓库副本复现的：旧配置同样以 “No tests to run!” 失败，修复后通过。</p>
   <p><strong>本机与 CI 两边都运行容器阶段：</strong>本机证据见 4.4，CI 的状态、步骤、日志和注解按提交分别核对。上表保留 L7 与 L8 的失败和后续成功结果；L8 中间修复轮次的完整过程见循环记录。后续纯文档收尾提交不改变上述代码、依赖与工作流，其实际运行状态在 <a href="https://github.com/liluyang1999/datacraft-lab/actions?query=branch%3Amain">main 的 Actions 页面</a>单独核对。</p>
 </section>
