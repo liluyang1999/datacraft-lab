@@ -259,6 +259,19 @@ class CacheTests(unittest.TestCase):
         assert match is not None
         self.assertEqual("1094", match.group(1))
 
+    def test_smoke_uses_parent_monotonic_time_instead_of_estimated_process_age(self):
+        with tempfile.TemporaryDirectory() as directory:
+            def launch(command, env=None, **kwargs):
+                assert env is not None
+                log = Path(env["DATACRAFT_DESKTOP_HOME"]) / "logs" / "desktop-0.log"
+                log.parent.mkdir()
+                log.write_text("Start-up: first frame at 9999 ms\n", encoding="utf-8")
+                return ""
+
+            with (mock.patch.object(packaging, "run", side_effect=launch),
+                  mock.patch("time.perf_counter_ns", side_effect=[1_000_000_000, 2_234_000_001])):
+                self.assertEqual(1235, packaging.smoke(Path("launcher"), Path(directory)))
+
     def test_smoke_preserves_a_jvm_option_with_spaces_as_one_argument(self):
         # The JVM parses JAVA_TOOL_OPTIONS itself, even when no shell is used to launch it.
         option = "-Ddatacraft.probe=folder with spaces"
@@ -275,8 +288,38 @@ class CacheTests(unittest.TestCase):
                 log.write_text("Start-up: first frame at 100 ms", encoding="utf-8")
                 return ""
 
-            with mock.patch.object(packaging, "run", side_effect=launch):
+            with (mock.patch.object(packaging, "run", side_effect=launch),
+                  mock.patch("time.perf_counter_ns", side_effect=[0, 100_000_000])):
                 self.assertEqual(100, packaging.smoke(Path("launcher"), work, [option]))
+
+    def test_observation_keeps_a_slow_start_and_excludes_time_after_readiness(self):
+        with tempfile.TemporaryDirectory() as directory:
+            log = Path(directory) / "desktop.log"
+            with mock.patch("time.perf_counter_ns", side_effect=[1_000_000_000, 2_600_000_001]) as clock:
+                with packaging.FirstFrameTimer(log) as timer:
+                    log.write_text("Start-up: first frame at 100 ms\n", encoding="utf-8")
+                    self.assertTrue(timer.ready.wait(5), "observer did not see the frame")
+                    self.assertEqual(1601, timer.elapsed_ms)
+                    # Exit/cleanup can happen much later; it must not change this measurement.
+                self.assertEqual(2, clock.call_count)
+                self.assertEqual(1601, timer.elapsed_ms)
+                self.assertFalse(timer.worker.is_alive())
+
+    def test_observer_stops_when_launch_fails_and_propagates_log_read_errors(self):
+        with tempfile.TemporaryDirectory() as directory:
+            log = Path(directory) / "desktop.log"
+            timer = packaging.FirstFrameTimer(log)
+            with self.assertRaisesRegex(packaging.Failed, "launch failed"):
+                with timer:
+                    raise packaging.Failed("launch failed")
+            self.assertFalse(timer.worker.is_alive())
+            self.assertIsNone(timer.elapsed_ms)
+            failed = packaging.FirstFrameTimer(log)
+            with mock.patch.object(Path, "read_text", side_effect=PermissionError("unreadable")):
+                with self.assertRaisesRegex(PermissionError, "unreadable"):
+                    with failed:
+                        self.assertTrue(failed.ready.wait(5))
+            self.assertFalse(failed.worker.is_alive())
 
     def test_an_uncaught_native_callback_fails_even_when_the_process_exits_zero(self):
         for error in ('Exception in thread "JavaFX Application Thread" java.lang.NullPointerException',

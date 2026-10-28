@@ -55,6 +55,8 @@ python3 -B cicd/desktop/package_desktop.py
 生成 JDK 25 的 AOT 缓存（JEP 483/514）；训练过程遍历五视图的浅深主题，再执行 20 次普通缓存启动检查，
 包含新建配置及恢复已保存页面。每次均确认 AOT 实际生效，标准错误中的未捕获异常也会让检查失败。
 默认以每次 ≤ 1500 ms 验收，完整样本写到 `desktop/target/package/startup.json`，不丢弃首次启动或慢样本。
+父进程用单调时钟从调用启动器计到观察到首帧日志，包含启动器、JVM 与观察延迟；
+应用日志里的 OS 进程年龄只作诊断，避免 Linux 秒级启动基准造成误差。
 全部启动都使用 `desktop/target` 下的临时数据目录，不碰 `~/.datacraft`。
 打包把同一批 JavaFX 平台 jar 的原生库放入运行时标准目录（Windows `bin/javafx`，Linux `lib`），
 复制后的文件逐一与源 jar 比对 SHA-256，清单保存在 `desktop/target/package/javafx-natives.json`，

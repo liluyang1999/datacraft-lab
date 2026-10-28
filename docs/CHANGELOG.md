@@ -25,6 +25,10 @@ All notable changes to this project are documented here. The format follows
   code zero, and enforces the 1500 ms budget across ten fresh and ten reused profiles. Reused
   profiles cannot reuse an earlier log entry; every restored view and theme is explicit, and
   benchmark database connections close explicitly.
+- Startup budgets use the parent's monotonic clock from before launcher invocation until the first
+  completed-frame log is observed, including launcher, JVM and observation overhead. Linux's
+  `ProcessHandle.startInstant` uses a whole-second boot-time estimate and is retained only for
+  diagnostics. The 1500 ms budget is unchanged; all historical results retain their timing basis.
 - Theme stylesheets are precompiled with the same JavaFX version and validated on load, reducing
   parsing on startup while preserving the source CSS and existing visual checks.
 - Theme changes use a root pseudo-class state instead of changing style-class membership, avoiding

@@ -20,7 +20,7 @@
 | 界面 | 整个窗口对脚本化的后台：五个视图都显示数据（两个后台的环为正常，甜甜圈的成功率，每条泳道的运行柱，时间线上的 8 个点与按名字列出的 4 次，作业结果的勾与指标数字，流水线的运行柱与 DAG 图）；总览的 ▷ 打开那条流水线的触发面板，点一根运行柱换成那次运行的图；运行中的作业按钮是转动的圆，视图隐藏时停转、回来再转，结果到达后换成叉；点任务卡打开日志，Esc 关闭；浅色与深色都无 JavaFX 警告；重启后窗口位置、大小、主题与上次的视图恢复；预热后、动效打开时切换视图（50 ms）与主题（100 ms）、滚动 1500 行日志都没有超时的停顿。每个视图存为 `desktop/target/ui-snapshots/*.png` | `MainWindowTest` | JavaFX：Windows 直接运行，Linux CI 用 Xvfb |
 | 端到端 | 对真实的 `serve-api` 与 Airflow：作业目录、`echo` 中文往返、`csv-profile` 指标、缺参数的失败结果、未知作业、错误令牌；Airflow 登录、健康、版本、三个 DAG 及其形状（与 DAG 文件里的 `chain` 一致）、暂停与恢复、触发 `datacraft_engine_jobs` 并跟踪到成功、任务与日志；整个窗口对真实后台运行作业，流水线视图把最新的运行画成 noop → echo | `EndToEndTest`、`EndToEndWindowTest`（标签 `e2e`） | 运行中的后台，见下文 |
 | 无障碍生命周期 | 两平台检查释放后的查询和操作、活动处理器的异常仍传播；Windows 另测真实控件移除、重新挂载和保留的原生文本范围 | `AccessibilityLifecycleTest` | JavaFX；原生 UIA 三项仅 Windows |
-| 打包 | 按源 jar 校验原生库，拒绝 JavaFX 用户缓存回退；五视图两主题训练 AOT，随后 20 次新建/复用配置启动；确认 AOT 使用、无异常且每次 ≤ 1500 ms | `cicd/desktop/package_desktop.py`；脚本逻辑由 `tests/ci/test_package_desktop.py` 覆盖 | JDK 25 的 jlink 与 jpackage，显示器 |
+| 打包 | 按源 jar 校验原生库，拒绝 JavaFX 用户缓存回退；五视图两主题训练 AOT，随后 20 次新建/复用配置启动；父进程单调时钟从调用启动器计到首帧日志被观察，包含观察延迟；确认 AOT 使用、无异常且每次 ≤ 1500 ms | `cicd/desktop/package_desktop.py`；脚本逻辑由 `tests/ci/test_package_desktop.py` 覆盖 | JDK 25 的 jlink 与 jpackage，显示器 |
 
 测试代码在 `tests/jvm/datacraft-desktop/java/`（仓库的测试都在 `tests/` 下）。单元到界面测试由
 `./mvnw -Pdesktop -pl :datacraft-desktop -am verify` 运行；这个可选反应堆同时运行父工程，

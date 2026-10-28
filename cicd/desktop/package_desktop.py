@@ -37,6 +37,8 @@ import struct
 import subprocess
 import sys
 import tempfile
+import threading
+import time
 import statistics
 import zipfile
 import zlib
@@ -72,6 +74,65 @@ class Failed(Exception):
 
 class Missing(Exception):
     """An input of the packaging is not there."""
+
+
+class FirstFrameTimer:
+    """Conservative launcher-to-frame timing on the parent's monotonic clock.
+
+    Linux ProcessHandle.startInstant adds a whole-second /proc/stat boot time to process ticks;
+    that estimate is unsuitable for a millisecond budget. Observe the existing readiness log
+    instead. Launcher creation, JVM initialization, log flush and observation delay all count.
+    """
+
+    def __init__(self, log):
+        self.log = log
+        self.elapsed_ms: int | None = None
+        self.read_error: OSError | None = None
+        self.ready = threading.Event()
+        self.stopped = threading.Event()
+        self.worker = threading.Thread(target=self._watch, name="first-frame-observer", daemon=True)
+        self.started_ns = 0
+
+    def __enter__(self):
+        self.started_ns = time.perf_counter_ns()
+        self.worker.start()
+        return self
+
+    def _observe(self):
+        try:
+            # A writer may be between UTF-8 bytes. Only readiness uses replacement; smoke
+            # reads and validates the complete log strictly after the process exits.
+            text = self.log.read_text(encoding="utf-8", errors="replace")
+        except FileNotFoundError:
+            return False
+        except OSError as error:
+            self.read_error = error
+        else:
+            if not STARTUP_LINE.search(text):
+                return False
+            elapsed_ns = time.perf_counter_ns() - self.started_ns
+            self.elapsed_ms = (elapsed_ns + 999_999) // 1_000_000
+        self.ready.set()
+        return True
+
+    def _watch(self):
+        while not self.stopped.is_set():
+            if self._observe():
+                return
+            self.stopped.wait(0.005)
+
+    def __exit__(self, exception_type, exception, traceback):
+        self.stopped.set()
+        self.worker.join(timeout=5)
+        if self.worker.is_alive():
+            raise Failed("the first-frame observer did not stop")
+        if exception_type is None:
+            # A very short probe may exit before the observer runs; counting that delay is
+            # conservative. Never substitute the inaccurate elapsed value inside the log.
+            if not self.ready.is_set():
+                self._observe()
+            if self.read_error is not None:
+                raise self.read_error
 
 
 def jvm_options():
@@ -378,8 +439,9 @@ def smoke(launcher, work, extra_options=None, *, home=None, require_aot=False):
         # paths with spaces (including the AOT output in a checkout such as "My Projects").
         env["JAVA_TOOL_OPTIONS"] = " ".join(quote_jvm_option(option) for option in options)
     training = "-Ddatacraft.desktop.aotTraining=true" in options
-    output = run([str(launcher), "--smoke"], env=env, timeout=180, diagnostics=True,
-                 aot_training=training)
+    with FirstFrameTimer(log) as timer:
+        output = run([str(launcher), "--smoke"], env=env, timeout=180, diagnostics=True,
+                     aot_training=training)
     if native_cache.exists():
         raise Failed("JavaFX fell back to its native cache; the packaged runtime is incomplete")
     if require_aot and "Using AOT-linked classes: true" not in output:
@@ -393,8 +455,10 @@ def smoke(launcher, work, extra_options=None, *, home=None, require_aot=False):
     if match is None:
         raise Failed(f"the app ran but logged no first frame:\n{text}")
     phases = [line.split("Start-up: ", 1)[1] for line in text.splitlines() if "Start-up: " in line]
-    print("Start-up phases: " + "; ".join(phases), flush=True)
-    return int(match.group(1))
+    print("Start-up phases (OS process-age estimates): " + "; ".join(phases), flush=True)
+    if timer.elapsed_ms is None or timer.elapsed_ms < 0:
+        raise Failed("the first frame has no valid monotonic observation")
+    return timer.elapsed_ms
 
 
 def check_startup(launcher, work, samples, budget_ms, require_aot):
@@ -417,6 +481,8 @@ def check_startup(launcher, work, samples, budget_ms, require_aot):
                 print(f"Start-up {mode} {index + 1}/{samples} {view}/{theme}: {elapsed} ms", flush=True)
     times = [result["first_frame_ms"] for result in results]
     report = {"platform": platform.platform(), "aot_verified": require_aot,
+              "measurement": "parent monotonic clock: launcher invocation to first-frame log observation",
+              "poll_interval_ms": 5, "rounding": "ceil",
               "budget_ms": budget_ms, "samples": results,
               "median_ms": statistics.median(times), "max_ms": max(times),
               "within_budget": max(times) <= budget_ms if budget_ms else None}

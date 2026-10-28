@@ -22,7 +22,8 @@ import javafx.stage.Stage;
 /**
  * 数艺工坊. The local store and the services open on a background thread while JavaFX starts ({@link
  * #prepare}), the window is built as soon as both are ready, and the health checks begin after it
- * is shown. Each phase is logged in milliseconds since the JVM started.
+ * is shown. Phase logs use OS process-age estimates; packaging independently measures elapsed
+ * startup time with the parent's monotonic clock.
  */
 public final class DesktopApp extends Application {
 
@@ -184,7 +185,7 @@ public final class DesktopApp extends Application {
     }.start();
   }
 
-  /** Logs how long after the JVM started a phase of the start-up ended. */
+  /** Logs the OS process-age estimate, whose Linux boot-time baseline has only second precision. */
   static void mark(String phase) {
     mark(phase, Instant.now(), ProcessHandle.current().info());
   }
