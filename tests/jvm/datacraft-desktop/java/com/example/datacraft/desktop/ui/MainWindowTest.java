@@ -757,14 +757,21 @@ class MainWindowTest {
 
   @Test
   void theWindowComesBackWhereItWasLeftAfterARestart() {
-    onFx(
-        () -> {
-          window.go(Destination.ACTIVITY);
-          stage.setX(140);
-          stage.setY(90);
-          stage.setWidth(1100);
-          stage.setHeight(720);
-        });
+    var expected =
+        onFx(
+            () -> {
+              var area = javafx.stage.Screen.getPrimary().getVisualBounds();
+              double width = Math.min(1100, Math.max(stage.getMinWidth(), area.getWidth() - 48));
+              double height = Math.min(720, Math.max(stage.getMinHeight(), area.getHeight() - 48));
+              double x = Math.floor(area.getMinX() + (area.getWidth() - width) / 2);
+              double y = Math.floor(area.getMinY() + (area.getHeight() - height) / 2);
+              window.go(Destination.ACTIVITY);
+              stage.setX(x);
+              stage.setY(y);
+              stage.setWidth(width);
+              stage.setHeight(height);
+              return List.of(x, y, width, height);
+            });
     context.preferences().theme(Preferences.Theme.DARK);
     onFx(
         () -> {
@@ -781,7 +788,7 @@ class MainWindowTest {
         });
     assertEquals(Destination.ACTIVITY, onFx(() -> window.navigator().current().get()));
     assertEquals(
-        List.of(140.0, 90.0, 1100.0, 720.0),
+        expected,
         onFx(() -> List.of(stage.getX(), stage.getY(), stage.getWidth(), stage.getHeight())));
     assertTrue(onFx(() -> stage.getScene().getRoot().getStyleClass().contains("dark")));
   }

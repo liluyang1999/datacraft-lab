@@ -35,8 +35,9 @@ All notable changes to this project are documented here. The format follows
   Narrow windows collapse the sidebar automatically so key actions remain readable.
 - Fast repeated view changes cancel the previous fade and restore its original cache policy;
   hidden views stop fading, and the first view is immediately opaque.
-- The desktop client uses first-tier JIT compilation after an alternating startup comparison;
-  tests, development launch and packaging share it. Server and Spark compilation is unchanged,
+- The Windows desktop client uses first-tier JIT compilation after an alternating startup comparison;
+  tests, development launch and packaging share it. Linux retains default tiered compilation for
+  software rendering throughput. Server and Spark compilation is unchanged,
   and existing UI latency budgets still apply; CPU-heavy client additions require reevaluation.
 
 #### Verification

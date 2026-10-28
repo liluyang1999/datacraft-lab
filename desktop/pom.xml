@@ -33,7 +33,7 @@
         <desktop.native.access>--enable-native-access=javafx.graphics,ALL-UNNAMED</desktop.native.access>
         <!-- Exercise the same bounded heap as the packaged console, including large-log UI tests. -->
         <desktop.a11y.test.opens></desktop.a11y.test.opens>
-        <desktop.compilation>-XX:TieredStopAtLevel=1</desktop.compilation>
+        <desktop.compilation>-XX:TieredStopAtLevel=4</desktop.compilation>
         <desktop.test.jvm.args>${test.jvm.args} -Xms32m -Xmx256m ${desktop.compilation} --module-path ${desktop.javafx.dir} --add-modules javafx.controls ${desktop.native.access} --add-opens javafx.graphics/javafx.scene=ALL-UNNAMED --add-opens javafx.graphics/com.sun.glass.ui=ALL-UNNAMED ${desktop.a11y.test.opens} -Ddatacraft.desktop.test=true</desktop.test.jvm.args>
     </properties>
 
@@ -205,6 +205,7 @@
             <id>windows-accessibility-test</id>
             <activation><os><family>Windows</family></os></activation>
             <properties>
+                <desktop.compilation>-XX:TieredStopAtLevel=1</desktop.compilation>
                 <desktop.a11y.test.opens>--add-opens javafx.graphics/com.sun.glass.ui.win=ALL-UNNAMED</desktop.a11y.test.opens>
             </properties>
         </profile>

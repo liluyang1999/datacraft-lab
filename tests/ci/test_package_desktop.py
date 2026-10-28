@@ -33,6 +33,13 @@ def touch(path):
 
 
 class InputTests(unittest.TestCase):
+    def test_compiler_policy_keeps_c2_for_non_windows_rendering(self):
+        for system, level in (("Windows", 1), ("Linux", 4), ("Darwin", 4)):
+            with self.subTest(system=system), mock.patch.object(packaging.platform, "system", return_value=system):
+                options = packaging.jvm_options()
+                self.assertIn(f"-XX:TieredStopAtLevel={level}", options)
+                self.assertIn("-Xmx256m", options)
+
     def test_jpackage_preserves_unicode_wildcards_and_paths_in_a_utf8_argument_file(self):
         arguments = ["--description", '数艺工坊 ???? "quoted"', "--input", r'C:\构建 目录\input']
         with tempfile.TemporaryDirectory() as directory:

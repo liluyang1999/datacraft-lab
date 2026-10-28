@@ -43,10 +43,7 @@ NAME = "DataCraft"
 MAIN_CLASS = "com.example.datacraft.desktop.Launcher"
 # The console holds bounded lists and logs, not datasets. Do not size its initial heap from the
 # host's RAM: on a developer workstation that can commit hundreds of unused megabytes at startup.
-# This bounded UI client favors startup latency over C2 throughput; the execution engine is a
-# different process. The desktop Maven tests exercise the same compiler policy and UI budgets.
-JVM_OPTIONS = ["-Xms32m", "-Xmx256m", "-XX:TieredStopAtLevel=1",
-               "--enable-native-access=javafx.graphics,ALL-UNNAMED"]
+JVM_OPTIONS = ["-Xms32m", "-Xmx256m", "--enable-native-access=javafx.graphics,ALL-UNNAMED"]
 JAVAFX_MODULES = ("javafx.base", "javafx.graphics", "javafx.controls")
 AOT_FILE = "datacraft.aot"
 STARTUP_LINE = re.compile(r"Start-up: first frame at (\d+) ms")
@@ -67,6 +64,16 @@ class Failed(Exception):
 
 class Missing(Exception):
     """An input of the packaging is not there."""
+
+
+def jvm_options():
+    """Windows favors startup latency; Linux's software renderer retains C2 throughput.
+
+    The desktop Maven tests and development launcher use the same platform policy. Neither
+    setting affects the backend execution engine, which runs in a different JVM.
+    """
+    level = 1 if platform.system() == "Windows" else 4
+    return [*JVM_OPTIONS, f"-XX:TieredStopAtLevel={level}"]
 
 
 def tool(name):
@@ -426,7 +433,7 @@ def package(root, skip_aot, startup_samples=10, startup_budget_ms=1500):
                "--vendor", "datacraft-lab", "--description", "数艺工坊",
                "--input", str(work / "input"), "--main-jar", app_jar.name, "--main-class", MAIN_CLASS,
                "--runtime-image", str(work / "runtime"), "--icon", str(icon), "--dest", str(dist)]
-    for option in JVM_OPTIONS:
+    for option in jvm_options():
         command += ["--java-options", option]
     run_jpackage(command[0], command[1:], work)
     image = dist / (f"{NAME}.app" if sys.platform == "darwin" else NAME)
