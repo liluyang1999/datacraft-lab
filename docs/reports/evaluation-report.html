@@ -350,7 +350,7 @@
 
 <section id="summary" aria-labelledby="h-summary">
   <h2 id="h-summary">一、执行摘要</h2>
-  <p><strong>总体结论：</strong>L8 已补齐 JavaFX 原生库，并修正 Windows UIA 不支持属性的返回契约、主题状态与长日志遍历。两平台界面门禁 Windows 120 / Linux 117 项通过；Linux 启动失败进一步暴露进程起点计时偏差。改用包含启动器和观察开销的父进程单调时钟，本机 20 次为 1000–1209 ms，中位数 1035.5 ms；新计时的远端门禁待验收。历史 2614 ms 尖峰尚未在管理员采样中复现，不能宣称单一系统成因已根治。原生操作没有异常，初次显示有两条耗时告警；保留全部失败与原有预算。逐提交结果见 4.5，测量边界见 4.4 与第八章。CLI、HTTP API 与 Airflow 共用同一个 <code>DataJob</code> 契约和执行引擎，失败语义统一；8 个 Maven 模块按职责分为 core、io、processing、interfaces 四组，越界依赖在构建的 <code>validate</code> 阶段即失败；质量门禁拒绝项目源码编译、类型检查或 Shell 检查警告，CI/CD 逻辑集中在 <code>cicd/</code>，可以脱离 GitHub Actions 在本机复现；流水线步骤的失败原因写入公开注解；Compose 栈与 Swarm 栈在 L7 本机及远端 CI 中均实际部署过；所有镜像运行按版本与校验和固定的 Temurin 25.0.5。桌面控制台“数艺工坊”在一个窗口里查看与操作两个后台，它只是客户端，默认后端构建不包含桌面工程。</p>
+  <p><strong>总体结论：</strong>L8 已补齐 JavaFX 原生库，并修正 Windows UIA 不支持属性的返回契约、主题状态与长日志遍历。两平台界面门禁 Windows 120 / Linux 117 项通过；Linux 启动失败进一步暴露进程起点计时偏差。改用包含启动器和观察开销的父进程单调时钟，本机 20 次为 1000–1209 ms，中位数 1035.5 ms；新计时远端 Windows 为 520–892 ms、Linux 为 648–827 ms，分别完整 20 次全部达标。历史 2614 ms 尖峰尚未在管理员采样中复现，不能宣称单一系统成因已根治。原生操作没有异常，初次显示有两条耗时告警；保留全部失败与原有预算。逐提交结果见 4.5，测量边界见 4.4 与第八章。CLI、HTTP API 与 Airflow 共用同一个 <code>DataJob</code> 契约和执行引擎，失败语义统一；8 个 Maven 模块按职责分为 core、io、processing、interfaces 四组，越界依赖在构建的 <code>validate</code> 阶段即失败；质量门禁拒绝项目源码编译、类型检查或 Shell 检查警告，CI/CD 逻辑集中在 <code>cicd/</code>，可以脱离 GitHub Actions 在本机复现；流水线步骤的失败原因写入公开注解；Compose 栈与 Swarm 栈在 L7 本机及远端 CI 中均实际部署过；所有镜像运行按版本与校验和固定的 Temurin 25.0.5。桌面控制台“数艺工坊”在一个窗口里查看与操作两个后台，它只是客户端，默认后端构建不包含桌面工程。</p>
   <div class="split">
     <div class="box">
       <span class="box-label">主要优势</span>
@@ -382,11 +382,11 @@
     <thead><tr><th>证据</th><th>来源</th><th>本轮状态</th></tr></thead>
     <tbody>
       <tr><td>代码、配置与文档</td><td>仓库 <code>main</code> 分支</td><td><span class="tag ok">已审阅</span> 关键路径逐项核对，文档与代码一致性由 <code>tests/docs</code> 检查</td></tr>
-      <tr><td>L8 构建与测试</td><td>本机 Windows 11 / Oracle JDK 25.0.5.0.3；CI Windows 2025、Ubuntu 24.04 / Temurin 25.0.5+8</td><td><span class="tag ok">通过</span> Windows 120 / Linux 117 项界面门禁通过；新单调时钟的本机 20 次启动通过，两平台打包待远端验证；历史两平台记录与测量边界见 4.4 与 L8</td></tr>
+      <tr><td>L8 构建与测试</td><td>本机 Windows 11 / Oracle JDK 25.0.5.0.3；CI Windows 2025、Ubuntu 24.04 / Temurin 25.0.5+8</td><td><span class="tag ok">通过</span> Windows 120 / Linux 117 项界面门禁通过；新单调时钟的本机及远端两平台各 20 次启动全部通过，Windows / Linux 的 54 / 10 个原生库与 AOT 使用均已确认；历史两平台记录与测量边界见 4.4 与 L8</td></tr>
       <tr><td>Airflow 运行环境</td><td>Airflow 3.3.2、官方 constraints 与安全修订、pyspark 4.2.0</td><td><span class="tag info">本轮复核</span> 在本轮镜像内检查 DAG 契约、三条真实流水线及依赖安全下限；结果见 4.4</td></tr>
       <tr><td>本机 Docker</td><td>Docker 29.9.2；本轮专用 Docker-in-Docker 引擎</td><td><span class="tag info">隔离演练</span> 镜像、Compose、单节点 Swarm 部署与升级、备份恢复在专用引擎运行；共享引擎的 Swarm 状态与其他项目卷保持不变</td></tr>
       <tr><td>L7 历史 CI</td><td>GitHub Actions / ubuntu-24.04</td><td><span class="tag ok">全部通过</span> 补修提交 <code>882dbfa</code> 的 <a href="https://github.com/liluyang1999/datacraft-lab/actions/runs/40628141047">40628141047</a> 六个作业成功，含后端 310 项、桌面 98 项、真实流水线、备份恢复和单节点 Swarm 升级；公告检查 <a href="https://github.com/liluyang1999/datacraft-lab/actions/runs/40628141207">40628141207</a> 成功</td></tr>
-      <tr><td>L8 补修 CI</td><td><code>9a4208d</code> / <a href="https://github.com/liluyang1999/datacraft-lab/actions/runs/40662454175">40662454175</a></td><td><span class="tag ok">全部通过</span> 七个作业成功，含两平台桌面、后端 310 项、脚本与文档、真实流水线、四个镜像、Compose 备份恢复与单节点 Swarm 升级；具体结果见 4.5</td></tr>
+      <tr><td>L8 当前代码 CI</td><td><code>69a7d04</code> / <a href="https://github.com/liluyang1999/datacraft-lab/actions/runs/40688429388">40688429388</a></td><td><span class="tag ok">全部通过</span> 七个作业成功，含两平台桌面及各 20 次启动、后端 310 项、脚本与文档、真实流水线、四个镜像、Compose 备份恢复与单节点 Swarm 升级（117 s）；具体结果见 4.5</td></tr>
       <tr><td>依赖版本与公告</td><td>OSV 与 Adoptium 官方接口</td><td><span class="tag ok">2026-10-28 核对</span> 32 个固定版本没有已知 OSV 公告；Temurin 25.0.5+8 是当前 Temurin 25 最新版，四个校验和一致；依赖版本保持锁定，JavaFX 私有修补另记录来源</td></tr>
       <tr><td>云平台价格</td><td>各厂商官方价格页、价格 API 与计费文档</td><td><span class="tag info">快照</span> 2026-09-19 核验，本轮未重新核价（<a href="pricing-evidence.md">价格依据</a>）</td></tr>
     </tbody>
@@ -791,9 +791,9 @@
   <p>启动与 Windows 原生无障碍专项接续 L7，根因、负向实验、两平台结果与交付记录见 <a href="../desktop/loop/log.md#l8-启动与原生无障碍专项2026-10-28">L8 循环记录</a>。下方 L7 和更早记录保留当时的证据。</p>
   <ul id="review-l8-evidence">
     <li>三次管理员 WPR 均已保存并停止，事件丢失数为 0。先定位 JavaFX 原生库遗漏，再经微软公开符号定位 UIA 的提供者错误诊断。原始追踪仅在本机分析。</li>
-    <li>原生包包含 54 个 Windows DLL，逐一核验源 jar SHA-256，拒绝 JavaFX 缓存回退。新单调时钟下本机 20 次启动全部确认 AOT，范围 1000–1209 ms，中位数 1035.5 ms。此前 OS 估计为 943–1091 ms、训练 1721 ms，两种计时不直接比较；训练单列不计入预算。</li>
+    <li>原生包包含 54 个 Windows DLL，逐一核验源 jar SHA-256，拒绝 JavaFX 缓存回退。新单调时钟下本机 20 次启动全部确认 AOT，范围 1000–1209 ms，中位数 1035.5 ms。远端 Windows 为 520–892 ms、Linux 为 648–827 ms，各 20 次全部通过；训练分别 1235 / 1571 ms 单列。此前 OS 估计与新计时不直接比较。</li>
     <li>已释放控件的回调有生命周期保护；活动控件不支持的属性返回 VT_EMPTY，使原生桥返回 S_OK。原始类哈希锁定，打包校验 v2 标记和实际类字节；活动回调异常仍传播，已释放对象的属性失败语义保留。四项无障碍回归通过。</li>
-    <li>Windows CI 曾出现 106 ms 主题停顿，现以根节点伪类避免整树 CSS 重匹配。UIA 的屏外日志单元格遍历用每页 100 行限制，全部 1500 行逐页检查顺序和完整性；200 行页的 53 ms 失败保留。同一提交 ae0f53c 的 Windows 120 项、Linux 117 项、格式、Checkstyle 与执行数检查通过。</li>
+    <li>Windows CI 曾出现 106 ms 主题停顿，现以根节点伪类避免整树 CSS 重匹配。UIA 的屏外日志单元格遍历用每页 100 行限制，全部 1500 行逐页检查顺序和完整性；200 行页的 53 ms 失败保留。同一提交 69a7d04 的 Windows 120 项、Linux 117 项、格式、Checkstyle 与执行数检查通过；原有 50 / 100 / 200 ms 预算未改。</li>
     <li>原生应用使用隔离配置和本地测试后台，检查五页、浅深主题、日志翻页、中文输入及选区、最大化与恢复、退出与重启。正常外框恢复为 1280×734，位置 128,41；深色主题和活动页恢复。没有异常或 ERROR；初次日志和作业显示各有一次 50 ms 告警，未再出现持续的原生循环告警。重启会话 stderr 为空。</li>
     <li>预算改由父进程单调时钟从调用启动器前计到首个 CSS/布局脉冲完成的日志被观察，5 ms 观察间隔并向上取整，包含日志和调度延迟。Linux 的 OS 进程年龄估计存在秒级基准偏差，保留作诊断。HTTP/TLS 首次请求在后台初始化；五视图与两主题参与训练。没有清空操作系统文件缓存，不等同于物理显示或任意负载下的磁盘冷启动。</li>
     <li>初始外框约占逻辑工作区 90%，上限 1280×800；越界窗口约束到显示器，最大化保留正常尺寸。853×560 窄窗自动收起侧栏，导航、关键操作与后台名称有回归；快速重复切换恢复原缓存策略。</li>
@@ -877,6 +877,8 @@
   <p><strong>原生库补包：</strong><code>7959539</code> / <a href="https://github.com/liluyang1999/datacraft-lab/actions/runs/40673162969">40673162969</a> 的 Windows 主题门禁在 106 ms 停顿处失败，尚未打包；其余六项作业通过。Linux 114 项、10 个原生库与全部 20 次启动通过，730–847 ms，中位数 777.5 ms。公告检查 <a href="https://github.com/liluyang1999/datacraft-lab/actions/runs/40673163114">40673163114</a> 通过。随后本机集成修补的 120 项与 20 次启动通过，远端结果继续按提交单独验收。</p>
   <p><strong>更正：</strong>v4.0 写的是“GitHub Actions 额度不足，推送不会触发 CI”，并据此把 CI 记为“未运行”。这个前提是错的：09-26 的两次推送都触发了运行，<code>containers</code> 作业两次都失败，而当时没有去看。失败的原因是上一轮自己引入的（附录 E.1）：根 POM 给 Surefire 显式设置了 <code>&lt;skip&gt;</code>，它取代了构建镜像所依赖的 <code>-Dmaven.test.skip=true</code>，而 Docker 构建上下文里没有 <code>tests/</code>。作业日志需要仓库权限才能下载，所以根因是在本机用一份按 <code>.dockerignore</code> 过滤的仓库副本复现的：旧配置同样以 “No tests to run!” 失败，修复后通过。</p>
   <p><strong>UIA 集成与计时反例：</strong><code>ae0f53c</code> / <a href="https://github.com/liluyang1999/datacraft-lab/actions/runs/40685686282">40685686282</a> 的 Windows 120 项与 20 次启动通过（599–685 ms）；Linux 117 项通过，但旧计时 19/20 超过预算（1477–1637 ms）。其余六项作业全部成功，单节点 Swarm 升级 110 s；公告检查 <a href="https://github.com/liluyang1999/datacraft-lab/actions/runs/40685977079">40685977079</a> 通过。Linux 进程年龄使用秒级系统启动基准，隔离探针实际总耗时 71.4–83.4 ms 却报告 284–292 ms，计时缺陷已复现；后续改用父进程单调时钟，全部失败样本和 1500 ms 门槛保留。</p>
+
+  <p><strong>单调时钟与最终代码验收：</strong><code>69a7d04</code> / <a href="https://github.com/liluyang1999/datacraft-lab/actions/runs/40688429388">40688429388</a> 七项作业全部实际执行并成功；Windows 120 项、Linux 117 项，新计时各 20 次全部通过（520–892 / 648–827 ms），54 / 10 个原生库与每次 AOT 生效均核验。后端 310 项、CI 工具 157 项、部署 71 项、DAG 21 项、文档 16 项与计算器 6 项通过；Pyright、Shell 与 Action 固定版本门禁通过。四个镜像、三条真实流水线、Compose 备份恢复通过；单节点 Swarm 117 s 完成任务替换，旧运行保留且新运行成功。公告检查 <a href="https://github.com/liluyang1999/datacraft-lab/actions/runs/40688588733">40688588733</a> 通过。19 张 Linux 截图逐张复核，本轮追踪、测试配置与构建产物已按白名单清理；历史尖峰和原生初次显示的两条告警仍保留。</p>
 
   <p><strong>本机与 CI 两边都运行容器阶段：</strong>本机证据见 4.4，CI 的状态、步骤、日志和注解按提交分别核对。上表保留 L7 与 L8 的失败和后续成功结果；L8 中间修复轮次的完整过程见循环记录。后续纯文档收尾提交不改变上述代码、依赖与工作流，其实际运行状态在 <a href="https://github.com/liluyang1999/datacraft-lab/actions?query=branch%3Amain">main 的 Actions 页面</a>单独核对。</p>
 </section>
@@ -1161,7 +1163,7 @@ bash deploy/scripts/compose-up.sh                # 预检机密与端口后启�
       <tr><td><span class="tag info">P3</span></td><td>一项新版本未采用</td><td>google-java-format 1.37.0 在 Spotless 3.10.4 下失败（2026-10-09 与 2026-10-26 两次实测），Spotless 没有新版本</td><td>等 Spotless 支持后两者一起升级</td></tr>
       <tr><td><span class="tag info">P3</span></td><td>API 对慢请求没有时限</td><td>JDK HTTP 服务器默认不限制请求到达的时间：发不完请求头的连接一直占着套接字与虚拟线程，足够多时会耗尽文件描述符或内存。只设 <code>sun.net.httpserver.maxReqTime</code> 不够：请求带有处理器不读的请求体时，计时要到响应写完才停，长作业会被切断。端口只能从回环、Swarm 覆盖网络或隧道到达</td><td>在处理器里先读完（有上限的）请求体，再设置 <code>maxReqTime</code> 与 <code>jdk.httpserver.maxConnections</code>，并用一个故意发不完请求头的测试验证</td></tr>
       <tr><td><span class="tag info">P3</span></td><td>Temurin 固定版本要手动提高</td><td>镜像的 Java 不再随官方镜像更新：Temurin 发布新版本后，要改 <code>Dockerfile.temurin</code> 的版本与四个校验和并重新构建镜像，在此之前镜像停在旧版本；只固定了 amd64 与 arm64 的归档</td><td>公告工作流每周核对，出现新版本时失败；收到失败当天提高固定版本、重新构建并部署</td></tr>
-      <tr><td><span class="tag info">P3</span></td><td>桌面控制台的限度</td><td>只生成应用目录，没有安装包与代码签名；AOT 缓存按时间戳核对 jar，复制应用目录要保留时间戳；连接远程后台要靠 SSH 隧道或 TLS 网关；本轮 14 张 Linux CI 截图的中文显示已核对；历史主题切换测量最慢约 75 ms；本轮实际门禁与性能边界见 4.4</td><td>需要分发给别人时再做安装包与签名；远程主机沿用 API 的边界，经 SSH 隧道访问</td></tr>
+      <tr><td><span class="tag info">P3</span></td><td>桌面控制台的限度</td><td>只生成应用目录，没有安装包与代码签名；AOT 缓存按时间戳核对 jar，复制应用目录要保留时间戳；连接远程后台要靠 SSH 隧道或 TLS 网关；本轮 19 张 Linux CI 截图逐张复核，含五页浅深主题、最小与窄窗、触发与日志面板；历史主题切换测量最慢约 75 ms；本轮实际门禁与性能边界见 4.4</td><td>需要分发给别人时再做安装包与签名；远程主机沿用 API 的边界，经 SSH 隧道访问</td></tr>
       <tr><td><span class="tag warn">P2</span></td><td>桌面启动稳定性未闭环</td><td>先前三组 20 次缓存启动达标，历史本机复测有 3 次超时、最大 2614 ms；共享 CI 历史上有 2074 / 1929 ms 早期尖峰，具体系统成因尚未确定。管理员 WPR 已定位并修复原生库打包遗漏，最新本机包用父进程单调时钟 20 次为 1000–1209 ms；Linux 旧算法的秒级基准偏差已复现并修正，但这不能解释 Windows 尖峰，尚未完整捕获并解释历史尖峰，不能覆盖此前失败。未清空 OS 文件缓存；无缓存训练不计作正常启动</td><td>保留严格 20 次预算门禁、实际 AOT 使用检查与完整样本；目标机器仍需按自身环境验收</td></tr>
       <tr><td><span class="tag info">P3</span></td><td>JavaFX 私有修补维护与 UIA 性能边界</td><td>已稳定复现并修复旧文本范围访问已释放处理器的空指针，活动对象异常仍传播。四项无障碍回归及原生交互通过；修正属性契约并限制日志每页 100 行后，完整日志性能门禁通过。原生初次显示仍有两次 50 ms 告警，未再见持续循环告警</td><td>升级 JavaFX 必须复核上游与工件哈希；上游修复后先跑原始模块回归再移除补丁。证据见 <a href="../desktop/javafx-patch.md">修补说明</a>与 L8</td></tr>
       <tr><td><span class="tag info">路线图</span></td><td>功能扩展</td><td>—</td><td>真实主机上的多节点演练与共享存储，可重复的两节点脚本；更多纯 JVM 作业与流式 CSV 解析；配置化作业目录；对象存储版 <code>StorageService</code>（S3A）；docker secrets；云端、ARM 与真实 SFTP 服务器验收；桌面控制台的安装包与经 SSH 隧道自动连接远程主机</td></tr>
