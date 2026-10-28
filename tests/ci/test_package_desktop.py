@@ -242,10 +242,19 @@ class CacheTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             work = Path(directory)
             with (mock.patch.object(packaging, "smoke", side_effect=[1700, 900, 950, 1000]) as run,
-                  mock.patch.object(packaging, "restore_startup_view", return_value=("jobs", "LIGHT"))):
+                  mock.patch.object(packaging, "restore_startup_view", return_value=("jobs", "LIGHT")) as restore):
                 with self.assertRaisesRegex(packaging.Failed, "budget 1500 ms exceeded"):
                     packaging.check_startup(Path("launcher"), work, 2, 1500, True)
                 self.assertEqual(4, run.call_count)
+                # A fresh sample seeds the shared profile; both reused starts restore it,
+                # including the first, which must not depend on the OS theme.
+                shared_home = run.call_args_list[0].kwargs["home"]
+                self.assertIsNotNone(shared_home)
+                self.assertIsNone(run.call_args_list[1].kwargs["home"])
+                self.assertEqual([shared_home, shared_home],
+                                 [call.kwargs["home"] for call in run.call_args_list[2:]])
+                self.assertEqual([mock.call(shared_home, 0), mock.call(shared_home, 1)],
+                                 restore.call_args_list)
             report = json.loads((work / "startup.json").read_text(encoding="utf-8"))
             self.assertFalse(report["within_budget"])
             self.assertEqual(1700, report["max_ms"])
@@ -254,7 +263,8 @@ class CacheTests(unittest.TestCase):
 
     def test_a_measurement_without_a_budget_does_not_claim_budget_success(self):
         with tempfile.TemporaryDirectory() as directory:
-            with mock.patch.object(packaging, "smoke", return_value=2000):
+            with (mock.patch.object(packaging, "smoke", return_value=2000),
+                  mock.patch.object(packaging, "restore_startup_view", return_value=("overview", "LIGHT"))):
                 report = packaging.check_startup(Path("launcher"), Path(directory), 1, 0, False)
             self.assertIsNone(report["within_budget"])
             self.assertFalse(report["aot_verified"])

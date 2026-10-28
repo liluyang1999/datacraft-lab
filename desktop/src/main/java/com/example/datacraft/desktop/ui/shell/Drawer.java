@@ -35,6 +35,10 @@ public final class Drawer extends StackPane {
     // Blur only the stable surface, not its scrolling log or changing form on every frame.
     Region shadow = new Region();
     shadow.getStyleClass().add("drawer-shadow");
+    // Reuse the already blurred surface across log repaints, also on software D3D.
+    // JavaFX invalidates this bitmap when the size or theme changes.
+    shadow.setCache(true);
+    shadow.setCacheHint(javafx.scene.CacheHint.SPEED);
     shadow.setMouseTransparent(true);
     shadow.setMaxWidth(WIDTH);
     shadow.setPrefWidth(WIDTH);

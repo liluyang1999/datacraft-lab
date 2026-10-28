@@ -307,14 +307,17 @@ def smoke(launcher, work, extra_options=None, *, home=None, require_aot=False):
 def check_startup(launcher, work, samples, budget_ms, require_aot):
     """Every sample counts, including the first; keep a machine-readable report on failure too."""
     results = []
-    for mode in ("fresh", "reused"):
-        with tempfile.TemporaryDirectory(prefix="reused-", dir=work,
-                                         ignore_cleanup_errors=True) as reused:
+    with tempfile.TemporaryDirectory(prefix="reused-", dir=work,
+                                     ignore_cleanup_errors=True) as reused:
+        for mode in ("fresh", "reused"):
             for index in range(samples):
                 view, theme = "overview", "SYSTEM"
-                if mode == "reused" and index:
+                if mode == "reused":
                     view, theme = restore_startup_view(Path(reused), index)
-                elapsed = smoke(launcher, work, home=Path(reused) if mode == "reused" else None,
+                # The first fresh sample seeds this profile. All reused samples then use an
+                # existing DB, including overview/LIGHT, regardless of the host's system theme.
+                home = Path(reused) if mode == "reused" or index == 0 else None
+                elapsed = smoke(launcher, work, home=home,
                                 require_aot=require_aot)
                 results.append({"profile": mode, "sample": index + 1, "view": view, "theme": theme,
                                 "first_frame_ms": elapsed})
