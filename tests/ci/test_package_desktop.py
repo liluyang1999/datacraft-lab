@@ -5,6 +5,7 @@ tests cover what can go wrong without them.
 """
 
 import importlib.util
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -106,6 +107,89 @@ class ModuleTests(unittest.TestCase):
                              packaging.jlink_module_path(str(jlink), javafx))
 
 
+class NativeLibraryTests(unittest.TestCase):
+    def test_platform_natives_are_bundled_byte_for_byte_at_the_jrt_loader_location(self):
+        for system, name, folder in (("Windows", "glass.dll", "bin/javafx"),
+                                     ("Linux", "libglass.so", "lib"),
+                                     ("Darwin", "libglass.dylib", "lib")):
+            with self.subTest(system=system), tempfile.TemporaryDirectory() as directory:
+                work = Path(directory)
+                jar = work / "javafx-graphics.jar"
+                with zipfile.ZipFile(jar, "w") as archive:
+                    archive.writestr(name, b"native bytes")
+                    archive.writestr("module-info.class", b"class bytes")
+                with mock.patch.object(packaging.platform, "system", return_value=system):
+                    manifest = packaging.install_javafx_natives([jar], work / "runtime")
+                self.assertEqual(b"native bytes", (work / "runtime" / folder / name).read_bytes())
+                self.assertEqual([{"path": f"{folder}/{name}", "source": jar.name,
+                                   "sha256": hashlib.sha256(b"native bytes").hexdigest()}], manifest)
+                packaging.verify_native_manifest(work / "runtime", manifest)
+
+    def test_native_archive_paths_cannot_escape_the_runtime(self):
+        for name in ("../glass.dll", "nested/glass.dll", r"..\glass.dll", "/glass.dll", "C:glass.dll", "CON.dll"):
+            with self.subTest(name=name), tempfile.TemporaryDirectory() as directory:
+                work = Path(directory)
+                jar = work / "javafx.jar"
+                with zipfile.ZipFile(jar, "w") as archive:
+                    archive.writestr(name, b"native")
+                with mock.patch.object(packaging.platform, "system", return_value="Windows"):
+                    with self.assertRaisesRegex(packaging.Failed, "native library name"):
+                        packaging.install_javafx_natives([jar], work / "runtime")
+
+    def test_conflicting_libraries_never_overwrite_runtime_or_another_module(self):
+        with tempfile.TemporaryDirectory() as directory:
+            work = Path(directory)
+            jars = [work / "first.jar", work / "second.jar"]
+            for jar in jars:
+                with zipfile.ZipFile(jar, "w") as archive:
+                    archive.writestr("glass.dll", b"native")
+            with mock.patch.object(packaging.platform, "system", return_value="Windows"):
+                with self.assertRaisesRegex(packaging.Failed, "duplicate native"):
+                    packaging.install_javafx_natives(jars, work / "runtime")
+                protected = work / "runtime/bin/javafx/glass.dll"
+                protected.parent.mkdir(parents=True, exist_ok=True)
+                protected.write_bytes(b"existing")
+                with self.assertRaisesRegex(packaging.Failed, "already exists"):
+                    packaging.install_javafx_natives(jars[:1], work / "runtime")
+                self.assertEqual(b"existing", protected.read_bytes())
+
+    def test_missing_platform_natives_are_rejected(self):
+        with tempfile.TemporaryDirectory() as directory:
+            jar = Path(directory) / "javafx.jar"
+            with zipfile.ZipFile(jar, "w") as archive:
+                archive.writestr("module-info.class", b"class")
+            with self.assertRaisesRegex(packaging.Failed, "no JavaFX native"):
+                packaging.install_javafx_natives([jar], Path(directory) / "runtime")
+
+    def test_a_modified_native_in_the_final_image_fails_verification(self):
+        with tempfile.TemporaryDirectory() as directory:
+            runtime = Path(directory)
+            library = touch(runtime / "bin/javafx/glass.dll")
+            manifest = [{"path": "bin/javafx/glass.dll", "source": "javafx.jar",
+                         "sha256": hashlib.sha256(b"original").hexdigest()}]
+            with self.assertRaisesRegex(packaging.Failed, "native checksum"):
+                packaging.verify_native_manifest(runtime, manifest)
+            library.unlink()
+            with self.assertRaisesRegex(packaging.Failed, "native.*missing"):
+                packaging.verify_native_manifest(runtime, manifest)
+
+    def test_smoke_rejects_javafx_falling_back_to_the_user_cache(self):
+        with tempfile.TemporaryDirectory() as directory:
+            work = Path(directory)
+
+            def launch(command, env=None, **kwargs):
+                assert env is not None
+                home = Path(env["DATACRAFT_DESKTOP_HOME"])
+                touch(home / "javafx-cache/glass.dll")
+                log = touch(home / "logs/desktop-0.log")
+                log.write_text("Start-up: first frame at 100 ms", encoding="utf-8")
+                return ""
+
+            with mock.patch.object(packaging, "run", side_effect=launch):
+                with self.assertRaisesRegex(packaging.Failed, "JavaFX.*cache"):
+                    packaging.smoke(Path("launcher"), work)
+
+
 class IconTests(unittest.TestCase):
     def test_the_png_is_well_formed(self):
         image = packaging.png(16, packaging.icon_pixels(16))
@@ -183,7 +267,9 @@ class CacheTests(unittest.TestCase):
 
             def launch(command, env=None, timeout=600, diagnostics=False, aot_training=False):
                 assert env is not None
-                self.assertEqual([option], shlex.split(env["JAVA_TOOL_OPTIONS"]))
+                parsed = shlex.split(env["JAVA_TOOL_OPTIONS"])
+                self.assertEqual(option, parsed[0])
+                self.assertEqual(f"-Djavafx.cachedir={Path(env['DATACRAFT_DESKTOP_HOME']) / 'javafx-cache'}", parsed[1])
                 log = Path(env["DATACRAFT_DESKTOP_HOME"]) / "logs" / "desktop-0.log"
                 log.parent.mkdir()
                 log.write_text("Start-up: first frame at 100 ms", encoding="utf-8")

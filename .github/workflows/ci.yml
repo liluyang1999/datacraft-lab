@@ -233,12 +233,14 @@ jobs:
         if: runner.os == 'Windows'
         run: python -B cicd/desktop/package_desktop.py
 
-      - name: Upload every startup sample
+      - name: Upload startup samples and native library provenance
         if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: desktop-startup-${{ matrix.os }}
-          path: desktop/target/package/startup.json
+          path: |
+            desktop/target/package/startup.json
+            desktop/target/package/javafx-natives.json
           if-no-files-found: ignore
 
       - name: Upload the UI snapshots

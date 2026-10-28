@@ -53,6 +53,10 @@ python3 -B cicd/desktop/package_desktop.py
 包含新建配置及恢复已保存页面。每次均确认 AOT 实际生效，标准错误中的未捕获异常也会让检查失败。
 默认以每次 ≤ 1500 ms 验收，完整样本写到 `desktop/target/package/startup.json`，不丢弃首次启动或慢样本。
 全部启动都使用 `desktop/target` 下的临时数据目录，不碰 `~/.datacraft`。
+打包把同一批 JavaFX 平台 jar 的原生库放入运行时标准目录（Windows `bin/javafx`，Linux `lib`），
+复制后的文件逐一与源 jar 比对 SHA-256，清单保存在 `desktop/target/package/javafx-natives.json`，
+与启动样本一起上传为 CI 构件。每次启动将 JavaFX 缓存指向测试目录；出现缓存回退即失败，
+防止遗漏原生库后仍借助用户目录启动成功，也省去每次启动的资源解压与缓存校验。
 首个新配置为复用组建立数据库；复用组从首个样本起明确恢复页面及主题，不依赖机器的系统主题。
 jpackage 选项通过 UTF-8 参数文件传递，避免 Windows 非中文环境把中文描述转为通配符后展开。
 堆固定为 32/256 MiB；Windows 使用一级 JIT 编译降低启动竞争，Linux 保留默认分层编译。

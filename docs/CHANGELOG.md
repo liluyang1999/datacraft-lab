@@ -30,6 +30,10 @@ All notable changes to this project are documented here. The format follows
   an accidental launch of the system WSL entry point while preserving exit codes and annotations.
 - jpackage receives UTF-8 argument files, preserving Chinese metadata and paths when the Windows
   native launcher would otherwise turn unrepresentable characters into wildcard arguments.
+- JavaFX native libraries are installed from the resolved platform jars into the JRT loader's
+  runtime directory. Packaging verifies every copied hash and rejects native-cache fallback,
+  avoiding repeated resource decompression/checksums and dependence on a writable user cache.
+  CI retains the library provenance beside all startup samples.
 - Initial outer window dimensions fit the scaled work area, with a 1280 × 800 cap; saved windows
   are clamped to the best matching monitor, and maximizing preserves the normal window bounds.
   Narrow windows collapse the sidebar automatically so key actions remain readable.

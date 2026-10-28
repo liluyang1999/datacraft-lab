@@ -122,6 +122,10 @@ HTTP 客户端及 TLS 仅在首次请求时由后台虚拟线程创建，多个�
 jlink 生成只含这些模块与本平台 JavaFX 模块的运行时，jpackage 把应用 jar、依赖与运行时做成
 `DataCraft`（Windows 上是 `DataCraft.exe`）。JavaFX 模块先经过版本与校验和锁定的
 [无障碍生命周期修补](javafx-patch.md)，不修改依赖缓存。
+平台 jar 内的原生库还需独立安装到 JavaFX 的 JRT 加载位置：Windows `runtime/bin/javafx`，
+Linux `lib/runtime/lib`。jlink 只保留 jar 资源，不会完成这一步；缺失时 JavaFX 会解压和校验
+用户缓存。脚本拒绝越界条目、重复库和运行时文件覆盖，jpackage 复制后按源 jar 的 SHA-256
+再次验证；启动门禁拒绝缓存回退，确保交付物自身完整。
 随后以隔离的 `--smoke` 训练模式遍历五视图及两种主题，生成 AOT 缓存
 （`-XX:AOTCacheOutput`），把 `-XX:AOTCache=$APPDIR/datacraft.aot` 写进启动器的配置。
 最后执行 10 次新配置和 10 次复用配置启动，后者覆盖不同已保存页面和主题；每次都确认 AOT 类实际生效，

@@ -7,6 +7,8 @@ newer) on PATH or in JAVA_HOME:
    from them plus the JavaFX modules of this platform (desktop/target/javafx).
 2. jpackage builds the app image `desktop/target/dist/DataCraft` around that runtime, with the
    app jar and its libraries on the class path and the icon drawn here (no image file is kept).
+   JavaFX native libraries are installed at its JRT loader location and verified after copying;
+   packaged starts must never fall back to extracting them into a user cache.
 3. A disposable `--smoke` training run visits every view in both themes while the JVM records
    an AOT cache (JEP 483/514). The launcher is then told to use the cache.
 4. Ten fresh-profile and ten reused-profile starts must confirm AOT use, exit without runtime
@@ -190,6 +192,61 @@ def jlink_module_path(jlink, javafx):
     return os.pathsep.join(entries + [str(path) for path in javafx])
 
 
+def install_javafx_natives(javafx, runtime):
+    """Modular jars keep natives as resources; jlink does not install them as native files.
+
+    Match OpenJFX NativeLibLoader.libDirForJRT: Windows bin/javafx, Linux/macOS lib.
+    Take bytes only from this build's platform jars, preserve JDK files, and record provenance.
+    This avoids decompressing and hashing the same resource against a user cache on every start.
+    """
+    system = platform.system()
+    suffix = {"Windows": ".dll", "Linux": ".so", "Darwin": ".dylib"}.get(system)
+    if suffix is None:
+        raise Missing(f"unsupported JavaFX native platform: {system}")
+    folder = Path("bin/javafx" if system == "Windows" else "lib")
+    pending = []
+    names = set()
+    for archive in javafx:
+        with zipfile.ZipFile(archive) as jar:
+            for entry in jar.infolist():
+                name = entry.filename
+                if not name.endswith(suffix):
+                    continue
+                if (not re.fullmatch(r"[A-Za-z0-9_.-]+", name)
+                        or re.match(r"(?i)(?:con|prn|aux|nul|com[0-9]|lpt[0-9])\.", name)
+                        or stat.S_ISLNK(entry.external_attr >> 16)):
+                    raise Failed(f"invalid JavaFX native library name: {name}")
+                if name.casefold() in names:
+                    raise Failed(f"duplicate native library: {name}")
+                names.add(name.casefold())
+                destination = runtime / folder / name
+                if not destination.resolve().is_relative_to(runtime.resolve()):
+                    raise Failed(f"native library path leaves the runtime: {name}")
+                if destination.exists() or destination.is_symlink():
+                    raise Failed(f"native library already exists: {destination}")
+                pending.append((folder / name, jar.read(entry), archive.name))
+    if not pending:
+        raise Failed(f"no JavaFX native libraries for {system}")
+    manifest = []
+    for relative, data, source in pending:
+        destination = runtime / relative
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        destination.write_bytes(data)
+        manifest.append({"path": relative.as_posix(), "source": source,
+                         "sha256": hashlib.sha256(data).hexdigest()})
+    return manifest
+
+
+def verify_native_manifest(runtime, manifest):
+    """Verify the final jpackage copy against bytes from the resolved JavaFX platform jars."""
+    for entry in manifest:
+        library = runtime / entry["path"]
+        if not library.resolve().is_relative_to(runtime.resolve()) or not library.is_file():
+            raise Failed(f"JavaFX native library missing: {entry['path']}")
+        if hashlib.sha256(library.read_bytes()).hexdigest() != entry["sha256"]:
+            raise Failed(f"JavaFX native checksum mismatch: {entry['path']}")
+
+
 def png(size, pixels):
     """A PNG of RGBA rows, standard library only."""
     raw = b"".join(b"\x00" + bytes(row) for row in pixels)
@@ -305,7 +362,8 @@ def smoke(launcher, work, extra_options=None, *, home=None, require_aot=False):
     log.unlink(missing_ok=True)
     env = dict(os.environ, DATACRAFT_DESKTOP_HOME=str(home))
     env.pop("JAVA_TOOL_OPTIONS", None)
-    options = list(extra_options or [])
+    native_cache = home / "javafx-cache"
+    options = [*list(extra_options or []), f"-Djavafx.cachedir={native_cache}"]
     if require_aot:
         options += ["-XX:AOTMode=on", "-Xlog:aot=info"]
     if options:
@@ -315,6 +373,8 @@ def smoke(launcher, work, extra_options=None, *, home=None, require_aot=False):
     training = "-Ddatacraft.desktop.aotTraining=true" in options
     output = run([str(launcher), "--smoke"], env=env, timeout=180, diagnostics=True,
                  aot_training=training)
+    if native_cache.exists():
+        raise Failed("JavaFX fell back to its native cache; the packaged runtime is incomplete")
     if require_aot and "Using AOT-linked classes: true" not in output:
         raise Failed(f"the JVM did not confirm that AOT-linked classes were used:\n{output}")
     text = log.read_text(encoding="utf-8") if log.is_file() else ""
@@ -443,6 +503,7 @@ def package(root, skip_aot, startup_samples=10, startup_budget_ms=1500):
     run([jlink, "--module-path", jlink_module_path(jlink, javafx),
          "--add-modules", ",".join(modules), "--strip-debug", "--no-header-files", "--no-man-pages",
          "--compress=zip-6", "--output", str(work / "runtime")])
+    natives = install_javafx_natives(javafx, work / "runtime")
 
     icon = write_icon(work)
     command = [jpackage, "--type", "app-image", "--name", NAME, "--app-version", version,
@@ -456,6 +517,12 @@ def package(root, skip_aot, startup_samples=10, startup_budget_ms=1500):
     launcher, cfg = layout(image)
     if not launcher.is_file() or not cfg.is_file():
         raise Failed(f"jpackage did not produce {launcher} and {cfg}")
+    runtime = image / ("runtime" if os.name == "nt" else "lib/runtime")
+    if sys.platform == "darwin":
+        runtime = image / "Contents/runtime/Contents/Home"
+    verify_native_manifest(runtime, natives)
+    (work / "javafx-natives.json").write_text(json.dumps(natives, indent=2) + "\n", encoding="utf-8")
+    print(f"Verified {len(natives)} bundled JavaFX native libraries against the platform jars")
 
     if not skip_aot:
         cache = cfg.parent / AOT_FILE
