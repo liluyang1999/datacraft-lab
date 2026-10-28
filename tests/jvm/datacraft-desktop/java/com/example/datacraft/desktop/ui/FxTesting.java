@@ -28,6 +28,7 @@ final class FxTesting {
 
   private static boolean started;
   private static final List<LogRecord> WARNINGS = new ArrayList<>();
+  private static final List<Throwable> FAILURES = new ArrayList<>();
 
   private FxTesting() {}
 
@@ -57,7 +58,19 @@ final class FxTesting {
               public void close() {}
             });
     CompletableFuture<Void> ready = new CompletableFuture<>();
-    Platform.startup(() -> ready.complete(null));
+    Platform.startup(
+        () -> {
+          Thread fx = Thread.currentThread();
+          Thread.UncaughtExceptionHandler previous = fx.getUncaughtExceptionHandler();
+          fx.setUncaughtExceptionHandler(
+              (thread, failure) -> {
+                synchronized (FAILURES) {
+                  FAILURES.add(failure);
+                }
+                previous.uncaughtException(thread, failure);
+              });
+          ready.complete(null);
+        });
     Platform.setImplicitExit(false);
     ready.join();
     started = true;
@@ -70,6 +83,25 @@ final class FxTesting {
           .map(record -> record.getLoggerName() + ": " + record.getMessage())
           .toList();
     }
+  }
+
+  /** Uncaught event or native callback errors must fail the test, not merely print on stderr. */
+  static void assertHealthy() {
+    onFx(
+        () -> {
+          synchronized (FAILURES) {
+            if (!FAILURES.isEmpty()) {
+              AssertionError error =
+                  new AssertionError("Uncaught JavaFX failure", FAILURES.getFirst());
+              FAILURES.stream().skip(1).forEach(error::addSuppressed);
+              FAILURES.clear();
+              throw error;
+            }
+          }
+          if (!javafxWarnings().isEmpty()) {
+            throw new AssertionError("JavaFX warnings: " + javafxWarnings());
+          }
+        });
   }
 
   static <T> T onFx(Callable<T> work) {
@@ -116,8 +148,24 @@ final class FxTesting {
 
   /** Lets a few pulses pass so that layout and CSS settle. */
   static void settle() {
-    for (int pulse = 0; pulse < 3; pulse++) {
-      onFx(() -> {});
+    CompletableFuture<Void> settled = new CompletableFuture<>();
+    onFx(
+        () ->
+            new javafx.animation.AnimationTimer() {
+              private int pulses;
+
+              @Override
+              public void handle(long now) {
+                if (++pulses == 3) {
+                  stop();
+                  settled.complete(null);
+                }
+              }
+            }.start());
+    try {
+      settled.get(10, TimeUnit.SECONDS);
+    } catch (Exception failure) {
+      throw new AssertionError("JavaFX did not render three pulses", failure);
     }
   }
 

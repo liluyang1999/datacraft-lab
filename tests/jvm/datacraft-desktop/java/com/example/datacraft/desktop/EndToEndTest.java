@@ -195,9 +195,12 @@ class EndToEndTest {
     @Test
     void pausingAndResumingIsWhatAirflowThenReports() {
       boolean before = paused(DAG);
-      airflow.setPaused(DAG, !before).join();
-      assertEquals(!before, paused(DAG));
-      airflow.setPaused(DAG, before).join();
+      try {
+        airflow.setPaused(DAG, !before).join();
+        assertEquals(!before, paused(DAG));
+      } finally {
+        airflow.setPaused(DAG, before).join();
+      }
       assertEquals(before, paused(DAG));
     }
 

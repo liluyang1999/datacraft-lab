@@ -9,7 +9,9 @@ import static com.example.datacraft.desktop.ui.FxTesting.snapshot;
 import static com.example.datacraft.desktop.ui.FxTesting.waitUntil;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
+import com.example.datacraft.desktop.api.AirflowModels.DagRun;
 import com.example.datacraft.desktop.api.EngineModels.JobInfo;
+import com.example.datacraft.desktop.api.RunTone;
 import com.example.datacraft.desktop.app.AppContext;
 import com.example.datacraft.desktop.app.AppPaths;
 import com.example.datacraft.desktop.store.Profile;
@@ -18,7 +20,9 @@ import com.example.datacraft.desktop.ui.shell.MainWindow;
 import com.example.datacraft.desktop.ui.shell.Navigator.Destination;
 import java.net.URI;
 import java.nio.file.Path;
+import java.time.Duration;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import javafx.scene.Parent;
 import javafx.scene.control.Button;
@@ -88,6 +92,7 @@ class EndToEndWindowTest {
   void close() {
     onFx(() -> stage.close());
     context.close();
+    FxTesting.assertHealthy();
   }
 
   @SuppressWarnings("unchecked")
@@ -107,7 +112,7 @@ class EndToEndWindowTest {
   }
 
   @Test
-  void theWindowWorksAgainstTheRealBackends() {
+  void theWindowWorksAgainstTheRealBackends() throws InterruptedException {
     Parent root = onFx(() -> stage.getScene().getRoot());
     int expected = env("DATACRAFT_E2E_AIRFLOW_URL").isEmpty() ? 1 : 2;
     waitUntil(
@@ -116,14 +121,15 @@ class EndToEndWindowTest {
             find(root, StatusRing.class).stream().filter(r -> "success".equals(r.tone())).count()
                 >= expected);
     if (expected == 2) {
+      completeEngineDagRun();
       onFx(() -> window.go(Destination.OVERVIEW));
       waitUntil("the overview lists the DAGs", () -> shows(root, "datacraft_engine_jobs"));
       settle();
       snapshot(onFx(() -> stage.getScene()), "e2e-overview");
       onFx(() -> window.go(Destination.PIPELINES));
       waitUntil("the pipelines view lists the DAGs", () -> shows(root, "datacraft_spark_etl"));
-      // datacraft_engine_jobs is selected first; once it has run (EndToEndTest triggers it), its
-      // newest run is selected and its tasks are listed.
+      // This test creates its own successful run, so it also works alone on a fresh deployment.
+      // datacraft_engine_jobs is selected first; its newest run and tasks must be drawn.
       waitUntil(
           "the newest run is drawn as the DAG, noop before echo, with its tasks' states",
           () ->
@@ -137,7 +143,7 @@ class EndToEndWindowTest {
                                   && card.getUserData()
                                       instanceof
                                       com.example.datacraft.desktop.api.AirflowModels.TaskInstance
-                                      task
+                                          task
                                   && task.taskId().equals("echo")));
       settle();
       snapshot(onFx(() -> stage.getScene()), "e2e-pipelines");
@@ -168,5 +174,37 @@ class EndToEndWindowTest {
     settle();
     snapshot(onFx(() -> stage.getScene()), "e2e-jobs");
     assertEquals(List.of(), FxTesting.javafxWarnings());
+  }
+
+  private void completeEngineDagRun() throws InterruptedException {
+    String dag = "datacraft_engine_jobs";
+    var airflow = context.session().current().orElseThrow().airflow();
+    boolean wasPaused =
+        airflow.dags().join().stream()
+            .filter(item -> dag.equals(item.dagId()))
+            .findFirst()
+            .orElseThrow()
+            .paused();
+    try {
+      if (wasPaused) {
+        airflow.setPaused(dag, false).join();
+      }
+      DagRun triggered = airflow.trigger(dag, Map.of(), "数艺工坊窗口端到端测试").join();
+      DagRun run = triggered;
+      long deadline = System.nanoTime() + Duration.ofMinutes(5).toNanos();
+      while (run.tone().active() && System.nanoTime() < deadline) {
+        Thread.sleep(3000);
+        run =
+            airflow.runs(dag, 25).join().stream()
+                .filter(item -> triggered.runId().equals(item.runId()))
+                .findFirst()
+                .orElseThrow();
+      }
+      assertEquals(RunTone.SUCCESS, run.tone(), "run " + run.runId() + " ended " + run.state());
+    } finally {
+      if (wasPaused) {
+        airflow.setPaused(dag, true).join();
+      }
+    }
   }
 }

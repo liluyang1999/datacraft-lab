@@ -41,7 +41,7 @@ datacraft-lab/
 │                                      security-overrides.txt
 ├── deploy/                            docker/, compose/, swarm/, scripts/
 ├── desktop/                           数艺工坊, the JavaFX desktop console: a Maven project of its own
-│                                      whose parent is the root POM; not a reactor module
+│                                      built with the parent through the opt-in desktop profile
 ├── design/                            architecture and design documents (English)
 ├── docs/                              README, CHANGELOG, guides/, reports/, desktop/
 └── tests/                             every test
@@ -69,7 +69,7 @@ datacraft-lab/
 - `orchestration/airflow` orchestrates the built CLI jar and never re-implements JVM logic.
   `deploy/` holds the Dockerfiles, the Compose and Swarm stacks and the scripts around them.
 - `desktop/` is a client of the engine API and Airflow, not part of the engine: it builds with
-  `./mvnw -f desktop/pom.xml verify`, keeps only settings and caches on the user's machine, and is
+  `./mvnw -Pdesktop -pl :datacraft-desktop -am verify`, keeps only settings and caches on the user's machine, and is
   documented in Chinese under [docs/desktop](../docs/desktop/README.md).
 
 ## Module responsibilities

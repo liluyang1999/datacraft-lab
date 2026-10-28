@@ -1,5 +1,6 @@
 package com.example.datacraft.desktop.ui;
 
+import javafx.animation.Animation;
 import javafx.animation.FadeTransition;
 import javafx.animation.Interpolator;
 import javafx.animation.TranslateTransition;
@@ -48,30 +49,32 @@ public final class Motion {
     fade.play();
   }
 
-  /** A drawer sliding in from the right: 160 ms ease-out. */
-  public static void slideIn(Node node, double distance) {
+  /** A drawer sliding in: 160 ms ease-out. Returns its animation, or null with reduced motion. */
+  public static Animation slideIn(Node node, double distance) {
     if (reduced) {
       node.setTranslateX(0);
-      return;
+      return null;
     }
     TranslateTransition slide = new TranslateTransition(Duration.millis(160), node);
     slide.setFromX(distance);
     slide.setToX(0);
     slide.setInterpolator(Interpolator.EASE_OUT);
     slide.play();
+    return slide;
   }
 
-  /** A drawer leaving; {@code done} runs when it is gone. */
-  public static void slideOut(Node node, double distance, Runnable done) {
+  /** A drawer leaving; returns its animation, or null when {@code done} runs immediately. */
+  public static Animation slideOut(Node node, double distance, Runnable done) {
     if (reduced) {
       done.run();
-      return;
+      return null;
     }
     TranslateTransition slide = new TranslateTransition(Duration.millis(120), node);
     slide.setToX(distance);
     slide.setInterpolator(Interpolator.EASE_IN);
     slide.setOnFinished(event -> done.run());
     slide.play();
+    return slide;
   }
 
   /** A toast appearing: 160 ms fade and a small rise. */

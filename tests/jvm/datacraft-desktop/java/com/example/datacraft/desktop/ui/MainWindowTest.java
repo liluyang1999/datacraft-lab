@@ -7,8 +7,10 @@ import static com.example.datacraft.desktop.ui.FxTesting.shows;
 import static com.example.datacraft.desktop.ui.FxTesting.snapshot;
 import static com.example.datacraft.desktop.ui.FxTesting.waitUntil;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import com.example.datacraft.desktop.api.StubServer;
 import com.example.datacraft.desktop.app.AppContext;
 import com.example.datacraft.desktop.app.AppPaths;
 import com.example.datacraft.desktop.app.Preferences;
@@ -19,14 +21,19 @@ import com.example.datacraft.desktop.ui.component.RunMark;
 import com.example.datacraft.desktop.ui.component.StatusRing;
 import com.example.datacraft.desktop.ui.component.TaskGraph;
 import com.example.datacraft.desktop.ui.component.TimeStrip;
+import com.example.datacraft.desktop.ui.shell.Drawer;
 import com.example.datacraft.desktop.ui.shell.MainWindow;
 import com.example.datacraft.desktop.ui.shell.Navigator.Destination;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.Optional;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 import javafx.scene.Parent;
 import javafx.scene.Scene;
 import javafx.scene.control.Button;
+import javafx.scene.control.Label;
 import javafx.scene.control.TextField;
 import javafx.stage.Stage;
 import org.junit.jupiter.api.AfterEach;
@@ -81,6 +88,7 @@ class MainWindowTest {
     onFx(() -> stage.close());
     context.close();
     backends.close();
+    FxTesting.assertHealthy();
   }
 
   /**
@@ -102,6 +110,97 @@ class MainWindowTest {
 
   private void go(Destination destination) {
     onFx(() -> window.go(destination));
+  }
+
+  private Drawer openFirstTrigger() {
+    Parent root = root();
+    go(Destination.PIPELINES);
+    waitUntil("the first DAG is loaded", () -> pickableRuns(root) == 12);
+    onFx(
+        () ->
+            find(root, Button.class).stream()
+                .filter(button -> "触发运行".equals(button.getText()))
+                .findFirst()
+                .orElseThrow()
+                .fire());
+    settle(); // ScrollPane's skin attaches the form to the scene during a real pulse.
+    return onFx(() -> find(root, Drawer.class).getFirst());
+  }
+
+  @Test
+  void aLateTriggerResponseCannotCloseThePanelThatReplacedItsForm() throws Exception {
+    CountDownLatch entered = new CountDownLatch(1);
+    CountDownLatch release = new CountDownLatch(1);
+    backends.airflow.on(
+        "POST /api/v2/dags/datacraft_engine_jobs/dagRuns",
+        request -> {
+          entered.countDown();
+          try {
+            if (!release.await(10, TimeUnit.SECONDS)) {
+              return StubServer.Answer.json(504, "{}");
+            }
+          } catch (InterruptedException interrupted) {
+            Thread.currentThread().interrupt();
+            return StubServer.Answer.json(503, "{}");
+          }
+          return StubServer.Answer.json(
+              200,
+              """
+              {"dag_run_id":"manual__held","dag_id":"datacraft_engine_jobs",
+               "state":"queued","run_type":"manual","run_after":"2026-10-27T10:00:00Z",
+               "conf":{},"queued_at":"2026-10-27T10:00:00Z","start_date":null,
+               "end_date":null,"duration":null}
+              """);
+        });
+    Drawer drawer = openFirstTrigger();
+    Button submit =
+        onFx(
+            () ->
+                find(drawer, Button.class).stream()
+                    .filter(button -> "触发运行".equals(button.getText()))
+                    .findFirst()
+                    .orElseThrow());
+    try {
+      onFx(submit::fire);
+      assertTrue(entered.await(10, TimeUnit.SECONDS), "the trigger request reached Airflow");
+      onFx(() -> drawer.open("新的面板", new Label("新的内容"), () -> {}));
+      release.countDown();
+      waitUntil("the original response was handled", () -> !submit.isDisabled());
+      assertTrue(onFx(() -> drawer.isOpen() && shows(drawer, "新的内容")));
+    } finally {
+      release.countDown();
+    }
+  }
+
+  @Test
+  void reopeningADrawerDuringItsExitKeepsTheNewContentAndReleasesTheOldOnce() {
+    motionOn();
+    Parent root = root();
+    Drawer drawer = onFx(() -> find(root, Drawer.class).getFirst());
+    AtomicInteger oldClosed = new AtomicInteger();
+    AtomicInteger newClosed = new AtomicInteger();
+    Label replacement = onFx(() -> new Label("新的内容"));
+    onFx(
+        () -> {
+          drawer.open("原来的面板", new Label("原来的内容"), oldClosed::incrementAndGet);
+          drawer.close();
+          drawer.open("新的面板", replacement, newClosed::incrementAndGet);
+        });
+    Parent panel = onFx(replacement::getParent);
+    settle();
+    waitUntil("the entrance animation finished", () -> Math.abs(panel.getTranslateX()) < 0.1);
+    assertTrue(onFx(() -> drawer.isOpen() && shows(drawer, "新的内容")));
+    assertEquals(1, oldClosed.get());
+    assertEquals(0, newClosed.get());
+  }
+
+  @Test
+  void changingConnectionClosesThePreviousTriggerForm() {
+    Drawer drawer = openFirstTrigger();
+    Parent root = root();
+    context.session().clear();
+    waitUntil("the connection is cleared", () -> shows(root, "先连接你的 Airflow"));
+    assertFalse(onFx(drawer::isOpen));
   }
 
   @Test
@@ -174,9 +273,7 @@ class MainWindowTest {
     snapshot(scene(), "jobs-light");
 
     go(Destination.PIPELINES);
-    waitUntil(
-        "the runs of the first DAG are bars to pick from",
-        () -> pickableRuns(root) == 12);
+    waitUntil("the runs of the first DAG are bars to pick from", () -> pickableRuns(root) == 12);
     waitUntil(
         "its newest run is drawn as the DAG",
         () ->
@@ -235,6 +332,47 @@ class MainWindowTest {
         false,
         true,
         null);
+  }
+
+  @Test
+  void pipelineActionsRemainVisibleAtTheMinimumWindowWidth() {
+    Parent root = root();
+    onFx(
+        () -> {
+          stage.setWidth(stage.getMinWidth());
+          stage.setHeight(stage.getMinHeight());
+        });
+    for (Destination destination : List.of(Destination.PIPELINES, Destination.OVERVIEW)) {
+      go(destination);
+      waitUntil("the DAGs are listed", () -> shows(root, "datacraft_spark_etl"));
+      settle();
+      snapshot(scene(), destination.id() + "-minimum-light");
+      onFx(
+          () -> {
+            var actions =
+                find(root, Button.class).stream()
+                    .filter(button -> "触发运行".equals(button.getAccessibleText()))
+                    .filter(FxTesting::visible)
+                    .toList();
+            assertEquals(3, actions.size());
+            for (Button action : actions) {
+              var bounds = action.localToScene(action.getBoundsInLocal());
+              assertTrue(
+                  bounds.getMaxX() <= stage.getScene().getWidth(),
+                  "a pipeline action lies outside the window: " + bounds);
+            }
+            var page =
+                find(root, javafx.scene.control.ScrollPane.class).stream()
+                    .filter(scroll -> scroll.getContent().getStyleClass().contains("view-content"))
+                    .filter(FxTesting::visible)
+                    .findFirst()
+                    .orElseThrow();
+            assertTrue(
+                page.getContent().getLayoutBounds().getWidth()
+                    <= page.getViewportBounds().getWidth() + 1,
+                destination + " should fit without horizontal scrolling");
+          });
+    }
   }
 
   private static boolean bothUp(Parent root) {
@@ -323,16 +461,13 @@ class MainWindowTest {
         () -> shows(root, "触发 datacraft_spark_etl") && shows(root, "encoding"));
     onFx(() -> window.go(Destination.PIPELINES)); // closes the panel
     waitUntil("the spark ETL runs are bars", () -> pickableRuns(root) == 6);
-    waitUntil(
-        "the running run is drawn",
-        () -> cardIs(root, "row_count", "running"));
+    waitUntil("the running run is drawn", () -> cardIs(root, "row_count", "running"));
     // The second bar from the right is the failed run before it.
     RunBars bars = onFx(() -> selectableBars(root).orElseThrow());
     onFx(() -> bars.fireEvent(clickAt(bars, 23 * (12 + 4) + 6, 40)));
     waitUntil(
         "the failed run is drawn instead",
-        () ->
-            cardIs(root, "row_count", "failed") && cardIs(root, "csv_to_parquet", "success"));
+        () -> cardIs(root, "row_count", "failed") && cardIs(root, "csv_to_parquet", "success"));
     assertEquals(
         List.of(23),
         onFx(
@@ -372,7 +507,9 @@ class MainWindowTest {
             find(root, TaskGraph.class).stream()
                 .anyMatch(
                     graph ->
-                        graph.taskIds().equals(List.of("download", "csv_to_parquet", "row_count"))));
+                        graph
+                            .taskIds()
+                            .equals(List.of("download", "csv_to_parquet", "row_count"))));
     assertEquals(List.of(), FxTesting.javafxWarnings(), "JavaFX logged warnings (CSS or layout)");
   }
 

@@ -80,7 +80,15 @@ public final class PipelinesView implements View {
     Label dagProblem = notice(model.dagProblem().isNotEmpty());
     dagProblem.textProperty().bind(model.dagProblem());
     Rows.bind(lanes, model.dags(), this::lane, this::updateLane);
-    model.selectedDag().addListener((property, before, now) -> markSelectedLane());
+    model
+        .selectedDag()
+        .addListener(
+            (property, before, now) -> {
+              markSelectedLane();
+              if (now == null) {
+                drawer.close();
+              }
+            });
     Label noDags = Controls.label("", "secondary");
     noDags.textProperty().bind(Bindings.when(model.loaded()).then("还没有流水线").otherwise("正在读取"));
     noDags.visibleProperty().bind(Bindings.isEmpty(model.dags()));
@@ -197,8 +205,11 @@ public final class PipelinesView implements View {
     Tooltip.install(schedule, scheduleTip);
     schedule.setUserData(scheduleTip);
     Label name = Controls.label("", "name", "latin");
-    name.setMinWidth(220);
+    name.setMinWidth(120);
     name.setPrefWidth(220);
+    Tooltip nameTip = new Tooltip();
+    nameTip.textProperty().bind(name.textProperty());
+    name.setTooltip(nameTip);
     RunBars bars = RunBars.compact(PipelinesModel.RIBBON);
     StatusRing last = StatusRing.dot();
     Label ago = Controls.label("", "secondary");
@@ -357,8 +368,13 @@ public final class PipelinesView implements View {
       asJson.setDisable(true);
     }
     layout.run();
+    ScrollPane scroll = new ScrollPane(body);
+    scroll.setFitToWidth(true);
     submit.setOnAction(
         event -> {
+          if (!drawer.isShowing(scroll)) {
+            return;
+          }
           Map<String, Object> conf;
           if (asJson.isSelected()) {
             var parsed = model.parseConf(jsonText.getText());
@@ -378,6 +394,9 @@ public final class PipelinesView implements View {
                       javafx.application.Platform.runLater(
                           () -> {
                             submit.setDisable(false);
+                            if (!drawer.isShowing(scroll)) {
+                              return;
+                            }
                             if (failure == null) {
                               drawer.close();
                               toasts.success("已触发 " + dagId);
@@ -386,8 +405,6 @@ public final class PipelinesView implements View {
                             }
                           }));
         });
-    ScrollPane scroll = new ScrollPane(body);
-    scroll.setFitToWidth(true);
     drawer.open("触发 " + dagId, scroll, () -> {});
   }
 

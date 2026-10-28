@@ -35,7 +35,9 @@ import zlib
 
 NAME = "DataCraft"
 MAIN_CLASS = "com.example.datacraft.desktop.Launcher"
-JVM_OPTIONS = ["--enable-native-access=javafx.graphics,ALL-UNNAMED"]
+# The console holds bounded lists and logs, not datasets. Do not size its initial heap from the
+# host's RAM: on a developer workstation that can commit hundreds of unused megabytes at startup.
+JVM_OPTIONS = ["-Xms32m", "-Xmx256m", "--enable-native-access=javafx.graphics,ALL-UNNAMED"]
 JAVAFX_MODULES = ("javafx.base", "javafx.graphics", "javafx.controls")
 AOT_FILE = "datacraft.aot"
 STARTUP_LINE = re.compile(r"Start-up: first frame at (\d+) ms")
@@ -231,7 +233,9 @@ def smoke(launcher, work, extra_options=None):
         env = dict(os.environ, DATACRAFT_DESKTOP_HOME=home)
         env.pop("JAVA_TOOL_OPTIONS", None)
         if extra_options:
-            env["JAVA_TOOL_OPTIONS"] = " ".join(extra_options)
+            # The JVM tokenizes this value, independently of subprocess/shell quoting. Protect
+            # paths with spaces (including the AOT output in a checkout such as "My Projects").
+            env["JAVA_TOOL_OPTIONS"] = " ".join(quote_jvm_option(option) for option in extra_options)
         run([str(launcher), "--smoke"], env=env, timeout=180)
         log = Path(home) / "logs" / "desktop-0.log"
         text = log.read_text(encoding="utf-8") if log.is_file() else ""
@@ -239,6 +243,14 @@ def smoke(launcher, work, extra_options=None):
         if match is None:
             raise Failed(f"the app ran but logged no first frame:\n{text}")
         return int(match.group(1))
+
+
+def quote_jvm_option(option):
+    """One JAVA_TOOL_OPTIONS argument: its quote delimiter must not occur in the value."""
+    for quote in ('"', "'"):
+        if quote not in option:
+            return quote + option + quote
+    raise Failed("a JVM option cannot contain both single and double quotes")
 
 
 def remove(directory):

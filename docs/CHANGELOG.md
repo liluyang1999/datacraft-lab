@@ -6,6 +6,39 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Quality review and desktop boundaries (2026-10-28)
+
+#### Fixed
+- The latest remote build failed because four desktop test files did not meet the parent's
+  formatting gate. The opt-in `desktop` Maven profile now lets CI and `make desktop-verify` run
+  the parent and desktop together, so this gate also covers tests under `tests/jvm/`.
+- Polling now checks its generation when the queued result is applied. Old results and failures
+  cannot overwrite a pause, a restarted poller or a changed connection; switching connections
+  clears the log and its continuation token and ignores old pause/trigger completions.
+- Successful reads must return JSON objects. Empty, null, array and scalar bodies are protocol
+  errors; HTTP errors retain their status, and pause acknowledgements can still omit a body.
+- Pipeline name columns shrink at the minimum window width and show full names in tooltips,
+  keeping actions visible without a page-wide horizontal scrollbar.
+- AOT training quotes each `JAVA_TOOL_OPTIONS` argument, including cache paths containing spaces.
+- The FX watchdog rechecks the answer after waking; UI snapshots wait for actual rendering pulses.
+- Every window test also fails on uncaught FX-thread exceptions, including native callbacks that
+  previously only appeared on stderr while JUnit reported success.
+- The drawer casts its shadow from a separate static surface. Scrolling a log no longer blurs the
+  panel's entire changing contents on every frame in JavaFX's software renderer.
+- Reopening the drawer cancels its previous exit animation and releases the old content once.
+  A late trigger response cannot close a newer panel; changing connections closes the old form.
+- The packaged console starts with a 32 MiB heap and caps it at 256 MiB; desktop tests use the same
+  limits. Its initial heap no longer grows with the workstation's RAM.
+- The real-backend window test prepares its own successful DAG run and restores the pause state;
+  it no longer depends on another test running first. Pause checks also restore state on failure.
+
+#### Verification
+- Regression coverage and the desktop execution floor are now 97 tests per platform. The review
+  evidence, platform results and remaining external gates are recorded in
+  [desktop round L7](desktop/loop/log.md#l7-全面复核与边界打磨2026-10-28).
+- Development, architecture, UI, performance, testing and CI documentation use the same complete
+  desktop gate and distinguish historical evidence from the current review.
+
 ### 数艺工坊: a visual-first interface (2026-10-28)
 
 The desktop console's second design: concise and fresh, with graphics and their motion as the main

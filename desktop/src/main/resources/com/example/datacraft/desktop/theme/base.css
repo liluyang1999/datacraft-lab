@@ -1093,11 +1093,15 @@
     -fx-background-color: -dc-scrim;
 }
 
+.drawer-shadow {
+    -fx-background-color: -dc-surface;
+    -fx-effect: dropshadow(gaussian, -dc-shadow, 18, 0, -6, 0);
+}
+
 .drawer {
     -fx-background-color: -dc-surface;
     -fx-border-color: transparent transparent transparent -dc-line;
     -fx-border-width: 0 0 0 1;
-    -fx-effect: dropshadow(gaussian, -dc-shadow, 18, 0, -6, 0);
     -fx-padding: 20 24 20 24;
     -fx-spacing: 16;
 }

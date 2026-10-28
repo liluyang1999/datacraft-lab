@@ -84,6 +84,37 @@ class PipelinesModelTest {
   }
 
   @Test
+  void changingConnectionClosesTheOldLogAndClearsItsContinuation() throws Exception {
+    etlRuns();
+    ticker.advance(Duration.ZERO);
+    ui.until("the tasks are listed", () -> model.tasks().size() == 2);
+    model.openLog(model.tasks().getFirst());
+    ui.until("the log is read", () -> !model.logLines().isEmpty());
+    context.session().clear();
+    ui.drain();
+    assertTrue(model.logLines().isEmpty(), "the previous connection's log must disappear");
+    assertTrue(model.logNext().get().isEmpty());
+    assertTrue(!model.logLoading().get());
+  }
+
+  @Test
+  void aDagListAlreadyQueuedForTheUiCannotUndoAPause() throws Exception {
+    backends.airflow.on("PATCH /api/v2/dags/" + ETL, 200, "{}");
+    // Let a poll finish, but hold its answer in the UI queue while the user changes the switch.
+    ui.until("the initial graph is loaded", () -> !model.structure().isEmpty());
+    model.selectDag(null); // only the DAG poller remains, so the queued work is unambiguous
+    ticker.advance(Duration.ofSeconds(10));
+    long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(10);
+    while (ui.pending() == 0 && System.nanoTime() < deadline) {
+      Thread.onSpinWait();
+    }
+    assertTrue(ui.pending() > 0, "a poll is waiting for the UI");
+    model.setPaused(ETL, true).join();
+    ui.drain();
+    assertTrue(etlPaused(), "the completed but unapplied poll must not undo the pause");
+  }
+
+  @Test
   void aLogOpenedWhileAnotherIsLoadingIsStillRead() throws Exception {
     List<DagRun> runs = etlRuns();
     ticker.advance(Duration.ZERO);
@@ -158,7 +189,9 @@ class PipelinesModelTest {
     ui.until(
         "the engine-jobs graph is known",
         () ->
-            model.structure().stream().map(task -> task.taskId()).toList()
+            model.structure().stream()
+                .map(task -> task.taskId())
+                .toList()
                 .equals(List.of("echo", "noop", "spark_version")));
     CountDownLatch release = new CountDownLatch(1);
     backends.airflow.on(

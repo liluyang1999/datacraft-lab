@@ -30,6 +30,6 @@
 
 ## 每轮的固定检查
 
-- `./mvnw -f desktop/pom.xml -B -ntp clean verify`（格式、编译、单元、接口、存储与界面测试）
+- `./mvnw -B -ntp -Pdesktop -pl :datacraft-desktop -am clean verify`（父工程与桌面格式门禁、编译、单元、接口、存储与界面测试）
 - 启动应用，控制台 0 条警告，记录冷启动时间
 - 对照本轮的验收条件，逐条记录证据

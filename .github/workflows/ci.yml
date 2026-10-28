@@ -202,7 +202,7 @@ jobs:
       # Format, Checkstyle, Enforcer, unit, client, store and UI tests (every view in both themes,
       # no JavaFX warning, no stalled FX thread once warm), then the jar.
       - name: Verify the desktop console on a virtual display
-        run: xvfb-run --auto-servernum ./mvnw -B -ntp -f desktop/pom.xml verify
+        run: xvfb-run --auto-servernum ./mvnw -B -ntp -Pdesktop -pl :datacraft-desktop -am verify
 
       # The desktop suite against its own floor; the passing count becomes a notice.
       - name: Assert the desktop suite executed its tests

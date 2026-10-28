@@ -81,5 +81,21 @@ class TestSkipFlagTests(unittest.TestCase):
                          "one profile must map maven.test.skip=true to skipTests=true")
 
 
+class DesktopFormattingTests(unittest.TestCase):
+    def test_the_desktop_gate_also_runs_the_parent_for_its_external_tests(self):
+        root = pom(REPOSITORY / "pom.xml")
+        modules = [module.text for profile in root.findall("{*}profiles/{*}profile")
+                   if profile.findtext("{*}id") == "desktop"
+                   for module in profile.findall("{*}modules/{*}module")]
+        self.assertEqual(["desktop"], modules)
+        self.assertNotIn("desktop", [node.text for node in root.findall("{*}modules/{*}module")])
+        command = "-Pdesktop -pl :datacraft-desktop -am verify"
+        for name in (".github/workflows/ci.yml", "Makefile"):
+            self.assertIn(command, (REPOSITORY / name).read_text(encoding="utf-8"), name)
+        makefile = (REPOSITORY / "Makefile").read_text(encoding="utf-8")
+        self.assertIn("$(MVN) -B -ntp -Pdesktop spotless:apply", makefile)
+        self.assertIn("$(MVN) -B -ntp -Pdesktop clean", makefile)
+
+
 if __name__ == "__main__":
     unittest.main()

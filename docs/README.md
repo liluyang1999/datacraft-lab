@@ -45,7 +45,7 @@ datacraft-lab/
 ├── orchestration/airflow/           dags/ (with .airflowignore), requirements.txt,
 │                                    security-overrides.txt
 ├── deploy/                          docker/, compose/, swarm/, scripts/
-├── desktop/                         数艺工坊, the JavaFX desktop console (a Maven project of its own)
+├── desktop/                         数艺工坊, the JavaFX desktop console (opt-in Maven desktop profile)
 ├── design/                          architecture and design documents (English)
 ├── docs/                            this page, guides/, reports/, desktop/, CHANGELOG.md
 └── tests/                           all tests, kept outside the modules

@@ -11,7 +11,6 @@ import com.example.datacraft.desktop.service.PipelineService;
 import com.example.datacraft.desktop.service.Poller;
 import com.example.datacraft.desktop.service.Session;
 import com.example.datacraft.desktop.service.Ticker;
-import com.example.datacraft.desktop.util.Latest;
 import com.example.datacraft.desktop.util.Lists;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -69,6 +68,7 @@ public final class PipelinesModel implements Visibility {
   private final Poller<RunTasks> taskPoller;
   private boolean visible;
   private int pausesInFlight;
+  private long connectionGeneration;
   // Read by the pollers off the UI thread, written on it.
   private volatile String polledDag;
   private volatile String polledRun;
@@ -110,15 +110,14 @@ public final class PipelinesModel implements Visibility {
     this.catalog = catalog;
     this.json = json;
     this.ui = ui;
-    Latest<List<DagRow>> latestDags = new Latest<>(ui, this::applyDags);
     this.dagPoller =
         new Poller<>(
             ticker,
             () -> DagRow.fetch(service, RIBBON),
-            latestDags::offer,
-            failure -> ui.execute(() -> dagProblem.set(PipelineService.describe(failure))),
-            () -> preferences.refresh().scale(DAGS));
-    Latest<DagRuns> latestRuns = new Latest<>(ui, this::applyRuns);
+            this::applyDags,
+            failure -> dagProblem.set(PipelineService.describe(failure)),
+            () -> preferences.refresh().scale(DAGS),
+            ui);
     this.runPoller =
         new Poller<>(
             ticker,
@@ -128,10 +127,10 @@ public final class PipelinesModel implements Visibility {
                   ? CompletableFuture.completedFuture(new DagRuns(null, List.of()))
                   : service.runs(dagId, RUNS).thenApply(list -> new DagRuns(dagId, list));
             },
-            latestRuns::offer,
-            failure -> ui.execute(() -> detailProblem.set(PipelineService.describe(failure))),
-            () -> preferences.refresh().scale(runsActive ? ACTIVE : IDLE));
-    Latest<RunTasks> latestTasks = new Latest<>(ui, this::applyTasks);
+            this::applyRuns,
+            failure -> detailProblem.set(PipelineService.describe(failure)),
+            () -> preferences.refresh().scale(runsActive ? ACTIVE : IDLE),
+            ui);
     this.taskPoller =
         new Poller<>(
             ticker,
@@ -144,15 +143,20 @@ public final class PipelinesModel implements Visibility {
                       .taskInstances(dagId, runId)
                       .thenApply(list -> new RunTasks(runId, list));
             },
-            latestTasks::offer,
-            failure -> ui.execute(() -> detailProblem.set(PipelineService.describe(failure))),
-            () -> preferences.refresh().scale(ACTIVE));
+            this::applyTasks,
+            failure -> detailProblem.set(PipelineService.describe(failure)),
+            () -> preferences.refresh().scale(ACTIVE),
+            ui);
     connected.set(session.current().isPresent());
     session.subscribe(
         connection ->
             ui.execute(
                 () -> {
+                  connectionGeneration++;
+                  pausesInFlight = 0;
                   connected.set(connection.isPresent());
+                  closeLog();
+                  dagProblem.set("");
                   dags.clear();
                   structures.clear();
                   structuresLoading.clear();
@@ -284,6 +288,7 @@ public final class PipelinesModel implements Visibility {
    * change has been answered.
    */
   public CompletableFuture<Void> setPaused(String dagId, boolean paused) {
+    long generation = connectionGeneration;
     replaceDag(dagId, paused);
     pausesInFlight++;
     dagPoller.stop();
@@ -293,6 +298,9 @@ public final class PipelinesModel implements Visibility {
             (ignored, failure) ->
                 ui.execute(
                     () -> {
+                      if (generation != connectionGeneration) {
+                        return;
+                      }
                       if (failure != null) {
                         replaceDag(dagId, !paused);
                       }
@@ -327,6 +335,7 @@ public final class PipelinesModel implements Visibility {
 
   /** Triggers a run of the selected DAG; on success the new run is selected and followed. */
   public CompletableFuture<DagRun> trigger(String dagId, Map<String, Object> conf, String note) {
+    long generation = connectionGeneration;
     return service
         .trigger(dagId, conf, note)
         .whenComplete(
@@ -334,6 +343,9 @@ public final class PipelinesModel implements Visibility {
               if (failure == null) {
                 ui.execute(
                     () -> {
+                      if (generation != connectionGeneration) {
+                        return;
+                      }
                       if (dagId.equals(selectedDag.get())) {
                         selectRun(run.runId());
                         runPoller.refresh();
@@ -425,6 +437,7 @@ public final class PipelinesModel implements Visibility {
     logLines.clear();
     logChars = 0;
     logNext.set("");
+    logProblem.set("");
   }
 
   private void loadLog() {

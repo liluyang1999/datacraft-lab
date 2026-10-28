@@ -46,8 +46,7 @@ class GraphLayoutTest {
   void unknownDownstreamTasksAreIgnoredAndACycleDoesNotLoop() {
     assertEquals(
         List.of(new Placement("a", 0, 0), new Placement("b", 1, 0)),
-        GraphLayout.place(
-            List.of(new Node("a", List.of("b", "gone")), new Node("b", List.of()))));
+        GraphLayout.place(List.of(new Node("a", List.of("b", "gone")), new Node("b", List.of()))));
     assertEquals(
         List.of(new Placement("x", 0, 0), new Placement("y", 0, 1)),
         GraphLayout.place(List.of(new Node("x", List.of("y")), new Node("y", List.of("x")))));

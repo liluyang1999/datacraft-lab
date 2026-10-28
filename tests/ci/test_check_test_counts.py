@@ -226,7 +226,7 @@ class CheckTestCountsTests(unittest.TestCase):
 
 
 class DesktopProjectTests(unittest.TestCase):
-    """The desktop console is a Maven project outside the reactor; its job checks it on its own."""
+    """The desktop console is outside the default reactor; its job checks its own test floor."""
 
     def setUp(self):
         directory = tempfile.TemporaryDirectory()

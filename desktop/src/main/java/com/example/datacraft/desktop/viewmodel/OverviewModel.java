@@ -9,7 +9,6 @@ import com.example.datacraft.desktop.service.Poller;
 import com.example.datacraft.desktop.service.Session;
 import com.example.datacraft.desktop.service.Ticker;
 import com.example.datacraft.desktop.store.RecentRunRepository.RecentRun;
-import com.example.datacraft.desktop.util.Latest;
 import com.example.datacraft.desktop.util.Lists;
 import java.time.Clock;
 import java.time.Duration;
@@ -98,14 +97,14 @@ public final class OverviewModel implements Visibility {
       Clock clock,
       Executor ui) {
     this.clock = clock;
-    Latest<Data> latest = new Latest<>(ui, this::apply);
     this.poller =
         new Poller<>(
             ticker,
             () -> fetch(pipelines, jobs),
-            latest::offer,
+            this::apply,
             failure -> {},
-            () -> preferences.refresh().scale(INTERVAL));
+            () -> preferences.refresh().scale(INTERVAL),
+            ui);
     connected.set(session.current().isPresent());
     session.subscribe(
         connection ->
@@ -115,6 +114,8 @@ public final class OverviewModel implements Visibility {
                   dags.clear();
                   recent.clear();
                   mix.set(Mix.NONE);
+                  problem.set("");
+                  staleSince.set(null);
                   loaded.set(false);
                   if (poller.running()) {
                     poller.restart();

@@ -126,10 +126,18 @@ public final class HttpTransport implements AutoCloseable {
     return json;
   }
 
-  /** Parses a JSON body; anything else is a PROTOCOL error. */
+  /**
+   * Parses the JSON object returned by either API; an empty or other-shaped body is a protocol
+   * error.
+   */
   public JsonNode parse(Response response) {
     try {
-      return json.readTree(response.body());
+      JsonNode body = json.readTree(response.body());
+      if (body == null || !body.isObject()) {
+        throw new ApiException(
+            ApiError.PROTOCOL, response.status(), "the answer is not a JSON object");
+      }
+      return body;
     } catch (IOException exception) {
       throw new ApiException(
           ApiError.PROTOCOL, response.status(), "the answer is not JSON", exception);

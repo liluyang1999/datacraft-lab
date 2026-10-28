@@ -8,6 +8,7 @@ import importlib.util
 import os
 from pathlib import Path
 import struct
+import shlex
 import tempfile
 import unittest
 from unittest import mock
@@ -153,6 +154,22 @@ class CacheTests(unittest.TestCase):
         self.assertIsNotNone(match)
         assert match is not None
         self.assertEqual("1094", match.group(1))
+
+    def test_smoke_preserves_a_jvm_option_with_spaces_as_one_argument(self):
+        # The JVM parses JAVA_TOOL_OPTIONS itself, even when no shell is used to launch it.
+        option = "-Ddatacraft.probe=folder with spaces"
+        with tempfile.TemporaryDirectory() as directory:
+            work = Path(directory)
+
+            def launch(command, env=None, timeout=600):
+                assert env is not None
+                self.assertEqual([option], shlex.split(env["JAVA_TOOL_OPTIONS"]))
+                log = Path(env["DATACRAFT_DESKTOP_HOME"]) / "logs" / "desktop-0.log"
+                log.parent.mkdir()
+                log.write_text("Start-up: first frame at 100 ms", encoding="utf-8")
+
+            with mock.patch.object(packaging, "run", side_effect=launch):
+                self.assertEqual(100, packaging.smoke(Path("launcher"), work, [option]))
 
 
 if __name__ == "__main__":

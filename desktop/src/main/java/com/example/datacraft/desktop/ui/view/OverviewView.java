@@ -227,8 +227,11 @@ public final class OverviewView implements View {
     Tooltip.install(schedule, scheduleTip);
     schedule.setUserData(scheduleTip);
     Label name = Controls.label("", "name", "latin");
-    name.setMinWidth(220);
+    name.setMinWidth(120);
     name.setPrefWidth(220);
+    Tooltip nameTip = new Tooltip();
+    nameTip.textProperty().bind(name.textProperty());
+    name.setTooltip(nameTip);
     RunBars bars = RunBars.compact(OverviewModel.RIBBON);
     StatusRing last = StatusRing.dot();
     Label ago = Controls.label("", "secondary");

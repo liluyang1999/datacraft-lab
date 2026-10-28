@@ -70,6 +70,24 @@ class AirflowClientTest {
   }
 
   @Test
+  void anAuthorizedReadMustHaveAJsonObjectBody() {
+    issuesTokens(Duration.ofHours(1));
+    AirflowClient client = client(Clock.fixed(NOW, ZoneOffset.UTC));
+    for (String body : List.of("", " ", "null", "[]", "42")) {
+      server.on("GET /api/v2/version", 200, body);
+      assertEquals(ApiError.PROTOCOL, failure(() -> client.version().join()).error(), body);
+    }
+  }
+
+  @Test
+  void aPauseCanAcknowledgeWithoutABody() {
+    issuesTokens(Duration.ofHours(1));
+    server.on("PATCH /api/v2/dags/test", 200, "");
+    client(Clock.fixed(NOW, ZoneOffset.UTC)).setPaused("test", true).join();
+    assertEquals("{\"is_paused\":true}", server.requests().getLast().body());
+  }
+
+  @Test
   void aTokenAboutToExpireIsRenewedBeforeTheRequest() {
     issuesTokens(Duration.ofSeconds(30));
     server.on("GET /api/v2/version", 200, "{\"version\":\"3.3.2\",\"git_version\":null}");

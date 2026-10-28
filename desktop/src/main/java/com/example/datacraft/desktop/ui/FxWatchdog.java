@@ -54,7 +54,9 @@ public final class FxWatchdog {
         while (answered.get() < ping && running) {
           Thread.sleep(5);
           long waited = (System.nanoTime() - sent) / 1_000_000;
-          if (!reported && waited > thresholdMs) {
+          // The watcher itself can be descheduled while sleeping. Recheck the answer before
+          // blaming the FX thread for that delay (and sampling an unrelated later frame).
+          if (!reported && running && answered.get() < ping && waited > thresholdMs) {
             reported = true;
             Thread thread = fxThread;
             List<StackTraceElement> where =

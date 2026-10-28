@@ -135,4 +135,36 @@ class PollerTest {
     assertEquals(Duration.ofSeconds(20), Poller.backoff(INTERVAL, 3));
     assertEquals(Poller.MAX_BACKOFF, Poller.backoff(INTERVAL, 100));
   }
+
+  @Test
+  void aQueuedAnswerOrFailureIsDiscardedAfterRestart() {
+    List<Runnable> queue = new ArrayList<>();
+    Poller<String> poller =
+        new Poller<>(
+            ticker,
+            () -> {
+              CompletableFuture<String> request = new CompletableFuture<>();
+              requests.add(request);
+              return request;
+            },
+            results::add,
+            failures::add,
+            () -> INTERVAL,
+            queue::add);
+    poller.start();
+    ticker.advance(Duration.ZERO);
+    requests.getLast().complete("old result");
+    poller.restart();
+    queue.removeFirst().run();
+    assertTrue(results.isEmpty());
+    ticker.advance(Duration.ZERO);
+    requests.getLast().completeExceptionally(new IllegalStateException("old failure"));
+    poller.restart();
+    queue.removeFirst().run();
+    assertTrue(failures.isEmpty());
+    ticker.advance(Duration.ZERO);
+    requests.getLast().complete("current");
+    queue.removeFirst().run();
+    assertEquals(List.of("current"), results);
+  }
 }

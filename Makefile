@@ -4,7 +4,7 @@ MVN ?= ./mvnw
 PYTHON ?= python3
 PYRIGHT ?= npx --yes pyright@1.1.414 --warnings
 
-.PHONY: help build test verify checks format package images up down swarm dags test-scripts typecheck lint clean
+.PHONY: help build test verify desktop-verify checks format package images up down swarm dags test-scripts typecheck lint clean
 
 help: ## Show available targets
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN{FS=":.*?## "}{printf "  \033[36m%-14s\033[0m %s\n", $$1, $$2}'
@@ -18,6 +18,9 @@ test: ## Run unit tests
 verify: ## Full gate: format check + checkstyle + tests + package
 	$(MVN) -B -ntp verify
 
+desktop-verify: ## Desktop gate including the external tests' formatting in the parent
+	$(MVN) -B -ntp -Pdesktop -pl :datacraft-desktop -am verify
+
 checks: ## After `make verify`: the build job's checks of the reports and the jar (cicd/build)
 	$(PYTHON) -B cicd/build/check_test_counts.py .
 	bash cicd/build/check-spark-suite.sh
@@ -27,7 +30,7 @@ checks: ## After `make verify`: the build job's checks of the reports and the ja
 	bash cicd/build/check-image-build.sh
 
 format: ## Apply Spotless formatting to all sources
-	$(MVN) -B -ntp spotless:apply
+	$(MVN) -B -ntp -Pdesktop spotless:apply
 
 package: ## Build the shaded CLI jar
 	$(MVN) -B -ntp -pl :datacraft-cli -am package -DskipTests
@@ -61,4 +64,4 @@ lint: ## Shell syntax, ShellCheck and pinned GitHub Actions (the CI checks in ci
 	bash cicd/lint/check-actions-pinned.sh
 
 clean: ## Remove build output
-	$(MVN) -B -ntp clean
+	$(MVN) -B -ntp -Pdesktop clean

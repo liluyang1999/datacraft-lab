@@ -7,8 +7,8 @@ import java.util.function.Consumer;
 
 /**
  * Hands values to the UI thread, keeping only the newest: a value offered while an older one is
- * still waiting replaces it, so the UI applies each kind of data at most once per pulse and a slow
- * frame never builds a queue.
+ * still waiting replaces it, so each kind of data has at most one pending handoff and a slow frame
+ * never builds a queue.
  */
 public final class Latest<T> {
 

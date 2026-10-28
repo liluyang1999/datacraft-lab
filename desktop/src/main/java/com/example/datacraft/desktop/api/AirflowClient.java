@@ -311,7 +311,7 @@ public final class AirflowClient {
                 throw failure(response);
               }
               return read.apply(
-                  response.body().length == 0
+                  response.body().length == 0 && "PATCH".equals(method)
                       ? transport.json().nullNode()
                       : transport.parse(response));
             });

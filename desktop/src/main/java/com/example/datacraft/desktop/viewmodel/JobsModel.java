@@ -15,7 +15,6 @@ import com.example.datacraft.desktop.service.Ticker;
 import com.example.datacraft.desktop.store.PresetRepository;
 import com.example.datacraft.desktop.store.PresetRepository.Preset;
 import com.example.datacraft.desktop.store.RecentRunRepository.RecentRun;
-import com.example.datacraft.desktop.util.Latest;
 import com.example.datacraft.desktop.util.Lists;
 import java.time.Duration;
 import java.time.Instant;
@@ -139,16 +138,14 @@ public final class JobsModel implements Visibility {
     this.catalog = catalog;
     this.presetRepository = presetRepository;
     this.ui = ui;
-    Latest<List<JobInfo>> latest = new Latest<>(ui, this::applyJobs);
     this.poller =
         new Poller<>(
             ticker,
             service::jobs,
-            latest::offer,
-            failure ->
-                ui.execute(
-                    () -> listProblem.set(describe(failure)) /* keep the last list on screen */),
-            () -> preferences.refresh().scale(INTERVAL));
+            this::applyJobs,
+            failure -> listProblem.set(describe(failure)), // keep the last list on screen
+            () -> preferences.refresh().scale(INTERVAL),
+            ui);
     params.addListener((ListChangeListener<ParamRow>) change -> updateMissing());
     canRun =
         Bindings.createBooleanBinding(

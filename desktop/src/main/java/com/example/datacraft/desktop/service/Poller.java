@@ -1,7 +1,9 @@
 package com.example.datacraft.desktop.service;
 
+import com.example.datacraft.desktop.util.Latest;
 import java.time.Duration;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.Executor;
 import java.util.function.Consumer;
 import java.util.function.Supplier;
 
@@ -20,6 +22,7 @@ public final class Poller<T> {
   private final Consumer<T> onResult;
   private final Consumer<Throwable> onFailure;
   private final Supplier<Duration> interval;
+  private final Latest<Runnable> delivery;
 
   private final Object lock = new Object();
   private long generation;
@@ -34,11 +37,26 @@ public final class Poller<T> {
       Consumer<T> onResult,
       Consumer<Throwable> onFailure,
       Supplier<Duration> interval) {
+    this(ticker, fetch, onResult, onFailure, interval, Runnable::run);
+  }
+
+  /**
+   * Delivers on the supplied executor, retaining only the latest answer while it is busy. The
+   * generation is checked there too: an answer queued before a stop must not update the UI later.
+   */
+  public Poller(
+      Ticker ticker,
+      Supplier<CompletableFuture<T>> fetch,
+      Consumer<T> onResult,
+      Consumer<Throwable> onFailure,
+      Supplier<Duration> interval,
+      Executor executor) {
     this.ticker = ticker;
     this.fetch = fetch;
     this.onResult = onResult;
     this.onFailure = onFailure;
     this.interval = interval;
+    this.delivery = new Latest<>(executor, Runnable::run);
   }
 
   /** Starts polling now; does nothing when already running. */
@@ -132,11 +150,19 @@ public final class Poller<T> {
             failures = failure == null ? 0 : failures + 1;
             delay = backoff(interval.get(), failures);
             schedule(delay);
-          }
-          if (failure == null) {
-            onResult.accept(value);
-          } else {
-            onFailure.accept(failure);
+            delivery.offer(
+                () -> {
+                  synchronized (lock) {
+                    if (!running || scheduledFor != generation) {
+                      return;
+                    }
+                    if (failure == null) {
+                      onResult.accept(value);
+                    } else {
+                      onFailure.accept(failure);
+                    }
+                  }
+                });
           }
         });
   }

@@ -21,8 +21,11 @@
 需要 JDK 25.0.5 或更新的版本（与后端相同）。在仓库根目录：
 
 ```bash
-./mvnw -f desktop/pom.xml -B -ntp verify
+./mvnw -B -ntp -Pdesktop -pl :datacraft-desktop -am verify
 ```
+
+这个入口同时检查父工程里的测试源码格式；`make desktop-verify` 等价。`make format` 与 `make clean`
+也启用 `desktop` profile，分别覆盖后端和桌面的全部源码格式、构建目录。
 
 ```bash
 ./mvnw -f desktop/pom.xml javafx:run
@@ -52,7 +55,7 @@ python3 -B cicd/desktop/package_desktop.py
 
 ## 端到端验证
 
-单元、接口、存储与界面测试都在 `verify` 里，不访问网络。对真实后台的测试带 `e2e` 标签，默认不运行：
+单元、接口、存储与界面测试都在 `verify` 里，只访问本机测试桩，不连接外部服务。对真实后台的测试带 `e2e` 标签，默认不运行：
 
 ```bash
 ./mvnw -f desktop/pom.xml -B -ntp -Pe2e test

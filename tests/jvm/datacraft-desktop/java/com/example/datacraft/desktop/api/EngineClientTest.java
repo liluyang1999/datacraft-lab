@@ -193,6 +193,24 @@ class EngineClientTest {
   }
 
   @Test
+  void aSuccessfulResponseMustBeAJsonObject() {
+    for (String body : List.of("", " ", "null", "[]", "42")) {
+      server.on("GET /health", 200, body);
+      assertEquals(ApiError.PROTOCOL, failure(() -> client.health().join()).error(), body);
+    }
+  }
+
+  @Test
+  void anEmptyErrorBodyStillPreservesTheHttpStatus() {
+    for (String body : List.of("", " ", "null")) {
+      server.on("GET /jobs", 401, body);
+      ApiException refused = failure(() -> client.jobs().join());
+      assertEquals(ApiError.UNAUTHORIZED, refused.error());
+      assertEquals(401, refused.status());
+    }
+  }
+
+  @Test
   void aClosedPortIsUnreachableAndSaysWhere() throws Exception {
     int port;
     try (ServerSocket socket = new ServerSocket(0)) {

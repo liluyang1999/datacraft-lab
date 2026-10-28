@@ -61,12 +61,12 @@ MODULE_DIRS = {
     "datacraft-cli": "modules/interfaces/datacraft-cli",
 }
 
-# The desktop console (数艺工坊) is a Maven project of its own, desktop/pom.xml, outside the reactor:
-# its CI job builds nothing else and runs this check with --project desktop. Each platform runs one
+# The desktop console (数艺工坊) is outside the default reactor. Its opt-in CI reactor builds only
+# the parent and desktop/pom.xml, then runs this check with --project desktop. Each platform runs one
 # of VaultPlatformTest's two platform tests and `verify` never runs the e2e-tagged ones, so the
 # floor is the same on both.
 DESKTOP_DIRS = {"datacraft-desktop": "desktop"}
-DESKTOP_FLOORS = {"datacraft-desktop": 86}
+DESKTOP_FLOORS = {"datacraft-desktop": 97}
 
 # What --project selects: the module directories, the floors per platform, and the notice's title.
 PROJECTS = {

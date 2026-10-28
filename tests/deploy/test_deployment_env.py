@@ -197,7 +197,7 @@ class DeploymentEnvironmentTests(unittest.TestCase):
                          "DATACRAFT_REGISTRY=registry.example.com:5000/team", "AIRFLOW_ADMIN_EMAIL=a+b@example.com",
                          "DATACRAFT_API_TOKEN=abc~def+/==", "EMPTY=", "  # an indented comment", ""):
                 with self.subTest(accepted=line):
-                    path.write_text(generated + line + "\n", encoding="utf-8")
+                    path.write_text(generated + line + "\n", encoding="utf-8", newline="\n")
                     module.require_plain(path)
             for line in ('AIRFLOW_ADMIN_PASSWORD="quoted-PRIVATE"', "AIRFLOW_ADMIN_PASSWORD='quoted-PRIVATE'",
                          "AIRFLOW_ADMIN_PASSWORD=two PRIVATE", "AIRFLOW_ADMIN_PASSWORD=PRIVATE$HOME",
@@ -207,7 +207,7 @@ class DeploymentEnvironmentTests(unittest.TestCase):
                          "AIRFLOW_ADMIN_PASSWORD=PRIVATE ", "export AIRFLOW_ADMIN_PASSWORD=PRIVATE",
                          "AIRFLOW_ADMIN_PASSWORD = PRIVATE", "touch /tmp/PRIVATE"):
                 with self.subTest(rejected=line):
-                    path.write_text(generated + line + "\n", encoding="utf-8")
+                    path.write_text(generated + line + "\n", encoding="utf-8", newline="\n")
                     with self.assertRaises(ValueError) as refused:
                         module.require_plain(path)
                     self.assertNotIn("PRIVATE", str(refused.exception))

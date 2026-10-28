@@ -108,7 +108,7 @@ def maven_packages(root):
 def desktop_packages(root):
     """(ecosystem, name, version, source) of each dependency desktop/pom.xml pins itself.
 
-    The desktop console is a Maven project outside the reactor whose parent is the root POM: a
+    The desktop console is outside the default reactor and inherits the root POM: a
     dependency without a version there is one the root POM manages, so it is checked already.
     """
     source = "desktop/pom.xml"

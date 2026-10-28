@@ -488,6 +488,14 @@
 
     <profiles>
         <profile>
+            <!-- Opt-in reactor: -Pdesktop -pl :datacraft-desktop -am verify builds only the
+                 parent and desktop, including the parent's formatting gate for tests/. -->
+            <id>desktop</id>
+            <modules>
+                <module>desktop</module>
+            </modules>
+        </profile>
+        <profile>
             <id>windows-host</id>
             <activation>
                 <os>
