@@ -834,9 +834,22 @@ class MainWindowTest {
   void theFxThreadDoesNotStallOnceWarm() {
     Parent root = root();
     motionOn(); // the animations are part of what must stay smooth
-    for (Destination destination : Destination.values()) {
-      go(destination);
+    FxWatchdog firstViews = new FxWatchdog(200);
+    onFx(firstViews::start);
+    try {
+      for (Destination destination : Destination.values()) {
+        go(destination);
+        // Constructing a view is not warming it: opacity zero can defer its first render peer.
+        // Complete the real fade and paint before measuring subsequent navigation.
+        waitUntil(
+            "the first view fade finishes",
+            () -> window.navigator().view().node().getOpacity() == 1);
+        settle();
+      }
+    } finally {
+      firstViews.stop();
     }
+    assertTrue(firstViews.stalls().isEmpty(), "first views stalled: " + firstViews.stalls());
     go(Destination.PIPELINES);
     waitUntil("the pipelines are loaded", () -> shows(root, "datacraft_spark_etl"));
     settle();
