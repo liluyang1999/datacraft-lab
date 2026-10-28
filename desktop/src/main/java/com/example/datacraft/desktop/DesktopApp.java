@@ -50,6 +50,7 @@ public final class DesktopApp extends Application {
     preparing =
         CompletableFuture.supplyAsync(
             () -> {
+              mark("store opening");
               AppContext opened = AppContext.open(paths);
               mark("store and services ready");
               return opened;
@@ -185,8 +186,12 @@ public final class DesktopApp extends Application {
 
   /** Logs how long after the JVM started a phase of the start-up ended. */
   static void mark(String phase) {
-    ProcessHandle.current()
-        .info()
+    mark(phase, Instant.now(), ProcessHandle.current().info());
+  }
+
+  /** Keeps early launcher observations intact instead of counting later logging setup as entry. */
+  static void mark(String phase, Instant observed, ProcessHandle.Info process) {
+    process
         .startInstant()
         .ifPresent(
             started ->
@@ -195,8 +200,12 @@ public final class DesktopApp extends Application {
                     "Start-up: "
                         + phase
                         + " at "
-                        + Duration.between(started, Instant.now()).toMillis()
-                        + " ms"));
+                        + Duration.between(started, observed).toMillis()
+                        + " ms; process CPU "
+                        + process
+                            .totalCpuDuration()
+                            .map(cpu -> cpu.toMillis() + " ms")
+                            .orElse("unavailable")));
   }
 
   /** Opens a folder in the system's file manager (without loading AWT). */

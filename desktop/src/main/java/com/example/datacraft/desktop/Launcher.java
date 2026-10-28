@@ -16,6 +16,8 @@ public final class Launcher {
   private Launcher() {}
 
   public static void main(String[] args) {
+    var enteredProcess = ProcessHandle.current().info();
+    var enteredAt = java.time.Instant.now();
     String problem = problem(Runtime.version().feature(), javafxPresent());
     if (problem != null) {
       System.err.println(problem);
@@ -28,6 +30,8 @@ public final class Launcher {
     AppPaths paths = AppPaths.resolve().ensureCreated();
     usePipeFolder(paths);
     Logging.configure(paths);
+    DesktopApp.mark("launcher entered", enteredAt, enteredProcess);
+    DesktopApp.mark("launcher configured");
     // Open the store and the services while JavaFX starts; neither needs the other.
     DesktopApp.prepare(paths);
     Application.launch(DesktopApp.class, args);

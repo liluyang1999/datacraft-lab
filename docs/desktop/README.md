@@ -55,6 +55,8 @@ python3 -B cicd/desktop/package_desktop.py
 全部启动都使用 `desktop/target` 下的临时数据目录，不碰 `~/.datacraft`。
 首个新配置为复用组建立数据库；复用组从首个样本起明确恢复页面及主题，不依赖机器的系统主题。
 jpackage 选项通过 UTF-8 参数文件传递，避免 Windows 非中文环境把中文描述转为通配符后展开。
+堆固定为 32/256 MiB；Windows 使用一级 JIT 编译降低启动竞争，Linux 保留默认分层编译。
+开发入口、测试及包采用相同的平台策略，权衡和测量条件见 [流畅度](performance.md)。
 AOT 缓存按文件时间戳核对应用的 jar：复制或压缩应用目录时保留时间戳；应用正常运行时允许 JVM 回退，
 但打包检查使用 `AOTMode=on`，回退不能冒充缓存成功。
 诊断机器负载时可传 `--startup-budget-ms 0` 仅记录结果，此模式不代表预算达标，CI 不使用它。
