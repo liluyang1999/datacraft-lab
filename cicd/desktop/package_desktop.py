@@ -299,6 +299,8 @@ def smoke(launcher, work, extra_options=None, *, home=None, require_aot=False):
     match = STARTUP_LINE.search(text)
     if match is None:
         raise Failed(f"the app ran but logged no first frame:\n{text}")
+    phases = [line.split("Start-up: ", 1)[1] for line in text.splitlines() if "Start-up: " in line]
+    print("Start-up phases: " + "; ".join(phases), flush=True)
     return int(match.group(1))
 
 

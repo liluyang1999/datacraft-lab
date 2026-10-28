@@ -31,6 +31,7 @@ import collections
 import os
 import re
 import select
+import shutil
 import signal
 import subprocess
 import sys
@@ -138,6 +139,14 @@ def run(command):
     the last GROUPS groups as (title, lines)).
     """
     try:
+        if os.name == "nt" and command[0].lower() in ("bash", "bash.exe"):
+            # Windows' System32 bash.exe launches WSL. The Actions bash shell is Git for Windows.
+            # Resolve beside the already installed Git, without changing PATH or falling back to WSL.
+            git = shutil.which("git")
+            bash = os.path.join(os.path.dirname(os.path.dirname(git)), "bin", "bash.exe") if git else ""
+            if not os.path.isfile(bash):
+                raise FileNotFoundError("Git for Windows bash.exe was not found beside git.exe")
+            command = [bash, *command[1:]]
         # Unbuffered: a chunk is passed on when it arrives, not when a buffer has filled.
         process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, bufsize=0)
     except OSError as error:

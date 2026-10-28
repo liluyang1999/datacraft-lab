@@ -315,7 +315,7 @@
     <div class="kpi"><dt>后端 Maven 模块</dt><dd class="v">8</dd><dd class="d">4 个职责分组，依赖范围由构建强制</dd></div>
     <div class="kpi"><dt>可调度作业</dt><dd class="v">7</dd><dd class="d">纯 JVM 2 · Spark 3 · 内置 2</dd></div>
     <div class="kpi"><dt>JVM 测试用例</dt><dd class="v">435</dd><dd class="d">后端 317 · 桌面 118（含端到端 11）；按平台与标签分组执行，结果见 4.4</dd></div>
-    <div class="kpi"><dt>Python 与 Node 测试</dt><dd class="v">256</dd><dd class="d">部署 71 · CI/CD 142 · 文档 16 · DAG 21 · 计算器 6</dd></div>
+    <div class="kpi"><dt>Python 与 Node 测试</dt><dd class="v">257</dd><dd class="d">部署 71 · CI/CD 143 · 文档 16 · DAG 21 · 计算器 6</dd></div>
     <div class="kpi"><dt>项目源码检查问题</dt><dd class="v">0</dd><dd class="d">源码编译、pyright、ShellCheck 无诊断；第三方首次编译提示另见 4.4</dd></div>
     <div class="kpi"><dt>综合评分</dt><dd class="v">4.4<small>/ 5</small></dd><dd class="d">13 个维度，新增桌面控制台；2026-09-25 审计前为 3.2</dd></div>
     <div class="kpi"><dt>常开月费</dt><dd class="v">$10.15</dd><dd class="d">腾讯云 Lighthouse 2 核 / 8 GB / 80 GB</dd></div>
@@ -357,7 +357,7 @@
       <ul>
         <li>一个契约、一个引擎、三种入口，新作业注册一次即可在 CLI、API 与 Airflow 中使用（第三章）。</li>
         <li>模块边界、JDK 版本下限与零警告由构建强制，而不是靠约定（3.2、4.3）。</li>
-        <li>317 项后端 JVM 测试、118 项桌面测试（含 11 项端到端）与 256 项脚本、文档、DAG 测试。平台测试和端到端测试分组执行；默认门禁下限为 Linux 后端 310、Windows 后端 300，桌面 Linux 104、Windows 106 项（4.2、4.4）。</li>
+        <li>317 项后端 JVM 测试、118 项桌面测试（含 11 项端到端）与 257 项脚本、文档、DAG 测试。平台测试和端到端测试分组执行；默认门禁下限为 Linux 后端 310、Windows 后端 300，桌面 Linux 104、Windows 106 项（4.2、4.4）。</li>
         <li>桌面控制台“数艺工坊”（JavaFX 25）：本机数据只在 <code>~/.datacraft</code> 的 SQLite 里，令牌与口令加密保存；界面测试覆盖每个视图的两种主题与 FX 线程的停顿，端到端测试对真实的引擎 API 与 Compose 部署通过（3.7）。</li>
       </ul>
     </div>
@@ -753,7 +753,7 @@
     <thead><tr><th>其他套件</th><th>位置</th><th class="num">数量</th><th>运行环境</th></tr></thead>
     <tbody>
       <tr><td>部署脚本与模板</td><td><code>tests/deploy</code></td><td class="num">71</td><td>Python 标准库；用 bash 运行部署脚本的用例需要 POSIX（Linux 或 WSL）</td></tr>
-      <tr><td>CI/CD 脚本、工作流结构与构建设置</td><td><code>tests/ci</code></td><td class="num">142</td><td>Python 标准库；25 项需要 POSIX 的 bash 或管道（其中 Swarm 演练的桩测试 14 项只在 Linux 运行）</td></tr>
+      <tr><td>CI/CD 脚本、工作流结构与构建设置</td><td><code>tests/ci</code></td><td class="num">143</td><td>Python 标准库；25 项需要 POSIX 的 bash 或管道（其中 Swarm 演练的桩测试 14 项只在 Linux 运行）</td></tr>
       <tr><td>文档一致性</td><td><code>tests/docs/test_docs_consistency.py</code></td><td class="num">16</td><td>Python 标准库</td></tr>
       <tr><td>费用计算器</td><td><code>tests/docs/cloud-costs.test.cjs</code></td><td class="num">6</td><td>Node</td></tr>
       <tr><td>DAG 契约与安全下限</td><td><code>tests/orchestration</code></td><td class="num">21</td><td>Airflow 3.3.2（安全下限的 4 项只需要 <code>packaging</code>）</td></tr>

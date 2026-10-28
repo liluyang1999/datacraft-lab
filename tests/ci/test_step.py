@@ -52,6 +52,15 @@ def annotations(output):
 
 
 class StepTests(unittest.TestCase):
+    @unittest.skipUnless(os.name == "nt", "Git for Windows shell selection")
+    def test_windows_bash_uses_git_and_preserves_failure_annotations(self):
+        result = run_step(["bash", "-c", 'printf "native=%s\\n" "$OSTYPE"; exit 7'])
+        self.assertEqual(7, result.returncode, result.stderr)
+        # Recent Git for Windows builds report cygwin; older bundled Bash builds report msys.
+        native = result.stdout.splitlines()[0].decode("utf-8")
+        self.assertIn(native, ("native=msys", "native=cygwin"))
+        self.assertEqual([native], [body for _, body in annotations(result.stdout)])
+
     def test_a_passing_step_is_passed_through_byte_for_byte_without_an_annotation(self):
         code = ("import sys\n"
                 "sys.stdout.buffer.write(b'out \\xff\\xfe 50%\\n'); sys.stdout.flush()\n"

@@ -266,7 +266,9 @@ or a developer runs (including the tests of the `cicd/` scripts, in `tests/ci`),
 `deploy/scripts/` holds what an operator runs on the host.
 
 Every `run:` step goes through `cicd/step.py`, which the workflow sets as its default shell
-(`python3 -B cicd/step.py bash -e {0}`). The step runs unchanged; when it fails on a runner, the
+(`python3 -B cicd/step.py bash -e {0}`, with `python` for the desktop matrix). On Windows it locates
+Bash beside the installed Git executable, avoiding the system's WSL launcher without changing PATH.
+The step runs unchanged; when it fails on a runner, the
 script adds an error annotation with the step's command, the first lines that name a failure and
 the last 30 lines of output. A script that tears a failed stack down reports its state first with
 `diagnose TITLE COMMAND...` from `cicd/lib.sh`; each of the last eight such groups becomes an
