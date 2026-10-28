@@ -311,7 +311,7 @@ cicd/
 | `dags` | After `build`: Python 3.13 and JDK 25; `cicd/airflow/install-airflow.sh` (Airflow 3.3.2 and its providers under the official constraints for the running Python, then `pyspark==4.2.0`, then the fixed releases of `orchestration/airflow/security-overrides.txt`); `cicd/airflow/check_security_floor.py` (Airflow 3.3.2, FAB provider 3.9.0 and each override release); `tests/orchestration`; `tests/smoke/airflow_runtime_smoke.py` with the verified jar |
 | `scripts` | `cicd/lint/check-actions-pinned.sh` (every `uses:` is `owner/repo@<full commit SHA> # vX.Y.Z` or a local action, on one line, and none appears in a comment); `cicd/lint/install-shellcheck.sh` (ShellCheck 0.11.0); `cicd/lint/check-shell-scripts.sh` (`bash -n` and ShellCheck over every shell script git knows; every finding fails, sourced files are followed); the `tests/deploy`, `tests/ci` and `tests/docs` suites on Python 3.13; `node --test tests/docs/cloud-costs.test.cjs` on Node.js 24; `npx --yes pyright@1.1.414 --warnings` |
 | `compose` | `cicd/stacks/check-stack-files.sh`: `docker compose config` and `docker stack config` with test-only secrets, and that each missing secret, the API token and for the stack the Redis password included, is rejected |
-| `desktop` | Windows 2025 and Ubuntu 24.04 matrix, JDK 25 (Linux uses D-Bus and Xvfb): `./mvnw -B -ntp -Pdesktop -pl :datacraft-desktop -am verify` runs parent formatting plus desktop unit, client, store, UI and accessibility lifecycle tests. `cicd/build/check_test_counts.py --project desktop` requires Windows 106 / Linux 104 tests. `cicd/desktop/package_desktop.py` verifies the pinned JavaFX disposal patch, builds the jlink/jpackage image, trains all views/themes and checks 20 fresh/reused starts: verified AOT, no runtime diagnostics, each at most 1500 ms. UI snapshots and all startup samples are platform-specific artifacts |
+| `desktop` | Windows 2025 and Ubuntu 24.04 matrix, JDK 25 (Linux uses D-Bus and Xvfb): `./mvnw -B -ntp -Pdesktop -pl :datacraft-desktop -am verify` runs parent formatting plus desktop unit, client, store, UI and accessibility lifecycle tests. `cicd/build/check_test_counts.py --project desktop` requires Windows 116 / Linux 114 tests. `cicd/desktop/package_desktop.py` verifies the pinned JavaFX disposal patch, builds the jlink/jpackage image, trains all views/themes and checks 20 fresh/reused starts: verified AOT, no runtime diagnostics, each at most 1500 ms. UI snapshots and all startup samples are platform-specific artifacts |
 | `containers` | After `build`, `scripts` and `compose`: `cicd/images/smoke-images.sh`, then `cicd/images/smoke-compose.sh`, then `cicd/images/smoke-swarm.sh` |
 
 The `cicd/build` scripts run after `./mvnw verify` on Linux, WSL or Git Bash (they use GNU tools
@@ -367,7 +367,7 @@ pom's `<modules>`.
 | `datacraft-cli` | 31 | 31 |
 
 `--project desktop` checks the desktop console instead (`desktop/target/surefire-reports`): the
-floor is 104 on Linux and 106 on Windows, which also runs two real native accessibility tests.
+floor is 114 on Linux and 116 on Windows, which also runs two real native accessibility tests.
 Each runs its own `VaultPlatformTest` case; `verify` excludes `e2e`. The desktop matrix checks the
 floor after `verify`.
 

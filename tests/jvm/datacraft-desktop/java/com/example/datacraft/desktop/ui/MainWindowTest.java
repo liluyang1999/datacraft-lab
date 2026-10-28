@@ -661,6 +661,101 @@ class MainWindowTest {
   }
 
   @Test
+  void maximizingDoesNotReplaceTheSavedNormalWindowSize() {
+    onFx(
+        () -> {
+          stage.setWidth(1100);
+          stage.setHeight(720);
+        });
+    settle();
+    onFx(() -> stage.setMaximized(true));
+    settle();
+    onFx(window::saveBounds);
+    var saved = context.preferences().window().orElseThrow();
+    assertEquals(1100, saved.width());
+    assertEquals(720, saved.height());
+  }
+
+  @Test
+  void allViewsKeepActionsWithinASmallScaledWorkArea() {
+    Parent root = root();
+    Scene compactScene = scene();
+    onFx(
+        () -> {
+          stage.setMinWidth(800);
+          stage.setMinHeight(560);
+          stage.setWidth(853);
+          stage.setHeight(560);
+        });
+    assertTrue(
+        onFx(
+            () ->
+                find(root, com.example.datacraft.desktop.ui.shell.Sidebar.class)
+                    .getFirst()
+                    .collapsed()),
+        "compact windows reserve space for page actions");
+    for (Destination destination : Destination.values()) {
+      go(destination);
+      settle();
+      snapshot(scene(), destination.id() + "-compact-light");
+      onFx(
+          () -> {
+            for (Label label : find(root, Label.class)) {
+              if (FxTesting.visible(label) && List.of("引擎", "Airflow").contains(label.getText())) {
+                assertTrue(
+                    label.getWidth() + 1 >= label.prefWidth(-1),
+                    "backend name is truncated: " + label.getText());
+              }
+            }
+            for (Button button : find(root, Button.class)) {
+              if (FxTesting.visible(button)) {
+                var bounds = button.localToScene(button.getBoundsInLocal());
+                assertTrue(
+                    bounds.getMinX() >= -1 && bounds.getMaxX() <= compactScene.getWidth() + 1,
+                    destination + " action outside the window: " + button.getText() + " " + bounds);
+                if (List.of("保存", "测试连接", "使用此连接", "删除", "运行作业", "触发运行")
+                    .contains(button.getText())) {
+                  assertTrue(
+                      button.getWidth() + 1 >= button.prefWidth(-1),
+                      destination + " action text is truncated: " + button.getText());
+                }
+              }
+            }
+          });
+    }
+  }
+
+  @Test
+  void aPartlyVisibleSavedWindowIsBroughtEntirelyIntoTheWorkArea() {
+    onFx(
+        () -> {
+          var area = javafx.stage.Screen.getPrimary().getVisualBounds();
+          stage.close();
+          context
+              .preferences()
+              .window(
+                  new Preferences.Bounds(
+                      area.getMaxX() - 20,
+                      area.getMinY() - 1000,
+                      area.getWidth() * 2,
+                      area.getHeight() * 2,
+                      false));
+          stage = new Stage();
+          window = new MainWindow(context, stage, folder -> {});
+          window.show();
+        });
+    settle();
+    onFx(
+        () -> {
+          var area = javafx.stage.Screen.getPrimary().getVisualBounds();
+          assertTrue(stage.getX() >= area.getMinX(), "left edge is reachable");
+          assertTrue(stage.getY() >= area.getMinY(), "title bar is reachable");
+          assertTrue(stage.getX() + stage.getWidth() <= area.getMaxX() + 1, "right edge fits");
+          assertTrue(stage.getY() + stage.getHeight() <= area.getMaxY() + 1, "bottom fits");
+        });
+  }
+
+  @Test
   void theWindowComesBackWhereItWasLeftAfterARestart() {
     onFx(
         () -> {

@@ -14,6 +14,9 @@ import javafx.util.Duration;
 public final class Motion {
 
   private static volatile boolean reduced;
+  private static final Object VIEW_FADE = new Object();
+
+  private record ViewFade(FadeTransition animation, boolean cached, javafx.scene.CacheHint hint) {}
 
   private Motion() {}
 
@@ -31,22 +34,29 @@ public final class Motion {
    * blended.
    */
   public static void fadeIn(Node node) {
+    finishFade(node);
     if (reduced) {
-      node.setOpacity(1);
       return;
     }
-    boolean wasCached = node.isCache();
+    FadeTransition fade = new FadeTransition(Duration.millis(120), node);
+    ViewFade state = new ViewFade(fade, node.isCache(), node.getCacheHint());
+    node.getProperties().put(VIEW_FADE, state);
     node.setCache(true);
     node.setCacheHint(javafx.scene.CacheHint.SPEED);
-    FadeTransition fade = new FadeTransition(Duration.millis(120), node);
     fade.setFromValue(0.0);
     fade.setToValue(1.0);
-    fade.setOnFinished(
-        event -> {
-          node.setCache(wasCached);
-          node.setCacheHint(javafx.scene.CacheHint.DEFAULT);
-        });
+    fade.setOnFinished(event -> finishFade(node));
     fade.play();
+  }
+
+  /** End a view fade before hiding or reusing it, restoring its original bitmap policy. */
+  public static void finishFade(Node node) {
+    if (node.getProperties().remove(VIEW_FADE) instanceof ViewFade state) {
+      state.animation().stop();
+      node.setCache(state.cached());
+      node.setCacheHint(state.hint());
+    }
+    node.setOpacity(1);
   }
 
   /** A drawer sliding in: 160 ms ease-out. Returns its animation, or null with reduced motion. */

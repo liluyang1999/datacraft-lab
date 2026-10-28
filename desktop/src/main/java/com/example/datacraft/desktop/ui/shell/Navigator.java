@@ -75,6 +75,7 @@ public final class Navigator {
     if (before != null) {
       View previous = views.get(before);
       previous.hidden();
+      Motion.finishFade(previous.node());
       show(previous.node(), false);
     }
     // Views stay in the scene once created and are only hidden: re-attaching a subtree makes
@@ -88,7 +89,9 @@ public final class Navigator {
     if (windowShown) {
       next.shown();
     }
-    Motion.fadeIn(next.node());
+    if (before != null) {
+      Motion.fadeIn(next.node());
+    }
     long elapsed = (System.nanoTime() - started) / 1_000_000;
     long budget = first ? FIRST_OPEN_BUDGET_MS : SWITCH_BUDGET_MS;
     // The view opened with the window is part of the start-up and counted there.

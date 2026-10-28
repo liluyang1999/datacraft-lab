@@ -33,9 +33,11 @@ public final class TopBar extends HBox {
       String name, javafx.beans.value.ObservableValue<BackendStatus> value) {
     StatusRing ring = StatusRing.dot();
     Label title = Controls.label(name, "");
+    title.setMinWidth(javafx.scene.layout.Region.USE_PREF_SIZE);
     Label detail = Controls.label("", "latency", "secondary");
     Tooltip tooltip = new Tooltip();
     HBox box = new HBox(ring, title, detail);
+    box.setMinWidth(javafx.scene.layout.Region.USE_PREF_SIZE);
     box.getStyleClass().add("backend-status");
     Tooltip.install(box, tooltip);
     Runnable show =

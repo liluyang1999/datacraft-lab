@@ -33,6 +33,16 @@ def touch(path):
 
 
 class InputTests(unittest.TestCase):
+    def test_jpackage_preserves_unicode_wildcards_and_paths_in_a_utf8_argument_file(self):
+        arguments = ["--description", '数艺工坊 ???? "quoted"', "--input", r'C:\构建 目录\input']
+        with tempfile.TemporaryDirectory() as directory:
+            work = Path(directory)
+            with mock.patch.object(packaging, "run", return_value="packaged") as run:
+                self.assertEqual("packaged", packaging.run_jpackage("jpackage", arguments, work))
+            run.assert_called_once_with(["jpackage", "@jpackage.args"], cwd=work)
+            # The argument-file grammar consumes quoted whitespace and escaped slash/quote pairs.
+            self.assertEqual(arguments, shlex.split((work / "jpackage.args").read_text(encoding="utf-8")))
+
     def test_the_version_comes_from_the_jar_name_without_snapshot(self):
         self.assertEqual("0.1.0", packaging.app_version(Path("datacraft-desktop-0.1.0-SNAPSHOT.jar")))
         self.assertEqual("1.2", packaging.app_version(Path("datacraft-desktop-1.2.jar")))

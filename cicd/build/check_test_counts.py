@@ -66,8 +66,8 @@ MODULE_DIRS = {
 # of VaultPlatformTest's two platform tests and `verify` never runs the e2e-tagged ones, so the
 # common floor is shared; Windows additionally exercises its retained native text range.
 DESKTOP_DIRS = {"datacraft-desktop": "desktop"}
-DESKTOP_FLOORS = {"datacraft-desktop": 104}
-DESKTOP_WINDOWS_FLOORS = {"datacraft-desktop": 106}
+DESKTOP_FLOORS = {"datacraft-desktop": 114}
+DESKTOP_WINDOWS_FLOORS = {"datacraft-desktop": 116}
 
 # What --project selects: the module directories, the floors per platform, and the notice's title.
 PROJECTS = {

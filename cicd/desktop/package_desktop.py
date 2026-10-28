@@ -43,7 +43,10 @@ NAME = "DataCraft"
 MAIN_CLASS = "com.example.datacraft.desktop.Launcher"
 # The console holds bounded lists and logs, not datasets. Do not size its initial heap from the
 # host's RAM: on a developer workstation that can commit hundreds of unused megabytes at startup.
-JVM_OPTIONS = ["-Xms32m", "-Xmx256m", "--enable-native-access=javafx.graphics,ALL-UNNAMED"]
+# This bounded UI client favors startup latency over C2 throughput; the execution engine is a
+# different process. The desktop Maven tests exercise the same compiler policy and UI budgets.
+JVM_OPTIONS = ["-Xms32m", "-Xmx256m", "-XX:TieredStopAtLevel=1",
+               "--enable-native-access=javafx.graphics,ALL-UNNAMED"]
 JAVAFX_MODULES = ("javafx.base", "javafx.graphics", "javafx.controls")
 AOT_FILE = "datacraft.aot"
 STARTUP_LINE = re.compile(r"Start-up: first frame at (\d+) ms")
@@ -80,9 +83,9 @@ def tool(name):
     return found
 
 
-def run(command, env=None, timeout=600, diagnostics=False, aot_training=False):
+def run(command, env=None, timeout=600, diagnostics=False, aot_training=False, cwd=None):
     """Runs a command; fails with its output when it exits with another status than 0."""
-    completed = subprocess.run(command, capture_output=True, text=True, env=env, timeout=timeout,
+    completed = subprocess.run(command, capture_output=True, text=True, env=env, timeout=timeout, cwd=cwd,
                                check=False)
     if completed.returncode != 0:
         raise Failed(f"{Path(command[0]).name} exited with {completed.returncode}:\n"
@@ -362,6 +365,19 @@ def quote_jvm_option(option):
     raise Failed("a JVM option cannot contain both single and double quotes")
 
 
+def run_jpackage(executable, arguments, work):
+    """Keep Unicode and wildcard metadata out of the Windows launcher's ANSI argv conversion.
+
+    jpackage reads this UTF-8 argument file itself. Only its ASCII filename crosses the launcher;
+    quoted paths in the file retain spaces, backslashes, quotes and non-ASCII characters.
+    """
+    filename = "jpackage.args"
+    (work / filename).write_text(
+        "\n".join(json.dumps(argument, ensure_ascii=False) for argument in arguments) + "\n",
+        encoding="utf-8")
+    return run([executable, "@" + filename], cwd=work)
+
+
 def remove(directory):
     """Deletes a previous build's directory; jlink leaves some runtime files read-only."""
 
@@ -412,7 +428,7 @@ def package(root, skip_aot, startup_samples=10, startup_budget_ms=1500):
                "--runtime-image", str(work / "runtime"), "--icon", str(icon), "--dest", str(dist)]
     for option in JVM_OPTIONS:
         command += ["--java-options", option]
-    run(command)
+    run_jpackage(command[0], command[1:], work)
     image = dist / (f"{NAME}.app" if sys.platform == "darwin" else NAME)
     launcher, cfg = layout(image)
     if not launcher.is_file() or not cfg.is_file():

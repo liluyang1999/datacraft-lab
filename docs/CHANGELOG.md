@@ -20,10 +20,27 @@ All notable changes to this project are documented here. The format follows
   unfinished client, and expired requests cannot be sent later.
 - Packaging verifies actual AOT use on every start, fails on runtime diagnostics even with exit
   code zero, and enforces the 1500 ms budget across ten fresh and ten reused profiles. Reused
-  profiles cannot reuse an earlier log entry, and benchmark database connections close explicitly.
+  profiles cannot reuse an earlier log entry; every restored view and theme is explicit, and
+  benchmark database connections close explicitly.
+- Theme stylesheets are precompiled with the same JavaFX version and validated on load, reducing
+  parsing on startup while preserving the source CSS and existing visual checks.
+- The drawer caches its static shadow surface; log scrolling reuses the blurred bitmap, while
+  size and theme changes invalidate it normally.
+- On Windows, the CI step wrapper resolves Bash from the installed Git distribution, avoiding
+  an accidental launch of the system WSL entry point while preserving exit codes and annotations.
+- jpackage receives UTF-8 argument files, preserving Chinese metadata and paths when the Windows
+  native launcher would otherwise turn unrepresentable characters into wildcard arguments.
+- Initial outer window dimensions fit the scaled work area, with a 1280 × 800 cap; saved windows
+  are clamped to the best matching monitor, and maximizing preserves the normal window bounds.
+  Narrow windows collapse the sidebar automatically so key actions remain readable.
+- Fast repeated view changes cancel the previous fade and restore its original cache policy;
+  hidden views stop fading, and the first view is immediately opaque.
+- The desktop client uses first-tier JIT compilation after an alternating startup comparison;
+  tests, development launch and packaging share it. Server and Spark compilation is unchanged,
+  and existing UI latency budgets still apply; CPU-heavy client additions require reevaluation.
 
 #### Verification
-- Desktop CI now runs on Windows and Linux, with execution floors of 106 and 104 respectively,
+- Desktop CI now runs on Windows and Linux, with execution floors of 116 and 114 respectively,
   native Windows lifecycle regressions, and an artifact containing every startup sample.
 - Reproduction, measurements, native checks and delivery evidence are recorded in
   [desktop round L8](desktop/loop/log.md#l8-启动与原生无障碍专项2026-10-28).

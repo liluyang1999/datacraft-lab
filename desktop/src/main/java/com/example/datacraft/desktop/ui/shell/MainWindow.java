@@ -20,8 +20,8 @@ import com.example.datacraft.desktop.viewmodel.SettingsModel;
 import com.example.datacraft.desktop.viewmodel.StatusModel;
 import java.nio.file.Path;
 import java.util.function.Consumer;
+import javafx.application.Platform;
 import javafx.geometry.Pos;
-import javafx.geometry.Rectangle2D;
 import javafx.scene.Scene;
 import javafx.scene.input.KeyCode;
 import javafx.scene.input.KeyCodeCombination;
@@ -39,11 +39,6 @@ import javafx.stage.Stage;
  */
 public final class MainWindow {
 
-  static final double DEFAULT_WIDTH = 1280;
-  static final double DEFAULT_HEIGHT = 800;
-  static final double MIN_WIDTH = 960;
-  static final double MIN_HEIGHT = 640;
-
   private final AppContext context;
   private final Stage stage;
   private final ThemeManager theme;
@@ -58,6 +53,9 @@ public final class MainWindow {
   private final Consumer<Path> openFolder;
   private PipelinesView pipelinesView;
   private JobsView jobsView;
+  private Preferences.Bounds normalBounds;
+  private boolean boundsQueued;
+  private boolean compact;
 
   public MainWindow(AppContext context, Stage stage, Consumer<Path> openFolder) {
     this.context = context;
@@ -90,15 +88,21 @@ public final class MainWindow {
     StackPane root = new StackPane(frame, toasts);
     StackPane.setAlignment(toasts, Pos.BOTTOM_RIGHT);
 
-    Scene scene = new Scene(root, DEFAULT_WIDTH, DEFAULT_HEIGHT);
+    Scene scene = new Scene(root);
     theme.style(scene);
     dialogs.owner(stage);
     keys(scene);
     stage.setScene(scene);
     stage.setTitle("数艺工坊");
-    stage.setMinWidth(MIN_WIDTH);
-    stage.setMinHeight(MIN_HEIGHT);
     restoreBounds(preferences);
+    adjustSidebar();
+    stage.widthProperty().addListener(ignored -> adjustSidebar());
+    javafx.beans.InvalidationListener moved = ignored -> rememberNormalBounds();
+    stage.xProperty().addListener(moved);
+    stage.yProperty().addListener(moved);
+    stage.widthProperty().addListener(moved);
+    stage.heightProperty().addListener(moved);
+    stage.maximizedProperty().addListener(moved);
 
     preferences.subscribe(
         key ->
@@ -259,26 +263,23 @@ public final class MainWindow {
   }
 
   private void restoreBounds(Preferences preferences) {
-    preferences
-        .window()
-        .filter(
-            bounds ->
-                !Screen.getScreensForRectangle(
-                        new Rectangle2D(
-                            bounds.x(),
-                            bounds.y(),
-                            Math.max(1, bounds.width()),
-                            Math.max(1, bounds.height())))
-                    .isEmpty())
-        .ifPresentOrElse(
-            bounds -> {
-              stage.setX(bounds.x());
-              stage.setY(bounds.y());
-              stage.setWidth(Math.max(MIN_WIDTH, bounds.width()));
-              stage.setHeight(Math.max(MIN_HEIGHT, bounds.height()));
-              stage.setMaximized(bounds.maximized());
-            },
-            stage::centerOnScreen);
+    var placement =
+        WindowPlacement.resolve(
+            preferences.window(),
+            Screen.getScreens().stream().map(Screen::getVisualBounds).toList(),
+            Screen.getPrimary().getVisualBounds());
+    var area = placement.area();
+    var bounds = placement.bounds();
+    normalBounds = bounds;
+    // These are OUTER window dimensions, including the title bar. Screen bounds already
+    // account for output scale and taskbars; applying DPI scaling again would overflow.
+    stage.setMinWidth(Math.min(WindowPlacement.MIN_WIDTH, area.getWidth()));
+    stage.setMinHeight(Math.min(WindowPlacement.MIN_HEIGHT, area.getHeight()));
+    stage.setX(bounds.x());
+    stage.setY(bounds.y());
+    stage.setWidth(bounds.width());
+    stage.setHeight(bounds.height());
+    stage.setMaximized(bounds.maximized());
   }
 
   /** Draws the window icons; called after the first frame so that they do not delay it. */
@@ -291,15 +292,48 @@ public final class MainWindow {
     if (stage.isIconified()) {
       return;
     }
+    if (!stage.isMaximized()) {
+      normalBounds = currentBounds();
+    }
     context
         .preferences()
         .window(
             new Preferences.Bounds(
-                stage.getX(),
-                stage.getY(),
-                stage.getWidth(),
-                stage.getHeight(),
+                normalBounds.x(),
+                normalBounds.y(),
+                normalBounds.width(),
+                normalBounds.height(),
                 stage.isMaximized()));
+  }
+
+  private Preferences.Bounds currentBounds() {
+    return new Preferences.Bounds(
+        stage.getX(), stage.getY(), stage.getWidth(), stage.getHeight(), false);
+  }
+
+  private void rememberNormalBounds() {
+    if (boundsQueued) {
+      return;
+    }
+    boundsQueued = true;
+    // Window managers report position, size and maximized state separately. Coalesce their
+    // notifications before deciding whether the resulting rectangle is a normal window.
+    Platform.runLater(
+        () -> {
+          boundsQueued = false;
+          if (stage.isShowing() && !stage.isMaximized() && !stage.isIconified()) {
+            normalBounds = currentBounds();
+          }
+        });
+  }
+
+  private void adjustSidebar() {
+    boolean narrow = stage.getWidth() < 1100;
+    if (narrow != compact) {
+      compact = narrow;
+      // Apply only when crossing the breakpoint; a user can still expand it manually.
+      sidebar.collapsed(narrow || context.preferences().sidebarCollapsed());
+    }
   }
 
   public void show() {
