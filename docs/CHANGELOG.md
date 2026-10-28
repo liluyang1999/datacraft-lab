@@ -43,6 +43,10 @@ All notable changes to this project are documented here. The format follows
 #### Verification
 - Desktop CI now runs on Windows and Linux, with execution floors of 116 and 114 respectively,
   native Windows lifecycle regressions, and an artifact containing every startup sample.
+- Startup diagnostics include early launcher phases and cumulative process CPU time. Historical
+  shared-runner spikes remain documented; added diagnostics do not establish that their cause is fixed.
+- UI latency tests wait for actual rendering before measuring warmed navigation, while a separate
+  first-render gate covers the initial visit to every view; existing warmed budgets are unchanged.
 - Reproduction, measurements, native checks and delivery evidence are recorded in
   [desktop round L8](desktop/loop/log.md#l8-启动与原生无障碍专项2026-10-28).
 
