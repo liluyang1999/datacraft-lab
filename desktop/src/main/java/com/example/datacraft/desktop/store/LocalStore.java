@@ -152,15 +152,44 @@ public final class LocalStore implements AutoCloseable {
     return submit(
         connection -> {
           connection.setAutoCommit(false);
+          Throwable failure = null;
+          boolean settled = false;
           try {
             T result = work.run(connection);
             connection.commit();
+            settled = true;
             return result;
-          } catch (SQLException | RuntimeException exception) {
-            connection.rollback();
+          } catch (SQLException | RuntimeException | Error exception) {
+            // Restoring auto-commit commits an unfinished transaction. Roll back errors too,
+            // while preserving the original failure if the connection cannot roll back.
+            failure = exception;
+            try {
+              connection.rollback();
+              settled = true;
+            } catch (SQLException rollbackFailure) {
+              exception.addSuppressed(rollbackFailure);
+            }
             throw exception;
           } finally {
-            connection.setAutoCommit(true);
+            try {
+              if (settled) {
+                connection.setAutoCommit(true);
+              } else {
+                // An unsuccessful rollback leaves the outcome unknown. Never implicitly commit
+                // or reuse that connection; subsequent work must fail until the store reopens.
+                connection.close();
+              }
+            } catch (SQLException cleanupFailure) {
+              try {
+                connection.close();
+              } catch (SQLException closeFailure) {
+                cleanupFailure.addSuppressed(closeFailure);
+              }
+              if (failure == null) {
+                throw cleanupFailure;
+              }
+              failure.addSuppressed(cleanupFailure);
+            }
           }
         });
   }

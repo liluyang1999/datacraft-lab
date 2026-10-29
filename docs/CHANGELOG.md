@@ -6,6 +6,28 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Cross-module boundary and asynchronous-state review (2026-10-29)
+
+#### Fixed
+- Direct Java API callers must supply a token when binding outside loopback, matching the HTTP
+  boundary already enforced by the CLI. The address is resolved once before validation and binding.
+- SQLite transactions roll back on `Error` as well as ordinary exceptions. Rollback and cleanup
+  failures preserve the original cause, and a connection with an uncertain outcome is closed.
+- Connection selection follows the order of user choices. Earlier decryption, save-and-activate
+  and delete completions cannot override a later choice.
+- Settings callbacks preserve the current draft and newly typed credentials; overlapping operations
+  keep the busy state until all have completed. Job history, presets and their errors cannot cross
+  selection generations, including identically named jobs on different connections.
+- Parameter controls use label associations, preserving their edited text and selected option for
+  accessibility readers instead of replacing those values with the parameter name.
+
+#### Verification and documentation
+- Added 15 behavior regressions, reproduced against the previous behavior before repair. Current
+  test floors are backend Linux/Windows 312/302 and desktop 130/133; budgets remain unchanged.
+- Synchronized architecture contracts, development/testing guides and the
+  [cross-module review evidence](reports/review-2026-10-29.md). No database migration, dependency
+  change or public JSON contract change is required.
+
 ### Desktop startup and native accessibility (2026-10-28)
 
 #### Fixed

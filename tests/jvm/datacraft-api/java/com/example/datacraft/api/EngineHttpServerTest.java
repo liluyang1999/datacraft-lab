@@ -5,6 +5,7 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.example.datacraft.engine.DataJob;
@@ -54,6 +55,47 @@ class EngineHttpServerTest {
   private static final Duration REQUEST_TIMEOUT = Duration.ofSeconds(10);
   private static final String JSON = "application/json; charset=utf-8";
   private static final String TOKEN = "0123456789abcdef0123456789abcdef";
+
+  @Test
+  void directApiUseCannotBindOutsideLoopbackWithoutAuthentication() {
+    IOException failure =
+        assertThrows(
+            IOException.class,
+            () -> {
+              try (EngineHttpServer server =
+                  EngineHttpServer.start(
+                      EngineHttpServerConfig.of("0.0.0.0", 0), new JobRegistry())) {
+                assertNotNull(server);
+              }
+            });
+    assertTrue(failure.getMessage().contains("token"), failure.getMessage());
+  }
+
+  @Test
+  void authenticatedWildcardBindingStillChecksTheToken() throws Exception {
+    try (HttpClient client = HttpClient.newHttpClient();
+        EngineHttpServer server =
+            EngineHttpServer.start(
+                EngineHttpServerConfig.of("0.0.0.0", 0).withApiToken(TOKEN), new JobRegistry())) {
+      URI jobs = URI.create("http://127.0.0.1:" + server.uri("/").getPort() + "/jobs");
+      assertEquals(
+          401,
+          client
+              .send(
+                  HttpRequest.newBuilder(jobs).GET().build(), HttpResponse.BodyHandlers.ofString())
+              .statusCode());
+      assertEquals(
+          200,
+          client
+              .send(
+                  HttpRequest.newBuilder(jobs)
+                      .header("Authorization", "Bearer " + TOKEN)
+                      .GET()
+                      .build(),
+                  HttpResponse.BodyHandlers.ofString())
+              .statusCode());
+    }
+  }
 
   @Test
   void rejectsInvalidRequestsWithoutDroppingTheConnection() throws Exception {

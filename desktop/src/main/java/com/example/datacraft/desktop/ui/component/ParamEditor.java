@@ -59,8 +59,8 @@ public final class ParamEditor extends VBox {
     grid.getChildren().clear();
     int line = 0;
     for (ParamRow row : rows) {
-      Node key = row.known() ? knownKey(row) : customKey(row);
       Node value = valueField(row);
+      Node key = row.known() ? knownKey(row, value) : customKey(row);
       GridPane.setHgrow(value, Priority.ALWAYS);
       grid.add(key, 0, line);
       grid.add(value, 1, line);
@@ -71,9 +71,11 @@ public final class ParamEditor extends VBox {
     }
   }
 
-  private Node knownKey(ParamRow row) {
+  private Node knownKey(ParamRow row, Node value) {
     JobCatalog.Param spec = row.spec().orElseThrow();
     Label key = Controls.label(spec.key(), "latin");
+    // A label names the field without overriding the edited/selected text read by accessibility.
+    key.setLabelFor(value);
     HBox box = new HBox(2, key);
     box.setAlignment(Pos.CENTER_LEFT);
     if (spec.required()) {
@@ -119,7 +121,6 @@ public final class ParamEditor extends VBox {
               if (!spec.hint().isEmpty()) {
                 value.setTooltip(new Tooltip(tooltip(spec)));
               }
-              value.setAccessibleText(spec.key());
             },
             () -> value.setPromptText("值"));
     return value;
@@ -152,7 +153,6 @@ public final class ParamEditor extends VBox {
     // Bidirectional bindings hold both sides weakly: a rebuilt form leaves no listener behind.
     choice.valueProperty().bindBidirectional(row.value());
     choice.setMaxWidth(Double.MAX_VALUE);
-    choice.setAccessibleText(spec.key());
     if (!spec.hint().isEmpty()) {
       choice.setTooltip(new Tooltip(tooltip(spec)));
     }

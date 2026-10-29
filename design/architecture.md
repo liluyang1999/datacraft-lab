@@ -227,6 +227,11 @@ port could otherwise run jobs and the file jobs could read any path. The `datacr
 serves on `0.0.0.0:8080` and sets `DATACRAFT_DATA_ROOT=/opt/datacraft/data`, so it starts only with
 a token, which both stacks pass from `.env`.
 
+The Java API also enforces its own authentication boundary: `EngineHttpServer.start` resolves the
+host once and refuses an unauthenticated address unless that exact address is loopback. Direct
+library callers therefore cannot bypass this check by omitting the CLI. The CLI remains responsible
+for requiring the data root used by its file jobs; the HTTP module does not depend on those jobs.
+
 On `close()` or SIGTERM the server stops accepting connections at once, waits up to 8 s for
 in-flight requests and up to 1 s more for handler threads, which fits Docker's 10 s default stop
 timeout. Runs still going after that, such as long Spark jobs, are cut off.

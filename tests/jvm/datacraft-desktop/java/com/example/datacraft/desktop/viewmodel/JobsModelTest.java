@@ -11,10 +11,15 @@ import com.example.datacraft.desktop.app.AppPaths;
 import com.example.datacraft.desktop.service.FakeBackends;
 import com.example.datacraft.desktop.service.ManualTicker;
 import com.example.datacraft.desktop.store.Profile;
+import com.example.datacraft.desktop.store.RecentRunRepository.RecentRun;
 import java.net.URI;
 import java.nio.file.Path;
 import java.time.Duration;
+import java.time.Instant;
+import java.util.List;
+import java.util.Map;
 import java.util.Optional;
+import java.util.concurrent.CompletableFuture;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -141,5 +146,91 @@ class JobsModelTest {
     model.savePreset("greeting");
     ui.until("the failure is reported", () -> !model.presetProblem().get().isEmpty());
     assertEquals("预设没有保存：本机数据库出错，详情见日志。", model.presetProblem().get());
+  }
+
+  @Test
+  void aPresetFailureForAnEarlierSelectionDoesNotMarkTheCurrentJob() {
+    select("echo");
+    context
+        .store()
+        .transaction(
+            connection -> {
+              try (var statement = connection.createStatement()) {
+                statement.execute("DROP TABLE job_presets");
+              }
+              return null;
+            })
+        .join();
+    model.savePreset("greeting");
+    context.store().submit(connection -> null).join();
+    context.store().submit(connection -> null).join();
+    select("noop");
+    ui.drain();
+    assertEquals("", model.presetProblem().get());
+  }
+
+  @Test
+  void aLateRecentRunListCannotCrossConnectionsWithTheSameJobSelected() {
+    var job = model.jobs().stream().filter(j -> j.name().equals("echo")).findFirst().orElseThrow();
+    Instant now = Instant.now();
+    context
+        .recentRuns()
+        .add(
+            new RecentRun(
+                a.id(),
+                "echo",
+                Map.of(),
+                "SUCCEEDED",
+                "A only",
+                Map.of(),
+                now,
+                Duration.ofMillis(1)),
+            now)
+        .join();
+    Profile b =
+        context
+            .profiles()
+            .save(
+                new Profile(
+                    Profile.NEW,
+                    "B",
+                    backends.engine.uri(),
+                    backends.airflow.uri(),
+                    "admin",
+                    false),
+                Profile.Secrets.NONE)
+            .join();
+    CompletableFuture<Void> first = new CompletableFuture<>();
+    CompletableFuture<Void> second = new CompletableFuture<>();
+    CompletableFuture<Void> reachedSecond = new CompletableFuture<>();
+    context
+        .store()
+        .submit(
+            connection -> {
+              first.join();
+              return null;
+            });
+    try {
+      model.select(job); // A's reads wait behind the first gate
+      context
+          .store()
+          .submit(
+              connection -> {
+                reachedSecond.complete(null);
+                second.join();
+                return null;
+              });
+      context.profiles().activate(b).join();
+      ui.drain();
+      model.applyJobs(List.of(job)); // B selects the same job while its reads are still blocked
+      first.complete(null);
+      reachedSecond.join();
+      ui.drain();
+      assertTrue(model.recent().isEmpty(), "A's cached runs must not appear under B");
+    } finally {
+      first.complete(null);
+      second.complete(null);
+      context.store().submit(connection -> null).join();
+    }
   }
 }

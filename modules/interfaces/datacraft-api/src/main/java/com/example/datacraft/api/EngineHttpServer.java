@@ -80,8 +80,14 @@ public final class EngineHttpServer implements AutoCloseable {
   public static EngineHttpServer start(EngineHttpServerConfig config, JobCatalog catalog)
       throws IOException {
     JobExecutionEngine engine = new JobExecutionEngine(catalog);
-    HttpServer server =
-        HttpServer.create(new InetSocketAddress(config.host(), config.port()), config.backlog());
+    // Resolve once and validate the exact address that will be bound. The API boundary must be
+    // safe for direct library callers too, independently of the CLI's data-root checks.
+    InetSocketAddress address = new InetSocketAddress(config.host(), config.port());
+    if (config.apiToken().isEmpty()
+        && (address.getAddress() == null || !address.getAddress().isLoopbackAddress())) {
+      throw new IOException("HTTP API requires a token when binding outside loopback.");
+    }
+    HttpServer server = HttpServer.create(address, config.backlog());
     ExecutorService executorService = Executors.newVirtualThreadPerTaskExecutor();
     EngineHttpServer engineHttpServer =
         new EngineHttpServer(

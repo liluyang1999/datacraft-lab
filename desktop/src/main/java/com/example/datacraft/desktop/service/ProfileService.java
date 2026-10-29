@@ -31,6 +31,9 @@ public final class ProfileService {
   private final Clock clock;
   private final ActivityLog activity;
   private final Map<Long, Profile.Secrets> unsaved = new ConcurrentHashMap<>();
+  // The order of user choices, not the order in which storage/decryption happens to finish.
+  // Selection and its application share this monitor; no I/O is awaited while holding it.
+  private long selectionGeneration;
 
   public ProfileService(
       ProfileRepository repository,
@@ -53,6 +56,10 @@ public final class ProfileService {
 
   /** Activates the profile used last time, or the first one; none when there is no profile. */
   public CompletableFuture<Optional<Profile>> restore() {
+    return restore(beginSelection());
+  }
+
+  private CompletableFuture<Optional<Profile>> restore(long selection) {
     return list()
         .thenCompose(
             profiles -> {
@@ -62,15 +69,29 @@ public final class ProfileService {
                       .flatMap(id -> profiles.stream().filter(p -> p.id() == id).findFirst())
                       .or(() -> profiles.stream().findFirst());
               if (chosen.isEmpty()) {
-                session.clear();
+                synchronized (this) {
+                  if (selection == selectionGeneration) {
+                    session.clear();
+                  }
+                }
                 return CompletableFuture.completedFuture(Optional.<Profile>empty());
               }
-              return activate(chosen.get()).thenApply(ignored -> chosen);
+              return activate(chosen.get(), selection).thenApply(ignored -> chosen);
             });
   }
 
   /** Saves the profile; when it is the active one, the session switches to the new values. */
   public CompletableFuture<Profile> save(Profile profile, Profile.Secrets secrets) {
+    return save(profile, secrets, currentSelection(), false);
+  }
+
+  /** Saves and selects in one user operation; an older save cannot supersede a later choice. */
+  public CompletableFuture<Profile> saveAndActivate(Profile profile, Profile.Secrets secrets) {
+    return save(profile, secrets, beginSelection(), true);
+  }
+
+  private CompletableFuture<Profile> save(
+      Profile profile, Profile.Secrets secrets, long selection, boolean select) {
     return repository
         .save(profile, secrets)
         .thenApply(
@@ -80,11 +101,12 @@ public final class ProfileService {
               } else {
                 unsaved.put(saved.id(), secrets);
               }
-              boolean active =
-                  session.current().map(c -> c.profile().id() == saved.id()).orElse(false);
-              if (active || session.current().isEmpty()) {
-                preferences.activeProfile(saved.id());
-                session.activate(saved, secrets);
+              synchronized (this) {
+                boolean active =
+                    session.current().map(c -> c.profile().id() == saved.id()).orElse(false);
+                if (select || active || session.current().isEmpty()) {
+                  applySelection(saved, secrets, selection);
+                }
               }
               activity.record(Level.INFO, Source.APP, "已保存连接 " + saved.name());
               return saved;
@@ -92,28 +114,46 @@ public final class ProfileService {
   }
 
   public CompletableFuture<Void> delete(Profile profile) {
+    long selection = currentSelection();
     return repository
         .delete(profile.id())
         .thenCompose(
             ignored -> {
               unsaved.remove(profile.id());
               activity.record(Level.INFO, Source.APP, "已删除连接 " + profile.name());
-              boolean active =
-                  session.current().map(c -> c.profile().id() == profile.id()).orElse(false);
-              return active
-                  ? restore().thenApply(chosen -> null)
-                  : CompletableFuture.completedFuture(null);
+              synchronized (this) {
+                boolean active =
+                    session.current().map(c -> c.profile().id() == profile.id()).orElse(false);
+                return active && selection == selectionGeneration
+                    ? restore(beginSelection()).thenApply(chosen -> null)
+                    : CompletableFuture.completedFuture(null);
+              }
             });
   }
 
   /** Makes the profile active with its remembered or in-memory secrets. */
   public CompletableFuture<Void> activate(Profile profile) {
-    return secrets(profile)
-        .thenAccept(
-            secrets -> {
-              preferences.activeProfile(profile.id());
-              session.activate(profile, secrets);
-            });
+    return activate(profile, beginSelection());
+  }
+
+  private CompletableFuture<Void> activate(Profile profile, long selection) {
+    return secrets(profile).thenAccept(secrets -> applySelection(profile, secrets, selection));
+  }
+
+  private synchronized long beginSelection() {
+    return ++selectionGeneration;
+  }
+
+  private synchronized long currentSelection() {
+    return selectionGeneration;
+  }
+
+  private synchronized void applySelection(
+      Profile profile, Profile.Secrets secrets, long selection) {
+    if (selection == selectionGeneration) {
+      preferences.activeProfile(profile.id());
+      session.activate(profile, secrets);
+    }
   }
 
   /** The secrets the profile would connect with: from the vault, or from this run's memory. */

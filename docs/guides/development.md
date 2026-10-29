@@ -363,11 +363,11 @@ pom's `<modules>`.
 | `datacraft-engine` | 34 | 34 |
 | `datacraft-jobs` | 72 | 70 |
 | `datacraft-spark` | 59 | 49 |
-| `datacraft-api` | 29 | 29 |
+| `datacraft-api` | 31 | 31 |
 | `datacraft-cli` | 31 | 31 |
 
 `--project desktop` checks the desktop console instead (`desktop/target/surefire-reports`): the
-floor is 114 on Linux and 116 on Windows, which also runs two real native accessibility tests.
+floor is 130 on Linux and 133 on Windows, which also runs three real native accessibility tests.
 Each runs its own `VaultPlatformTest` case; `verify` excludes `e2e`. The desktop matrix checks the
 floor after `verify`.
 

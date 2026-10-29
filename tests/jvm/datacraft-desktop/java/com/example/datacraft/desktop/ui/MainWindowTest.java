@@ -33,11 +33,13 @@ import java.util.Optional;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
+import javafx.scene.AccessibleAttribute;
 import javafx.scene.Parent;
 import javafx.scene.Scene;
 import javafx.scene.control.Button;
 import javafx.scene.control.Label;
 import javafx.scene.control.TextField;
+import javafx.scene.robot.Robot;
 import javafx.stage.Stage;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeAll;
@@ -98,6 +100,19 @@ class MainWindowTest {
    * Turns motion on through the preference. Every preference write (the last view, on each
    * navigation) applies the preference again, so setting Motion directly would last one step.
    */
+  private void parkPointerInClientArea() {
+    // The physical pointer is shared with the desktop. Windows title-bar tooltips animate inside
+    // GetMessage (CreateTooltipWindow -> AnimateWindow -> SleepEx), blocking the FX thread even
+    // when no application work is queued. Make the input precondition repeatable without disabling
+    // window decorations, accessibility, application animations, or the response-time budgets.
+    onFx(
+        () ->
+            new Robot()
+                .mouseMove(
+                    stage.getX() + stage.getWidth() / 2, stage.getY() + stage.getHeight() / 2));
+    settle();
+  }
+
   private void motionOn() {
     context.preferences().reducedMotion(false);
     waitUntil("motion is on", () -> !Motion.reduced());
@@ -248,7 +263,11 @@ class MainWindowTest {
         () -> {
           TextField input =
               find(root, TextField.class).stream()
-                  .filter(field -> "input".equals(field.getAccessibleText()))
+                  .filter(
+                      field ->
+                          field.queryAccessibleAttribute(AccessibleAttribute.LABELED_BY)
+                                  instanceof Label label
+                              && "input".equals(label.getText()))
                   .findFirst()
                   .orElseThrow();
           input.setText("/opt/datacraft/data/input.csv");
@@ -810,6 +829,7 @@ class MainWindowTest {
 
   @Test
   void aLogOfFifteenHundredLinesScrollsWithoutStalls() {
+    parkPointerInClientArea();
     Parent root = root();
     motionOn();
     go(Destination.PIPELINES);
@@ -875,6 +895,7 @@ class MainWindowTest {
 
   @Test
   void theFxThreadDoesNotStallOnceWarm() {
+    parkPointerInClientArea();
     Parent root = root();
     motionOn(); // the animations are part of what must stay smooth
     FxWatchdog firstViews = new FxWatchdog(200);

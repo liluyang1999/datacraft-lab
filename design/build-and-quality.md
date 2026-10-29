@@ -299,14 +299,15 @@ tests bind to `slf4j-nop`.
 
 ### Test inventory and floors
 
-The JVM suites have 317 test cases.
+The backend JVM suites have 319 test cases; the optional desktop suite has 145, including 11
+end-to-end cases that require running backends.
 [`cicd/build/check_test_counts.py`](../cicd/build/check_test_counts.py) reads each module's
 `target/surefire-reports/TEST-*.xml`, counts executed tests (skipped, aborted and canceled ones do
 not count) and fails when a module is below its floor. Floors are minimums: adding tests needs no
 change, removing tests needs a lower floor in the same commit. A test in `tests/ci` checks that
 the script's module map matches the POM's `<modules>`. The desktop console, outside the default reactor,
-is checked with `--project desktop` against floors of 114 on Linux and 116 on Windows; Windows
-additionally exercises two real native accessibility lifecycles.
+is checked with `--project desktop` against floors of 130 on Linux and 133 on Windows; Windows
+additionally exercises three real native accessibility lifecycle and property contracts.
 
 | Module | Linux executes (CI floor) | Windows executes (Windows floor) | Tagged for the other OS |
 | --- | --- | --- | --- |
@@ -316,9 +317,9 @@ additionally exercises two real native accessibility lifecycles.
 | `datacraft-engine` | 34 | 34 | none |
 | `datacraft-jobs` | 72 | 70 | 2 `posix-only` |
 | `datacraft-spark` | 59 | 49 | 10 `posix-only` |
-| `datacraft-api` | 29 | 29 | none |
+| `datacraft-api` | 31 | 31 | none |
 | `datacraft-cli` | 31 | 31 | none |
-| Total | 310 | 300 | |
+| Total | 312 | 302 | |
 
 The script keeps a set of floors per platform, because each platform excludes the other's tagged
 tests: `--platform` names the platform that ran the tests and defaults to the one the script runs

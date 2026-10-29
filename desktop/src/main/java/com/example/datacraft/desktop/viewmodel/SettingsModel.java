@@ -74,6 +74,10 @@ public final class SettingsModel {
   /** Counts the profiles shown in the form; a test result for an earlier one is dropped. */
   private long formGeneration;
 
+  private long tokenRevision;
+  private long passwordRevision;
+  private int pendingOperations;
+
   public SettingsModel(
       ProfileService service,
       Session session,
@@ -90,6 +94,8 @@ public final class SettingsModel {
     this.paths = paths;
     this.vaultDescription = vaultDescription;
     this.ui = ui;
+    engineToken.addListener((property, before, value) -> tokenRevision++);
+    airflowPassword.addListener((property, before, value) -> passwordRevision++);
     theme = new SimpleObjectProperty<>(preferences.theme());
     theme.addListener((property, before, value) -> preferences.theme(value));
     reducedMotion = new SimpleBooleanProperty(preferences.reducedMotion());
@@ -153,20 +159,32 @@ public final class SettingsModel {
     airflowPassword.set("");
     formError.set("");
     testResult.set(null);
+    long opened = formGeneration;
+    long tokenAtOpen = tokenRevision;
+    long passwordAtOpen = passwordRevision;
     service
         .secrets(profile)
         .thenAccept(
             secrets ->
                 ui.execute(
                     () -> {
-                      if (profile.equals(editing.get())) {
-                        engineToken.set(secrets.engineToken().orElse(""));
-                        airflowPassword.set(secrets.airflowPassword().orElse(""));
+                      if (opened == formGeneration) {
+                        if (tokenAtOpen == tokenRevision) {
+                          engineToken.set(secrets.engineToken().orElse(""));
+                        }
+                        if (passwordAtOpen == passwordRevision) {
+                          airflowPassword.set(secrets.airflowPassword().orElse(""));
+                        }
                       }
                     }))
         .exceptionally(
             failure -> {
-              ui.execute(() -> formError.set("保存的口令无法解密，请重新输入后保存。"));
+              ui.execute(
+                  () -> {
+                    if (opened == formGeneration) {
+                      formError.set("保存的口令无法解密，请重新输入后保存。");
+                    }
+                  });
               return null;
             });
   }
@@ -235,26 +253,37 @@ public final class SettingsModel {
   }
 
   public CompletableFuture<Profile> save() {
+    return save(false);
+  }
+
+  private CompletableFuture<Profile> save(boolean activate) {
     Optional<Profile> profile = fromForm();
     if (profile.isEmpty()) {
       return CompletableFuture.failedFuture(new IllegalArgumentException(formError.get()));
     }
-    busy.set(true);
-    return service
-        .save(profile.get(), secrets())
-        .whenComplete(
-            (saved, failure) ->
-                ui.execute(
-                    () -> {
-                      busy.set(false);
-                      if (failure != null) {
-                        formError.set("没有保存：" + rootMessage(failure));
-                        return;
-                      }
-                      creating = false;
-                      editing.set(saved);
-                      service.list().thenAccept(list -> ui.execute(() -> profiles.setAll(list)));
-                    }));
+    operationStarted();
+    long savedForm = formGeneration;
+    CompletableFuture<Profile> saving =
+        activate
+            ? service.saveAndActivate(profile.get(), secrets())
+            : service.save(profile.get(), secrets());
+    return saving.whenComplete(
+        (saved, failure) ->
+            ui.execute(
+                () -> {
+                  operationFinished();
+                  if (savedForm != formGeneration) {
+                    service.list().thenAccept(list -> ui.execute(() -> profiles.setAll(list)));
+                    return;
+                  }
+                  if (failure != null) {
+                    formError.set("没有保存：" + rootMessage(failure));
+                    return;
+                  }
+                  creating = false;
+                  editing.set(saved);
+                  service.list().thenAccept(list -> ui.execute(() -> profiles.setAll(list)));
+                }));
   }
 
   public CompletableFuture<Void> delete() {
@@ -263,14 +292,25 @@ public final class SettingsModel {
       newProfile();
       return CompletableFuture.completedFuture(null);
     }
+    long deletedForm = formGeneration;
+    operationStarted();
     return service
         .delete(profile)
-        .thenRun(
-            () ->
+        .whenComplete(
+            (ignored, failure) ->
                 ui.execute(
                     () -> {
-                      editing.set(null);
-                      load();
+                      operationFinished();
+                      if (deletedForm == formGeneration) {
+                        if (failure != null) {
+                          formError.set("没有删除：" + rootMessage(failure));
+                        } else {
+                          editing.set(null);
+                          load();
+                        }
+                      } else if (failure == null) {
+                        service.list().thenAccept(list -> ui.execute(() -> profiles.setAll(list)));
+                      }
                     }));
   }
 
@@ -279,7 +319,7 @@ public final class SettingsModel {
     if (profile.isEmpty()) {
       return CompletableFuture.failedFuture(new IllegalArgumentException(formError.get()));
     }
-    busy.set(true);
+    operationStarted();
     testResult.set(null);
     long tested = formGeneration;
     return service
@@ -288,7 +328,7 @@ public final class SettingsModel {
             (result, failure) ->
                 ui.execute(
                     () -> {
-                      busy.set(false);
+                      operationFinished();
                       if (tested == formGeneration) {
                         testResult.set(result); // still the profile that was tested
                       }
@@ -300,7 +340,17 @@ public final class SettingsModel {
    * pasted token, a new address) are the ones the connection uses.
    */
   public CompletableFuture<Void> activate() {
-    return save().thenCompose(service::activate);
+    return save(true).thenApply(saved -> null);
+  }
+
+  private void operationStarted() {
+    pendingOperations++;
+    busy.set(true);
+  }
+
+  private void operationFinished() {
+    pendingOperations--;
+    busy.set(pendingOperations != 0);
   }
 
   /** Deletes the cached runs and the activity record; settings and profiles stay. */

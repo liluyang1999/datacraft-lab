@@ -24,8 +24,10 @@ import java.time.Duration;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import javafx.scene.AccessibleAttribute;
 import javafx.scene.Parent;
 import javafx.scene.control.Button;
+import javafx.scene.control.Label;
 import javafx.scene.control.TextField;
 import javafx.stage.Stage;
 import org.junit.jupiter.api.AfterEach;
@@ -156,7 +158,11 @@ class EndToEndWindowTest {
     onFx(
         () ->
             find(root, TextField.class).stream()
-                .filter(field -> "message".equals(field.getAccessibleText()))
+                .filter(
+                    field ->
+                        field.queryAccessibleAttribute(AccessibleAttribute.LABELED_BY)
+                                instanceof Label label
+                            && "message".equals(label.getText()))
                 .findFirst()
                 .orElseThrow()
                 .setText("来自数艺工坊的端到端运行"));

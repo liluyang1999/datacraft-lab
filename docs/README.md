@@ -127,5 +127,6 @@ Swarm, is in Chinese: [guides/deployment.md](guides/deployment.md).
 | [guides/deployment.md](guides/deployment.md) | Chinese | Compose and Swarm deployment tutorial and operations |
 | [desktop/README.md](desktop/README.md) | Chinese | 数艺工坊 desktop console: scope, architecture, UI design, backend integration, performance, tests, loop plan and log |
 | [reports/evaluation-report.html](reports/evaluation-report.html) | Chinese | Consolidated evaluation report: architecture, quality evidence, security, the cloud platform decision with its cost model and calculator, scores and risks |
+| [reports/review-2026-10-29.md](reports/review-2026-10-29.md) | Chinese | Cross-module review: API authentication boundary, transaction atomicity, asynchronous UI ownership, current validation and cleanup evidence |
 | [reports/pricing-evidence.md](reports/pricing-evidence.md) | Chinese | Sources and calculations behind the cloud prices |
 | [CHANGELOG.md](CHANGELOG.md) | English | Change history |

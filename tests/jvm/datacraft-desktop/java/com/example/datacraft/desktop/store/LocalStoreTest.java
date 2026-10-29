@@ -3,6 +3,7 @@ package com.example.datacraft.desktop.store;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
+import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -24,6 +25,7 @@ import java.time.Instant;
 import java.util.Arrays;
 import java.util.Map;
 import java.util.Optional;
+import java.util.concurrent.CompletionException;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -52,6 +54,49 @@ class LocalStoreTest {
     assertEquals(LocalStore.SCHEMA_VERSION, version);
     String journal = store.submit(connection -> pragma(connection, "journal_mode")).join();
     assertEquals("wal", journal);
+  }
+
+  @Test
+  void anErrorRollsBackPartialWritesAndTheNextTransactionStillWorks() {
+    AssertionError original = new AssertionError("controlled transaction failure");
+    CompletionException failure =
+        assertThrows(
+            CompletionException.class,
+            () ->
+                store
+                    .transaction(
+                        connection -> {
+                          try (Statement statement = connection.createStatement()) {
+                            statement.executeUpdate(
+                                "INSERT INTO settings VALUES ('partial', 'bad', 0)");
+                          }
+                          throw original;
+                        })
+                    .join());
+    assertSame(original, failure.getCause());
+    assertTrue(new SettingsRepository(store).all().join().isEmpty());
+    assertTrue(store.submit(Connection::getAutoCommit).join());
+    new SettingsRepository(store).put("next", "committed").join();
+    assertEquals(Map.of("next", "committed"), new SettingsRepository(store).all().join());
+  }
+
+  @Test
+  void aBrokenConnectionDoesNotHideTheOriginalTransactionFailure() {
+    AssertionError original = new AssertionError("controlled connection failure");
+    CompletionException failure =
+        assertThrows(
+            CompletionException.class,
+            () ->
+                store
+                    .transaction(
+                        connection -> {
+                          connection.close();
+                          throw original;
+                        })
+                    .join());
+    assertSame(original, failure.getCause());
+    assertTrue(original.getSuppressed().length > 0, "rollback failure remains available");
+    assertTrue(store.submit(Connection::isClosed).join());
   }
 
   @Test

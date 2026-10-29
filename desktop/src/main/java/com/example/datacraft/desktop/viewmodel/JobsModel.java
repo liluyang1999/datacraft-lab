@@ -108,6 +108,7 @@ public final class JobsModel implements Visibility {
   private final Executor ui;
   private final Poller<List<JobInfo>> poller;
   private final Map<String, JobState> states = new HashMap<>();
+  private long selectionGeneration;
 
   private final ObservableList<JobInfo> jobs = FXCollections.observableArrayList();
   private final ObjectProperty<JobInfo> selected = new SimpleObjectProperty<>();
@@ -167,6 +168,7 @@ public final class JobsModel implements Visibility {
    * list nor a selection, draft, result or run, and the list is fetched again for the new one.
    */
   private void reset(boolean isConnected) {
+    selectionGeneration++;
     connected.set(isConnected);
     states.clear();
     selected.set(null);
@@ -194,6 +196,7 @@ public final class JobsModel implements Visibility {
 
   /** Shows a job: its draft, its last result, its presets and its recent runs. */
   public void select(JobInfo job) {
+    long selection = ++selectionGeneration;
     JobInfo previous = selected.get();
     if (previous != null) {
       state(previous.name()).draft = values(true);
@@ -214,7 +217,7 @@ public final class JobsModel implements Visibility {
             list ->
                 ui.execute(
                     () -> {
-                      if (job.equals(selected.get())) {
+                      if (selection == selectionGeneration) {
                         presets.setAll(list);
                       }
                     }));
@@ -353,6 +356,7 @@ public final class JobsModel implements Visibility {
   /** Shows the job's presets once the change is stored, if that job is still the one shown. */
   private void reloadPresetsAfter(
       String jobName, java.util.concurrent.CompletableFuture<Void> change, String failureText) {
+    long selection = selectionGeneration;
     change
         .thenCompose(ignored -> presetRepository.list(jobName))
         .whenComplete(
@@ -361,11 +365,15 @@ public final class JobsModel implements Visibility {
                     () -> {
                       if (failure != null) {
                         LOG.log(System.Logger.Level.WARNING, failureText + ": " + jobName, failure);
-                        presetProblem.set(failureText + "：本机数据库出错，详情见日志。");
+                        if (selection == selectionGeneration) {
+                          presetProblem.set(failureText + "：本机数据库出错，详情见日志。");
+                        }
                         return;
                       }
                       JobInfo shown = selected.get();
-                      if (shown != null && shown.name().equals(jobName)) {
+                      if (selection == selectionGeneration
+                          && shown != null
+                          && shown.name().equals(jobName)) {
                         presets.setAll(list);
                       }
                     }));
@@ -379,6 +387,7 @@ public final class JobsModel implements Visibility {
   }
 
   private void loadRecent() {
+    long selection = selectionGeneration;
     JobInfo job = selected.get();
     if (job == null) {
       recent.clear();
@@ -390,7 +399,7 @@ public final class JobsModel implements Visibility {
             runs ->
                 ui.execute(
                     () -> {
-                      if (job.equals(selected.get())) {
+                      if (selection == selectionGeneration) {
                         Lists.reconcile(
                             recent, runs, run -> run.startedAt().toEpochMilli() + run.jobName());
                       }

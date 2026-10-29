@@ -1,7 +1,9 @@
 package com.example.datacraft.desktop.viewmodel;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.example.datacraft.desktop.api.StubServer;
 import com.example.datacraft.desktop.app.AppContext;
@@ -10,6 +12,7 @@ import com.example.datacraft.desktop.service.FakeBackends;
 import com.example.datacraft.desktop.store.Profile;
 import java.nio.file.Path;
 import java.util.Optional;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import org.junit.jupiter.api.AfterEach;
@@ -134,5 +137,180 @@ class SettingsModelTest {
     assertEquals("远程测试", model.name().get());
     assertEquals("http://10.0.0.5:8088", model.engineUrl().get());
     assertEquals("x".repeat(40), model.engineToken().get());
+  }
+
+  @Test
+  void delayedSecretsDoNotReplaceCredentialsTheUserHasAlreadyTyped() {
+    model.edit(a);
+    awaitStore();
+    model.engineToken().set("new-token");
+    model.airflowPassword().set("new-password");
+    ui.drain();
+    assertEquals("new-token", model.engineToken().get());
+    assertEquals("new-password", model.airflowPassword().get());
+  }
+
+  @Test
+  void aDecryptionFailureForAnEarlierFormCannotSetTheCurrentFormsError() {
+    context
+        .store()
+        .submit(
+            connection -> {
+              try (var statement =
+                  connection.prepareStatement(
+                      "UPDATE profiles SET engine_token = ? WHERE id = ?")) {
+                statement.setBytes(1, new byte[] {1, 2, 3});
+                statement.setLong(2, a.id());
+                statement.executeUpdate();
+              }
+              return null;
+            })
+        .join();
+    model.edit(a);
+    awaitStore();
+    model.newProfile();
+    ui.drain();
+    assertEquals("", model.formError().get());
+  }
+
+  @Test
+  void savingAnEarlierFormDoesNotReplaceTheProfileNowBeingEdited() {
+    Profile b =
+        context
+            .profiles()
+            .save(
+                new Profile(
+                    Profile.NEW, "B", backends.engine.uri(), backends.airflow.uri(), "admin", true),
+                Profile.Secrets.NONE)
+            .join();
+    model.name().set("A updated");
+    model.save().join();
+    model.edit(b);
+    awaitStore();
+    ui.drain();
+    assertEquals(b, model.editing().get());
+    assertEquals("B", model.name().get());
+    assertEquals("", model.engineToken().get());
+  }
+
+  private void awaitStore() {
+    context.store().submit(connection -> null).join();
+    context.store().submit(connection -> null).join();
+  }
+
+  @Test
+  void anEarlierSaveAndActivateCannotOverrideALaterConnectionChoice() {
+    Profile b =
+        context
+            .profiles()
+            .save(
+                new Profile(
+                    Profile.NEW,
+                    "B",
+                    backends.engine.uri(),
+                    backends.airflow.uri(),
+                    "admin",
+                    false),
+                Profile.Secrets.NONE)
+            .join();
+    CompletableFuture<Void> release = new CompletableFuture<>();
+    var held =
+        context
+            .store()
+            .submit(
+                connection -> {
+                  release.join();
+                  return null;
+                });
+    try {
+      var earlier = model.activate();
+      context.profiles().activate(b).join();
+      release.complete(null);
+      earlier.join();
+      assertEquals(b, context.session().current().orElseThrow().profile());
+      assertEquals(Optional.of(b.id()), context.preferences().activeProfile());
+    } finally {
+      release.complete(null);
+      held.join();
+    }
+  }
+
+  @Test
+  void aSlowRememberedConnectionCannotOverrideALaterInMemoryChoice() {
+    Profile b =
+        context
+            .profiles()
+            .save(
+                new Profile(
+                    Profile.NEW,
+                    "B",
+                    backends.engine.uri(),
+                    backends.airflow.uri(),
+                    "admin",
+                    false),
+                Profile.Secrets.NONE)
+            .join();
+    CompletableFuture<Void> release = new CompletableFuture<>();
+    var held =
+        context
+            .store()
+            .submit(
+                connection -> {
+                  release.join();
+                  return null;
+                });
+    try {
+      var earlier = context.profiles().activate(a);
+      context.profiles().activate(b).join();
+      release.complete(null);
+      earlier.join();
+      assertEquals(b, context.session().current().orElseThrow().profile());
+      assertEquals(Optional.of(b.id()), context.preferences().activeProfile());
+    } finally {
+      release.complete(null);
+      held.join();
+    }
+  }
+
+  @Test
+  void deletingAnEarlierProfileKeepsTheCurrentDraft() {
+    Profile b =
+        context
+            .profiles()
+            .save(
+                new Profile(
+                    Profile.NEW, "B", backends.engine.uri(), backends.airflow.uri(), "admin", true),
+                Profile.Secrets.NONE)
+            .join();
+    model.delete().join();
+    model.edit(b);
+    model.name().set("B draft");
+    ui.drain();
+    awaitStore();
+    ui.drain();
+    assertEquals(b, model.editing().get());
+    assertEquals("B draft", model.name().get());
+  }
+
+  @Test
+  void completingOneOperationDoesNotClearBusyForAnotherOperation() {
+    CompletableFuture<Void> release = new CompletableFuture<>();
+    backends.engine.on(
+        "GET /health",
+        request -> {
+          release.join();
+          return StubServer.Answer.json(200, "{\"status\":\"UP\",\"service\":\"datacraft-api\"}");
+        });
+    model.save().join(); // its completion is waiting in the UI queue
+    var testing = model.test();
+    try {
+      ui.drain();
+      assertTrue(model.busy().get(), "the connection test has not finished");
+    } finally {
+      release.complete(null);
+      testing.join();
+      ui.drain();
+    }
+    assertFalse(model.busy().get());
   }
 }
