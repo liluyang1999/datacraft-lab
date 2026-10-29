@@ -881,6 +881,8 @@
 
   <p><strong>单调时钟与最终代码验收：</strong><code>69a7d04</code> / <a href="https://github.com/liluyang1999/datacraft-lab/actions/runs/40688429388">40688429388</a> 七项作业全部实际执行并成功；Windows 120 项、Linux 117 项，新计时各 20 次全部通过（520–892 / 648–827 ms），54 / 10 个原生库与每次 AOT 生效均核验。后端 310 项、CI 工具 157 项、部署 71 项、DAG 21 项、文档 16 项与计算器 6 项通过；Pyright、Shell 与 Action 固定版本门禁通过。四个镜像、三条真实流水线、Compose 备份恢复通过；单节点 Swarm 117 s 完成任务替换，旧运行保留且新运行成功。公告检查 <a href="https://github.com/liluyang1999/datacraft-lab/actions/runs/40688588733">40688588733</a> 通过。19 张 Linux 截图逐张复核，本轮追踪、测试配置与构建产物已按白名单清理；历史尖峰和原生初次显示的两条告警仍保留。</p>
 
+  <p><strong>L9 跨模块修复交付：</strong><code>46dd747</code> / <a href="https://github.com/liluyang1999/datacraft-lab/actions/runs/40811871168">40811871168</a> 七项作业全部实际执行并成功；后端 Linux 312 项，桌面 Windows 133 项、Linux 130 项通过。每平台完整 20 次启动分别为 622–746 / 621–767 ms，原生库与 AOT 均核验；19 张 Linux 截图逐张复核。脚本、类型、文档、四类镜像、三条真实流水线、Compose 备份恢复及单节点 Swarm 升级通过；44 s 内替换全部 Airflow 任务，旧运行保留且新运行成功。<a href="https://github.com/liluyang1999/datacraft-lab/actions/runs/40811940174">公告检查</a>对同一提交通过。完整样本、原生交互、性能追踪与定界清理见<a href="review-2026-10-29.md">本轮复核记录</a>；历史 2.6 s 尖峰仍未完整归因。</p>
+
   <p><strong>本机与 CI 两边都运行容器阶段：</strong>本机证据见 4.4，CI 的状态、步骤、日志和注解按提交分别核对。上表保留 L7 与 L8 的失败和后续成功结果；L8 中间修复轮次的完整过程见循环记录。后续纯文档收尾提交不改变上述代码、依赖与工作流，其实际运行状态在 <a href="https://github.com/liluyang1999/datacraft-lab/actions?query=branch%3Amain">main 的 Actions 页面</a>单独核对。</p>
 </section>
 
