@@ -32,7 +32,10 @@ All notable changes to this project are documented here. The format follows
 - The local package completed all 20 startup samples, with two above the unchanged 1500 ms
   budget (1579 ms and 1503 ms). Native-library provenance and AOT checks passed, but startup
   acceptance did not. Windows rejected a new WPR session with `0xc5585011`; these boundaries
-  and pending platform/CI evidence are tracked in the [current review](reports/review-2026-11-05.md).
+  are tracked in the [current review](reports/review-2026-11-05.md). Code commit `8bfd17b` passed
+  all seven CI jobs and the advisory check, including both desktop platforms, real pipelines,
+  Compose backup recovery and a single-node Swarm upgrade. Remote success does not erase the
+  two local startup failures.
 - Added the [CSV quality guide](guides/csv-quality.md) and synchronized usage, architecture,
   desktop interactions and test contracts. No dependency, database migration or new HTTP
   endpoint is required; existing Airflow DAG definitions are unchanged.

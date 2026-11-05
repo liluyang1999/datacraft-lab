@@ -350,7 +350,7 @@
 
 <section id="summary" aria-labelledby="h-summary">
   <h2 id="h-summary">一、执行摘要</h2>
-  <p><strong>2026-11-05 功能扩展：</strong>新增 <code>csv-quality</code> 作业，检查空白、重复及最少行数；作业页支持中文搜索、类型筛选和中文指标。补齐参数键校验与逐行草稿保留。Windows 后端 322 项和桌面 141 项完整验证通过；本机打包的 20 次启动中，1579 ms 与 1503 ms 两次超出 1500 ms，启动验收未通过。WPR 新会话仍被 Windows 以 <code>0xc5585011</code> 拒绝，预算保持不变。当前验证和待完成的远端证据见<a href="review-2026-11-05.md">本轮记录</a>，历史通过不替代本轮结果。</p>
+  <p><strong>2026-11-05 功能扩展：</strong>新增 <code>csv-quality</code> 作业，检查空白、重复及最少行数；作业页支持中文搜索、类型筛选和中文指标。补齐参数键校验与逐行草稿保留。Windows 后端 322 项和桌面 141 项完整验证通过；本机打包的 20 次启动中，1579 ms 与 1503 ms 两次超出 1500 ms，启动验收未通过。WPR 新会话仍被 Windows 以 <code>0xc5585011</code> 拒绝，预算保持不变。当前验证和远端交付证据见<a href="review-2026-11-05.md">本轮记录</a>，历史通过不替代本轮结果。</p>
   <p><strong>2026-10-29 复核：</strong>补齐直接 Java API 调用的非回环鉴权边界、SQLite 在 Error 下的回滚与原始错误保留、连接选择顺序、设置草稿和作业视图的异步归属。新增 15 项回归先复现旧行为再修复；Windows 后端 302 项、桌面 133 项完整门禁及真实后台 11 项通过；原生中文参数、草稿、主题与窗口恢复复核通过，最终包 20 次启动为 981–1098 ms。本轮原生运行、两平台 CI 与清理结果统一记录在<a href="review-2026-10-29.md">跨模块复核记录</a>；下面的 L8 数字属于此前交付，不替代本轮证据。模块结构、数据库格式、公共 JSON 契约和性能预算保持不变。</p>
   <p><strong>L8 历史结论与架构基线：</strong>L8 已补齐 JavaFX 原生库，并修正 Windows UIA 不支持属性的返回契约、主题状态与长日志遍历。两平台界面门禁 Windows 120 / Linux 117 项通过；Linux 启动失败进一步暴露进程起点计时偏差。改用包含启动器和观察开销的父进程单调时钟，本机 20 次为 1000–1209 ms，中位数 1035.5 ms；新计时远端 Windows 为 520–892 ms、Linux 为 648–827 ms，分别完整 20 次全部达标。历史 2614 ms 尖峰尚未在管理员采样中复现，不能宣称单一系统成因已根治。原生操作没有异常，初次显示有两条耗时告警；保留全部失败与原有预算。逐提交结果见 4.5，测量边界见 4.4 与第八章。CLI、HTTP API 与 Airflow 共用同一个 <code>DataJob</code> 契约和执行引擎，失败语义统一；8 个 Maven 模块按职责分为 core、io、processing、interfaces 四组，越界依赖在构建的 <code>validate</code> 阶段即失败；质量门禁拒绝项目源码编译、类型检查或 Shell 检查警告，CI/CD 逻辑集中在 <code>cicd/</code>，可以脱离 GitHub Actions 在本机复现；流水线步骤的失败原因写入公开注解；Compose 栈与 Swarm 栈在 L7 本机及远端 CI 中均实际部署过；所有镜像运行按版本与校验和固定的 Temurin 25.0.5。桌面控制台“数艺工坊”在一个窗口里查看与操作两个后台，它只是客户端，默认后端构建不包含桌面工程。</p>
   <div class="split">
@@ -384,7 +384,7 @@
     <thead><tr><th>证据</th><th>来源</th><th>结果与时间范围</th></tr></thead>
     <tbody>
       <tr><td>代码、配置与文档</td><td>仓库 <code>main</code> 分支</td><td><span class="tag ok">已审阅</span> 关键路径逐项核对，文档与代码一致性由 <code>tests/docs</code> 检查</td></tr>
-      <tr><td>L10 本机验证</td><td>2026-11-05 / Windows；<a href="review-2026-11-05.md">当前复核记录</a></td><td><span class="tag warn">部分通过</span> 后端 322 项、桌面 141 项完整验证通过；CI 工具 132 项通过、25 项 POSIX 专属跳过。20 次启动有两次超出 1500 ms，原生库来源与 AOT 检查通过；部署脚本在 Windows 的 bash 入口失败，交由本轮 Linux CI 验证</td></tr>
+      <tr><td>L10 本机验证</td><td>2026-11-05 / Windows；<a href="review-2026-11-05.md">当前复核记录</a></td><td><span class="tag warn">部分通过</span> 后端 322 项、桌面 141 项完整验证通过；CI 工具 132 项通过、25 项 POSIX 专属跳过。20 次启动有两次超出 1500 ms，原生库来源与 AOT 检查通过；部署脚本在 Windows 的 bash 入口失败，随后当前代码提交的 Linux CI 71 项部署测试通过</td></tr>
       <tr><td>L8 历史构建与测试</td><td>本机 Windows 11 / Oracle JDK 25.0.5.0.3；CI Windows 2025、Ubuntu 24.04 / Temurin 25.0.5+8</td><td><span class="tag ok">通过</span> Windows 120 / Linux 117 项界面门禁通过；新单调时钟的本机及远端两平台各 20 次启动全部通过，Windows / Linux 的 54 / 10 个原生库与 AOT 使用均已确认；历史两平台记录与测量边界见 4.4 与 L8</td></tr>
       <tr><td>L7/L8 Airflow 运行环境</td><td>Airflow 3.3.2、官方 constraints 与安全修订、pyspark 4.2.0</td><td><span class="tag info">历史复核</span> 当时在镜像内检查 DAG 契约、三条真实流水线及依赖安全下限；结果见 4.4</td></tr>
       <tr><td>L7/L8 本机 Docker</td><td>Docker 29.9.2；当时的专用 Docker-in-Docker 引擎</td><td><span class="tag info">历史演练</span> 镜像、Compose、单节点 Swarm 部署与升级、备份恢复在专用引擎运行；共享引擎的 Swarm 状态与其他项目卷保持不变</td></tr>
@@ -683,7 +683,7 @@
       <tr><td>单机 Compose 优先</td><td>成本最低、运维最简单，CI 中真实启动并做备份恢复</td><td>没有高可用；Swarm 仍是把所有服务固定在一台数据节点上的模板</td><td>Compose 冒烟测试；决策 6</td></tr>
       <tr><td>Swarm 栈在 CI 的单节点上演练，Redis 带口令，覆盖网络加密</td><td>栈文件、两个部署脚本与镜像每次推送都真实地一起运行一遍，包括一次升级；Redis 与覆盖网络不再是“扩展前要补”的事项</td><td>单节点说明不了放置、故障切换与节点间流量；Swarm 的旧 <code>.env</code> 要补 Redis 口令；<code>containers</code> 作业多出约 4 至 6 分钟</td><td>CI 的演练一步、<code>tests/ci</code> 的桩测试 15 项；决策 14</td></tr>
       <tr><td>API 令牌、并发上限与回环绑定</td><td>到达端口不再等于可以运行作业；同时运行的作业数有上限；浏览器跨源请求被拒</td><td>令牌是明文 HTTP 上的共享密钥，对外暴露仍需终结 TLS 的网关；旧部署升级要在 <code>.env</code> 补上令牌</td><td>API 与 CLI 测试、镜像与两个栈的冒烟；决策 5、11</td></tr>
-      <tr><td>CI/CD 逻辑独立到 <code>cicd/</code></td><td>检查可在本机复现，ShellCheck 覆盖全部流水线脚本</td><td>容器检查需要 Docker；本轮在专用隔离引擎中演练，避免改变共享 Docker 的 Swarm 状态；最终结果见 4.4</td><td>本机实跑结果（4.4）；决策 10</td></tr>
+      <tr><td>CI/CD 逻辑独立到 <code>cicd/</code></td><td>检查可在本机复现，ShellCheck 覆盖全部流水线脚本</td><td>容器检查需要 Docker；历史本机验证使用专用隔离引擎，未改变共享 Docker 的 Swarm 状态；2026-11-05 的容器演练在远端 CI 执行，结果见当前复核记录</td><td>实跑结果（4.4）；决策 10</td></tr>
       <tr><td>失败原因与通过证据写入公开注解</td><td>不需要仓库权限就能定位失败的步骤与原因；失败的栈在拆除前留下各服务的状态；通过的运行也留下可核对的数字</td><td>注解只保留 4096 个字符、每步 10 条，要挑选输出行；每个步骤多一层包装</td><td><code>tests/ci</code> 21 项；决策 12</td></tr>
       <tr><td>定时公告检查，不用更新机器人</td><td>固定的版本出现公告时，一周内以失败的运行暴露；提交历史仍只有一位贡献者</td><td>只覆盖直接固定的版本，不含传递依赖与基础镜像；依赖 OSV 这一公共服务，只写在发布说明里的漏洞（本轮的 Jackson CVE）它也发现不了</td><td><code>tests/ci</code> 16 项；决策 13</td></tr>
       <tr><td>镜像的 Java 按版本与校验和固定</td><td>安全更新不再等官方镜像；下载的归档逐个校验，构建镜像与运行镜像的 Java 一致</td><td>Temurin 的新版本要手动提高，四个校验和一起改；多出两个中间镜像；只固定了 amd64 与 arm64 的归档</td><td>镜像冒烟检查版本；<code>check_temurin.py</code> 6 项测试；决策 4</td></tr>
@@ -728,7 +728,7 @@
       <tr><td>Airflow 3.x 编排</td><td>3 个 DAG，依赖用 <code>chain()</code> 声明</td><td>21 项 DAG 与安全下限测试；CI 在真实 Airflow 中运行三条流水线</td><td><span class="tag ok">满足</span></td></tr>
       <tr><td>单机 Compose 与多机 Swarm</td><td>Compose 为主，Swarm 固定单数据节点</td><td>Compose 在 CI 真实启动并做备份恢复；Swarm 在 CI 的单节点上真实部署并升级，多节点未验证</td><td><span class="tag warn">部分</span></td></tr>
       <tr><td>云部署评估与成本</td><td>11 个平台、两个地域、成本模型与计算器（第六章）</td><td>价格快照 2026-09-19；计算器 6 项测试</td><td><span class="tag ok">满足</span></td></tr>
-      <tr><td>零警告构建</td><td>编译、类型检查、Shell 检查的警告都会使门禁失败</td><td>本轮 Windows 完整构建通过；pyright 与 ShellCheck 由当前提交的 CI 复核，历史结果见 4.4</td><td><span class="tag ok">满足</span></td></tr>
+      <tr><td>零警告构建</td><td>编译、类型检查、Shell 检查的警告都会使门禁失败</td><td>本轮 Windows 完整构建通过；当前代码提交 CI 的 pyright 无诊断，24 个 Shell 脚本语法与 ShellCheck 通过</td><td><span class="tag ok">满足</span></td></tr>
       <tr><td>在线 API 的访问控制</td><td>令牌认证（回环之外强制）、并发运行上限、回环绑定、Origin 检查、数据根约束</td><td>31 项 API 测试；镜像、Compose 与 Swarm 冒烟；没有 TLS，属于已记录的边界</td><td><span class="tag ok">满足</span></td></tr>
       <tr><td>实时的桌面控制面板与监控界面</td><td>数艺工坊：JavaFX 25.0.5，对接引擎 API 与 Airflow；本机配置与缓存只在 <code>~/.datacraft</code> 的 SQLite</td><td>154 项测试（默认 Windows 141、Linux 138 项；另有端到端 12 项与平台专用测试）；本轮 Windows 完整验证通过，其他当前结果见本轮复核记录；FX 线程的停顿与主题切换有界面测试</td><td><span class="tag ok">满足</span></td></tr>
     </tbody>
@@ -793,7 +793,7 @@
 
   <h3>4.4 验证证据与时间范围</h3>
   <h4>2026-11-05：数据质量与作业查找</h4>
-  <p>本轮 Windows 后端完整 <code>verify</code> 执行 322 项，桌面完整 <code>verify</code> 执行 141 项，均通过。CI 工具共 157 项，132 项通过、25 项 POSIX 专属跳过；Windows 的 bash 入口未能运行部署套件，不能记为通过，待当前提交的 Linux CI 补齐。</p>
+  <p>本轮 Windows 后端完整 <code>verify</code> 执行 322 项，桌面完整 <code>verify</code> 执行 141 项，均通过。本机 CI 工具共 157 项，132 项通过、25 项 POSIX 专属跳过；Windows 的 bash 入口未能运行部署套件，这次失败保留。随后代码提交 <code>8bfd17b</code> 的 Linux CI 完成部署 71 项、CI 工具 156 项（另 1 项 Windows 专属跳过）、文档 16 项和计算器 6 项，均通过。</p>
   <p>本机包完成 10 次新配置和 10 次复用配置启动，54 个原生库的来源校验及每次 AOT 检查通过；新配置第 4 次为 1579 ms，复用配置第 10 次（设置页、深色）为 1503 ms，均超过未放宽的 1500 ms 门槛。当前启动验收失败。新 WPR GeneralProfile 会话实际被拒绝（<code>0xc5585011</code>），仍缺系统性能追踪权限，不能将历史管理员会话视为当前可用。完整样本、原生操作、远端 CI 与清理证据以<a href="review-2026-11-05.md">本轮记录</a>为准。</p>
   <h4>2026-10-28：L8 历史验证</h4>
   <p>启动与 Windows 原生无障碍专项接续 L7，根因、负向实验、两平台结果与交付记录见 <a href="../desktop/loop/log.md#l8-启动与原生无障碍专项2026-10-28">L8 循环记录</a>。下方 L7 和更早记录保留当时的证据。</p>
@@ -854,6 +854,7 @@
   </details>
 
   <h3>4.5 CI 状态</h3>
+  <p><strong>2026-11-05 代码交付：</strong><code>8bfd17b</code> 的 <a href="https://github.com/liluyang1999/datacraft-lab/actions/runs/41967800748">七项 CI</a> 与 <a href="https://github.com/liluyang1999/datacraft-lab/actions/runs/41967848936">公告检查</a> 全部通过，逐项核对 SHA、运行机和步骤。后端 Linux 332 项、桌面 Windows 141 / Linux 138 项；各 20 次启动最大 481 / 565 ms；真实流水线、Compose 备份恢复、单节点 Swarm 升级通过（113 秒，旧运行保留且新运行成功）。本机 1579 / 1503 ms 超预算与 WPR 权限限制仍保留。完整验收和清理见<a href="review-2026-11-05.md">本轮记录</a>；下表为历史交付。</p>
   <div class="table-wrap">
   <table>
     <thead><tr><th>提交</th><th>运行</th><th>结果</th></tr></thead>
@@ -1173,7 +1174,7 @@ bash deploy/scripts/compose-up.sh                # 预检机密与端口后启�
       <tr><td><span class="tag info">P3</span></td><td>一项新版本未采用</td><td>google-java-format 1.37.0 在 Spotless 3.10.4 下失败（2026-10-09 与 2026-10-26 两次实测），Spotless 没有新版本</td><td>等 Spotless 支持后两者一起升级</td></tr>
       <tr><td><span class="tag info">P3</span></td><td>API 对慢请求没有时限</td><td>JDK HTTP 服务器默认不限制请求到达的时间：发不完请求头的连接一直占着套接字与虚拟线程，足够多时会耗尽文件描述符或内存。只设 <code>sun.net.httpserver.maxReqTime</code> 不够：请求带有处理器不读的请求体时，计时要到响应写完才停，长作业会被切断。端口只能从回环、Swarm 覆盖网络或隧道到达</td><td>在处理器里先读完（有上限的）请求体，再设置 <code>maxReqTime</code> 与 <code>jdk.httpserver.maxConnections</code>，并用一个故意发不完请求头的测试验证</td></tr>
       <tr><td><span class="tag info">P3</span></td><td>Temurin 固定版本要手动提高</td><td>镜像的 Java 不再随官方镜像更新：Temurin 发布新版本后，要改 <code>Dockerfile.temurin</code> 的版本与四个校验和并重新构建镜像，在此之前镜像停在旧版本；只固定了 amd64 与 arm64 的归档</td><td>公告工作流每周核对，出现新版本时失败；收到失败当天提高固定版本、重新构建并部署</td></tr>
-      <tr><td><span class="tag info">P3</span></td><td>桌面控制台的限度</td><td>只生成应用目录，没有安装包与代码签名；AOT 缓存按时间戳核对 jar，复制应用目录要保留时间戳；连接远程后台要靠 SSH 隧道或 TLS 网关；本轮 19 张 Linux CI 截图逐张复核，含五页浅深主题、最小与窄窗、触发与日志面板；历史主题切换测量最慢约 75 ms；本轮实际门禁与性能边界见 4.4</td><td>需要分发给别人时再做安装包与签名；远程主机沿用 API 的边界，经 SSH 隧道访问</td></tr>
+      <tr><td><span class="tag info">P3</span></td><td>桌面控制台的限度</td><td>只生成应用目录，没有安装包与代码签名；AOT 缓存按时间戳核对 jar，复制应用目录要保留时间戳；连接远程后台要靠 SSH 隧道或 TLS 网关；本轮 19 张 Linux CI 截图中查看 10 张，覆盖作业浅深主题、窄窗及各页代表状态、触发与日志面板；静态复核不替代原生交互；历史主题切换测量最慢约 75 ms；本轮实际门禁与性能边界见 4.4</td><td>需要分发给别人时再做安装包与签名；远程主机沿用 API 的边界，经 SSH 隧道访问</td></tr>
       <tr><td><span class="tag warn">P2</span></td><td>桌面启动稳定性未闭环</td><td>先前三组 20 次缓存启动达标，历史本机复测有 3 次超时、最大 2614 ms；共享 CI 历史上有 2074 / 1929 ms 早期尖峰，具体系统成因尚未确定。管理员 WPR 已定位并修复原生库打包遗漏，最新本机包用父进程单调时钟 20 次为 1000–1209 ms；Linux 旧算法的秒级基准偏差已复现并修正，但这不能解释 Windows 尖峰，尚未完整捕获并解释历史尖峰，不能覆盖此前失败。未清空 OS 文件缓存；无缓存训练不计作正常启动</td><td>保留严格 20 次预算门禁、实际 AOT 使用检查与完整样本；目标机器仍需按自身环境验收</td></tr>
       <tr><td><span class="tag info">P3</span></td><td>JavaFX 私有修补维护与 UIA 性能边界</td><td>已稳定复现并修复旧文本范围访问已释放处理器的空指针，活动对象异常仍传播。四项无障碍回归及原生交互通过；修正属性契约并限制日志每页 100 行后，完整日志性能门禁通过。原生初次显示仍有两次 50 ms 告警，未再见持续循环告警</td><td>升级 JavaFX 必须复核上游与工件哈希；上游修复后先跑原始模块回归再移除补丁。证据见 <a href="../desktop/javafx-patch.md">修补说明</a>与 L8</td></tr>
       <tr><td><span class="tag info">路线图</span></td><td>功能扩展</td><td>—</td><td>真实主机上的多节点演练与共享存储，可重复的两节点脚本；更多纯 JVM 作业与流式 CSV 解析；配置化作业目录；对象存储版 <code>StorageService</code>（S3A）；docker secrets；云端、ARM 与真实 SFTP 服务器验收；桌面控制台的安装包与经 SSH 隧道自动连接远程主机</td></tr>
