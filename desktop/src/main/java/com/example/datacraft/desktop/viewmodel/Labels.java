@@ -9,6 +9,20 @@ public final class Labels {
 
   private Labels() {}
 
+  /** Known job metrics use short labels; unknown backend keys remain visible as supplied. */
+  public static String metric(String key) {
+    return switch (key) {
+      case "rows" -> "行数";
+      case "columns" -> "列数";
+      case "bytes" -> "大小";
+      case "blankCells" -> "空白单元格";
+      case "blankRows" -> "空白行";
+      case "duplicateRows" -> "重复行";
+      case "sha256" -> "SHA-256";
+      default -> key;
+    };
+  }
+
   public static String tone(RunTone tone) {
     return switch (tone) {
       case SUCCESS -> "成功";

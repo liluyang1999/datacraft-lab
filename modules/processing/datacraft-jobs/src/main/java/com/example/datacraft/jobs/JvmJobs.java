@@ -14,7 +14,7 @@ public final class JvmJobs {
   private JvmJobs() {}
 
   public static List<DataJob> all() {
-    return List.of(new CsvProfileJob(), new FileChecksumJob());
+    return List.of(new CsvProfileJob(), new CsvQualityJob(), new FileChecksumJob());
   }
 
   /** Registers every JVM data job into the registry and returns it for chaining. */

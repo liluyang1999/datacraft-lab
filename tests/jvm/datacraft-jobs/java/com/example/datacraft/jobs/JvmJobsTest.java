@@ -31,9 +31,11 @@ class JvmJobsTest {
     JobRegistry returned = JvmJobs.register(registry);
 
     assertSame(registry, returned);
-    assertEquals(List.of("csv-profile", "echo", "file-checksum", "noop"), registry.jobNames());
     assertEquals(
-        List.of("csv-profile", "file-checksum"),
+        List.of("csv-profile", "csv-quality", "echo", "file-checksum", "noop"),
+        registry.jobNames());
+    assertEquals(
+        List.of("csv-profile", "csv-quality", "file-checksum"),
         JvmJobs.all().stream().map(DataJob::name).toList());
   }
 

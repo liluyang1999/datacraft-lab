@@ -16,6 +16,7 @@ class JobCatalogTest {
   void knowsEveryBuiltInJobAndDag() {
     for (String job :
         List.of(
+            "csv-quality",
             "csv-profile",
             "file-checksum",
             "csv-to-parquet",
@@ -34,7 +35,7 @@ class JobCatalogTest {
 
   @Test
   void knowsWhereEachJobRuns() {
-    for (String job : List.of("csv-profile", "file-checksum")) {
+    for (String job : List.of("csv-quality", "csv-profile", "file-checksum")) {
       assertEquals(JobCatalog.Kind.JVM, catalog.job(job).orElseThrow().kind(), job);
     }
     for (String job : List.of("csv-to-parquet", "row-count", "spark-version")) {
@@ -45,6 +46,16 @@ class JobCatalogTest {
     }
     assertEquals(JobCatalog.Kind.OTHER, catalog.dag("datacraft_spark_etl").orElseThrow().kind());
     assertEquals(JobCatalog.Kind.OTHER, JobCatalog.Kind.of("unheard-of"));
+  }
+
+  @Test
+  void qualityChecksExposeRequiredInputAndExplicitThresholds() {
+    var quality = catalog.job("csv-quality").orElseThrow();
+    assertEquals(List.of("input"), quality.missing(Map.of()));
+    assertEquals("1", quality.param("minRows").orElseThrow().defaultValue());
+    assertEquals("0", quality.param("maxBlankCells").orElseThrow().defaultValue());
+    assertEquals("0", quality.param("maxDuplicateRows").orElseThrow().defaultValue());
+    assertEquals("67108864", quality.param("maxBytes").orElseThrow().defaultValue());
   }
 
   @Test

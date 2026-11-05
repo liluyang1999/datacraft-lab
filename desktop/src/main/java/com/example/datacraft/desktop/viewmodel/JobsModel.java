@@ -96,10 +96,23 @@ public final class JobsModel implements Visibility {
 
   /** What the model remembers for each job while the app runs. */
   private static final class JobState {
-    Map<String, String> draft = new LinkedHashMap<>();
+    List<ParamDraft> draft;
     JobService.Handle handle;
     JobResult result;
     String error = "";
+  }
+
+  /** Preserve unfinished rows as rows: a map would silently collapse duplicate or empty keys. */
+  private record ParamDraft(Optional<JobCatalog.Param> spec, String key, String value) {
+    ParamRow row() {
+      return new ParamRow(spec, key, value);
+    }
+  }
+
+  private List<ParamDraft> draft() {
+    return params.stream()
+        .map(row -> new ParamDraft(row.spec(), row.key().get(), row.value().get()))
+        .toList();
   }
 
   private final JobService service;
@@ -199,7 +212,7 @@ public final class JobsModel implements Visibility {
     long selection = ++selectionGeneration;
     JobInfo previous = selected.get();
     if (previous != null) {
-      state(previous.name()).draft = values(true);
+      state(previous.name()).draft = draft();
     }
     selected.set(job);
     presetProblem.set("");
@@ -208,7 +221,10 @@ public final class JobsModel implements Visibility {
       return;
     }
     JobState state = state(job.name());
-    params.setAll(rows(job.name(), state.draft));
+    params.setAll(
+        state.draft == null
+            ? rows(job.name(), Map.of())
+            : state.draft.stream().map(ParamDraft::row).toList());
     showState(state);
     presets.clear();
     presetRepository
@@ -247,13 +263,13 @@ public final class JobsModel implements Visibility {
     return rows;
   }
 
-  /** The form's values; {@code keepBlank} keeps empty custom rows in a draft. */
-  private Map<String, String> values(boolean keepBlank) {
+  /** The valid form's request values; blank values use backend defaults. */
+  private Map<String, String> values() {
     Map<String, String> values = new LinkedHashMap<>();
     for (ParamRow row : params) {
       String key = row.key().get() == null ? "" : row.key().get().strip();
       String value = row.value().get() == null ? "" : row.value().get();
-      if (!key.isEmpty() && (keepBlank || !value.isBlank())) {
+      if (!key.isEmpty() && !value.isBlank()) {
         values.put(key, value);
       }
     }
@@ -266,9 +282,29 @@ public final class JobsModel implements Visibility {
       missing.set("");
       return;
     }
+    String problem = parameterProblem();
+    if (!problem.isEmpty()) {
+      missing.set(problem);
+      return;
+    }
     List<String> keys =
-        catalog.job(job.name()).map(entry -> entry.missing(values(false))).orElse(List.of());
+        catalog.job(job.name()).map(entry -> entry.missing(values())).orElse(List.of());
     missing.set(keys.isEmpty() ? "" : "缺少必填参数：" + String.join("、", keys));
+  }
+
+  private String parameterProblem() {
+    java.util.Set<String> keys = new java.util.HashSet<>();
+    for (ParamRow row : params) {
+      String key = row.key().get() == null ? "" : row.key().get().strip();
+      String value = row.value().get() == null ? "" : row.value().get();
+      if (key.isEmpty() && !value.isBlank()) {
+        return "请填写参数名称";
+      }
+      if (!key.isEmpty() && !keys.add(key)) {
+        return "参数名称重复：" + key;
+      }
+    }
+    return "";
   }
 
   public void addParam() {
@@ -288,9 +324,9 @@ public final class JobsModel implements Visibility {
       return;
     }
     JobState state = state(job.name());
-    state.draft = values(true);
+    state.draft = draft();
     state.error = "";
-    state.handle = service.run(job.name(), values(false));
+    state.handle = service.run(job.name(), values());
     showState(state);
     JobService.Handle handle = state.handle;
     handle
@@ -334,7 +370,10 @@ public final class JobsModel implements Visibility {
   }
 
   public void applyPreset(Preset preset) {
-    params.setAll(rows(preset.jobName(), preset.params()));
+    JobInfo job = selected.get();
+    if (job != null && job.name().equals(preset.jobName())) {
+      params.setAll(rows(job.name(), preset.params()));
+    }
   }
 
   public void savePreset(String name) {
@@ -342,7 +381,12 @@ public final class JobsModel implements Visibility {
     if (job == null || name == null || name.isBlank()) {
       return;
     }
-    Preset preset = new Preset(job.name(), name.strip(), values(false));
+    String problem = parameterProblem();
+    if (!problem.isEmpty()) {
+      presetProblem.set(problem);
+      return;
+    }
+    Preset preset = new Preset(job.name(), name.strip(), values());
     presetProblem.set("");
     reloadPresetsAfter(job.name(), presetRepository.save(preset), "预设没有保存");
   }

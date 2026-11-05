@@ -8,7 +8,7 @@ whether it is started from the command line, through the JSON HTTP API, or by an
 3.3.2 DAG, because the DAGs launch the same CLI jar.
 
 - **Processing**: Apache Spark 4.2.0 jobs (`spark-version`, `csv-to-parquet`, `row-count`) for heavy
-  work, launched with `spark-submit`, and plain-JVM jobs (`csv-profile`, `file-checksum`) for small
+  work, launched with `spark-submit`, and plain-JVM jobs (`csv-profile`, `csv-quality`, `file-checksum`) for small
   files, which need no Spark. CSV input is read in the encoding it names and fails when its bytes
   are not valid in it.
 - **One artifact**: the shaded `datacraft-cli.jar` runs jobs and also serves the HTTP API
@@ -69,7 +69,7 @@ Build a single module by its artifactId, for example `./mvnw -pl :datacraft-jobs
 | `modules/core/datacraft-config` | `datacraft-config` | `com.example.datacraft.config` | UTF-8 `java.util.Properties` loading (BOM optional), typed access, prefix slicing | common |
 | `modules/io/datacraft-io` | `datacraft-io` | `com.example.datacraft.io` | Root-bound local storage, file helpers, a small CSV reader/writer, SFTP transfers | common |
 | `modules/core/datacraft-engine` | `datacraft-engine` | `com.example.datacraft.engine` | The `DataJob` contract, job registry, execution engine, result model, shared parameter keys, built-in `echo` and `noop` | common |
-| `modules/processing/datacraft-jobs` | `datacraft-jobs` | `com.example.datacraft.jobs` | Plain-JVM jobs for small files: `csv-profile`, `file-checksum` | common, engine, io |
+| `modules/processing/datacraft-jobs` | `datacraft-jobs` | `com.example.datacraft.jobs` | Plain-JVM jobs for small files: `csv-profile`, `csv-quality`, `file-checksum` | common, engine, io |
 | `modules/processing/datacraft-spark` | `datacraft-spark` | `com.example.datacraft.spark` | Spark jobs `spark-version`, `csv-to-parquet`, `row-count`, with session handling and path guards (Scala; Spark is `provided`) | common, engine |
 | `modules/interfaces/datacraft-api` | `datacraft-api` | `com.example.datacraft.api` | JSON HTTP API on the JDK HTTP server | common, engine |
 | `modules/interfaces/datacraft-cli` | `datacraft-cli` | `com.example.datacraft.cli` | Process entry point (Scala): control commands and job dispatch; builds the shaded jar | any module (composition root) |
@@ -93,6 +93,7 @@ java -jar "$JAR" --command list-jobs
 java -jar "$JAR" --command echo --param message=hello
 printf 'id,note\n1,"a, b"\n2,c\n' > sample.csv
 java -jar "$JAR" --command csv-profile --param input=sample.csv --param expectedRows=2 --json
+java -jar "$JAR" --command csv-quality --param input=sample.csv --json
 ```
 
 To build only the jar, without tests, run `make package`, `bash deploy/scripts/build-jar.sh`, or
@@ -122,6 +123,7 @@ Swarm, is in Chinese: [guides/deployment.md](guides/deployment.md).
 | [design/build-and-quality.md](../design/build-and-quality.md) | English | Reactor, versions, compiler and formatting settings, Enforcer rules, tests, packaging, CI gates, zero-warning policy |
 | [design/decisions.md](../design/decisions.md) | English | Architecture decision log, including the cloud platform choice |
 | [guides/usage.md](guides/usage.md) | English | Running jobs: CLI options, exit codes, `spark-submit`, `serve-api`, HTTP API |
+| [guides/csv-quality.md](guides/csv-quality.md) | Chinese | Checking small CSV files before conversion: blank values, duplicate rows, thresholds, results and desktop workflow |
 | [guides/development.md](guides/development.md) | English | Prerequisites, build and test commands, test layout, CI and the `cicd/` scripts |
 | [guides/airflow.md](guides/airflow.md) | English | DAGs, Airflow configuration, SFTP connection, Airflow tests |
 | [guides/deployment.md](guides/deployment.md) | Chinese | Compose and Swarm deployment tutorial and operations |

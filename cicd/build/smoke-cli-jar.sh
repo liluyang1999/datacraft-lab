@@ -19,10 +19,17 @@ java -jar "$jar" --command noop --lifecycle prod
 sample="$work/sample.csv"
 printf 'id,note\n1,"a, b"\n2,c\n' > "$sample"
 java -jar "$jar" --command csv-profile --param input="$sample" --param expectedRows=2 --json
+java -jar "$jar" --command csv-quality --param input="$sample" --param minRows=2 --json
 java -jar "$jar" --command file-checksum --param input="$sample" \
   --param expectedSha256="$(sha256sum "$sample" | cut -d' ' -f1)" --json
 
 rc=0
 java -jar "$jar" --command csv-profile --param input="$sample" --param expectedRows=3 || rc=$?
 [ "$rc" -eq 1 ] || fail "csv-profile row gate exited $rc, expected 1"
+printf 'id,note\n1,\n1,\n' > "$work/quality.csv"
+rc=0
+java -jar "$jar" --command csv-quality --param input="$work/quality.csv" --json || rc=$?
+[ "$rc" -eq 1 ] || fail "csv-quality gate exited $rc, expected 1"
+java -jar "$jar" --command csv-quality --param input="$work/quality.csv" \
+  --param maxBlankCells=2 --param maxDuplicateRows=1 --json
 echo "the CLI jar runs its plain-JVM jobs and enforces their quality gates"

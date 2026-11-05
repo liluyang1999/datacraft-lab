@@ -11,8 +11,8 @@ such as the `datacraft/jvm` image, they return FAILED with "Spark runtime is not
 (missing <class>); launch Spark jobs with spark-submit", where `<class>` is, for example,
 `org/apache/spark/sql/SparkSession`. That hint appears only when Spark itself cannot be loaded:
 under `spark-submit`, a missing class such as a file-system connector built for another Hadoop keeps
-its original `NoClassDefFoundError`. The plain-JVM jobs `csv-profile` and `file-checksum` need no
-Spark: `csv-profile` profiles small CSV files in memory and `file-checksum` streams a file of any
+its original `NoClassDefFoundError`. The plain-JVM jobs `csv-profile`, `csv-quality` and `file-checksum` need no
+Spark: the CSV jobs inspect small files in memory and `file-checksum` streams a file of any
 size. Managed Spark jobs in one JVM serialize session ownership, so one request cannot stop another
 request's context. An externally owned active session is rejected ("requirement failed: A managed
 Spark job requires exclusive session ownership") and left running.
@@ -204,7 +204,7 @@ local CLI use.
   Otherwise the job fails with "requirement failed: input must be inside the configured data root"
   (or `output`). The check covers the input path itself, not symbolic links that Spark follows
   inside an input directory.
-- `csv-profile` and `file-checksum`: see [Plain-JVM small-file jobs](#plain-jvm-small-file-jobs).
+- `csv-profile`, `csv-quality` and `file-checksum`: see [Plain-JVM small-file jobs](#plain-jvm-small-file-jobs).
 - `row-count`, `spark-version`, `echo` and `noop` are not confined.
 
 Overwrite, the default mode, recursively deletes the target before writing, so anyone who can
@@ -237,11 +237,11 @@ root.
 
 ## Plain-JVM small-file jobs
 
-`csv-profile` and `file-checksum` (module `datacraft-jobs`) run with plain
+`csv-profile`, `csv-quality` and `file-checksum` (module `datacraft-jobs`) run with plain
 `java -jar datacraft-cli.jar`, in the `datacraft/jvm` image, and through
 `POST /jobs/<name>/runs?input=...`.
 
-Rules for both jobs:
+Rules for these jobs:
 
 - `input` is required and trimmed; it is a local file path, not a URI. A missing or blank value
   fails with "Missing required parameter: input", a missing file with "Input file does not exist:
@@ -251,9 +251,9 @@ Rules for both jobs:
 - Parameter names are case-sensitive: a case variant of a documented name fails, for example
   "Unknown parameter expectedrows; did you mean expectedRows?", and so does the name with
   whitespace around it. Other unknown keys are ignored.
-  Messages for malformed or out-of-range `header`, `delimiter`, `expectedRows`, `maxBytes` and
-  `expectedSha256` values name the key but never echo the rejected value.
-- A quality-gate mismatch (`expectedRows`, `expectedSha256`) returns FAILED and keeps the metrics.
+  Messages for malformed or out-of-range `header`, `delimiter`, `expectedRows`, `maxBytes`,
+  `expectedSha256`, `minRows`, `maxBlankCells` and `maxDuplicateRows` values name the key but never echo the rejected value.
+- A quality-gate mismatch (`expectedRows`, `expectedSha256` or a `csv-quality` threshold) returns FAILED and keeps the metrics.
 - When `DATACRAFT_DATA_ROOT` is set, it must be an absolute path to an existing directory; otherwise
   the run fails with "DATACRAFT_DATA_ROOT must be an absolute path", "DATACRAFT_DATA_ROOT must name
   an existing directory" or "DATACRAFT_DATA_ROOT is not a valid path", and the directory is never
@@ -267,7 +267,7 @@ Rules for both jobs:
   "Storage path must not traverse symbolic links: <path>", and a junction or mount point below it
   whose target lies outside the root fails with "Storage path must not leave the root through a
   link or junction: <path>" (see [IO boundaries](#io-boundaries)).
-- Source files must not change while a job reads them. `csv-profile` computes every metric from one
+- Source files must not change while a job reads them. Each CSV job computes every metric from one
   read; `file-checksum` reads the size and then streams the hash.
 
 `csv-profile` profiles a small UTF-8 CSV file in memory:
@@ -314,6 +314,38 @@ bytes) and `durationMillis`. The success message is "<rows> rows, <columns> colu
 - The budget is for one run, so a JVM loads one file at a time. Concurrent runs, which the HTTP API
   allows, wait their turn instead of each taking a quarter of the heap; a run interrupted while it
   waits fails with "Interrupted while waiting for another csv-profile run to finish.".
+
+`csv-quality` checks a small CSV against explicit quality thresholds. It shares `csv-profile`'s
+`input`, `header`, `delimiter` and `maxBytes` defaults and validation, strict UTF-8 decoding,
+CSV record-shape rules, data-root confinement and single-snapshot metrics. It adds:
+
+| Parameter | Default | Rule |
+| --- | --- | --- |
+| `minRows` | `1` | 64-bit integer >= 0; data-row count must be at least this value |
+| `maxBlankCells` | `0` | 64-bit integer >= 0; blank-cell count must not exceed this value |
+| `maxDuplicateRows` | `0` | 64-bit integer >= 0; duplicate-row count must not exceed this value |
+
+Metrics are `rows`, `columns`, `blankCells`, `blankRows`, `duplicateRows`, `bytes`, `sha256` and
+the engine's `durationMillis`. The header is excluded from every quality count. A blank cell is
+one for which Java `String.isBlank()` is true; a blank row has only blank cells. Duplicate rows
+compare every parsed field exactly, without trimming or case folding. Only appearances after
+the first are counted, so three identical data records contribute two duplicates. Quoting is
+CSV syntax: `a` and `"a"` are the same parsed value. No field values are returned in the metrics.
+
+All violated thresholds are reported together in parameter order, while retaining the complete
+metrics: "CSV quality failed: rows=<n> is below minRows=<m>; blankCells=<n> exceeds maxBlankCells=<m>;
+duplicateRows=<n> exceeds maxDuplicateRows=<m>" (only violated clauses are present). Success is
+"CSV quality passed: <n> rows, <b> blank cells, <d> duplicate rows". Empty input fails the default
+`minRows=1`; `minRows=0` permits it. Invalid encoding, malformed CSV or an unreadable file fails
+before a complete quality report exists. A valid report that exceeds a threshold follows the
+ordinary FAILED/CLI exit 1/HTTP 500 contract and does not write or alter the input.
+
+The duplicate index adds a conservative 96-byte budget per potential record to the shared CSV
+heap estimate, still bounded by one quarter of the JVM's maximum heap. Both CSV jobs hold the
+same JVM-wide lock through reading and analysis, so profile and quality requests cannot each
+claim that budget simultaneously. This is a small-file quality gate, not a distributed validator,
+schema checker or row-repair operation. A walkthrough is in
+[CSV quality checks](../docs/guides/csv-quality.md).
 
 `file-checksum` streams any regular file, text or binary and of any size, through SHA-256 with a
 bounded buffer. Parameters: `input` and optional `expectedSha256` (64 hexadecimal characters in any
@@ -511,7 +543,7 @@ in CI's `dags` job (see [CI gates](build-and-quality.md#ci-gates)).
 | Spark job parameters, runtime hint and case variants | [`SparkJobsSpec`](../tests/jvm/datacraft-spark/scala/com/example/datacraft/spark/SparkJobsSpec.scala), [`SparkRuntimeConfigSpec`](../tests/jvm/datacraft-spark/scala/com/example/datacraft/spark/SparkRuntimeConfigSpec.scala), [`CsvReadOptionsSpec`](../tests/jvm/datacraft-spark/scala/com/example/datacraft/spark/CsvReadOptionsSpec.scala) |
 | Conversion, write modes and `row-count` on a real SparkSession | [`SparkPipelineSpec`](../tests/jvm/datacraft-spark/scala/com/example/datacraft/spark/SparkPipelineSpec.scala) |
 | Overlap guard and Spark data root | [`PathGuardsSpec`](../tests/jvm/datacraft-spark/scala/com/example/datacraft/spark/PathGuardsSpec.scala) |
-| Plain-JVM jobs and their data root | [`CsvProfileJobTest`](../tests/jvm/datacraft-jobs/java/com/example/datacraft/jobs/CsvProfileJobTest.java), [`FileChecksumJobTest`](../tests/jvm/datacraft-jobs/java/com/example/datacraft/jobs/FileChecksumJobTest.java), [`DataRootConfinementTest`](../tests/jvm/datacraft-jobs/java/com/example/datacraft/jobs/DataRootConfinementTest.java), [`JvmJobsTest`](../tests/jvm/datacraft-jobs/java/com/example/datacraft/jobs/JvmJobsTest.java) |
+| Plain-JVM jobs and their data root | [`CsvProfileJobTest`](../tests/jvm/datacraft-jobs/java/com/example/datacraft/jobs/CsvProfileJobTest.java), [`CsvQualityJobTest`](../tests/jvm/datacraft-jobs/java/com/example/datacraft/jobs/CsvQualityJobTest.java), [`FileChecksumJobTest`](../tests/jvm/datacraft-jobs/java/com/example/datacraft/jobs/FileChecksumJobTest.java), [`DataRootConfinementTest`](../tests/jvm/datacraft-jobs/java/com/example/datacraft/jobs/DataRootConfinementTest.java), [`JvmJobsTest`](../tests/jvm/datacraft-jobs/java/com/example/datacraft/jobs/JvmJobsTest.java) |
 | `CsvFiles` | [`CsvFilesTest`](../tests/jvm/datacraft-io/java/com/example/datacraft/io/CsvFilesTest.java) |
 | IO boundaries | [`StorageServiceTest`](../tests/jvm/datacraft-io/java/com/example/datacraft/io/StorageServiceTest.java), [`LocalFilesTest`](../tests/jvm/datacraft-io/java/com/example/datacraft/io/LocalFilesTest.java) |
 | SFTP | [`SftpClientTest`](../tests/jvm/datacraft-io/java/com/example/datacraft/io/SftpClientTest.java) (embedded SFTP server), [`RemoteFileTransferTest`](../tests/jvm/datacraft-io/java/com/example/datacraft/io/RemoteFileTransferTest.java), [`SftpConfigTest`](../tests/jvm/datacraft-io/java/com/example/datacraft/io/SftpConfigTest.java) |

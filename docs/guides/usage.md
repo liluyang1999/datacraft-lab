@@ -35,6 +35,7 @@ description, sorted by name.
 | Job | Runs on | `list-jobs` description | Parameters |
 | --- | --- | --- | --- |
 | `csv-profile` | plain JVM | Profiles a small UTF-8 CSV file in the JVM: rows, columns, bytes and SHA-256. | `input`, `header`, `delimiter`, `expectedRows`, `maxBytes` |
+| `csv-quality` | plain JVM | Checks a small UTF-8 CSV for minimum rows, blank cells and duplicate rows. | `input`, `header`, `delimiter`, `minRows`, `maxBlankCells`, `maxDuplicateRows`, `maxBytes` |
 | `csv-to-parquet` | Spark | Converts a CSV dataset to Parquet. | `input`, `output`, `mode`, `header`, `delimiter`, `schema`, `inferSchema`, `multiLine`, `escape`, `encoding` |
 | `echo` | built-in | Returns the message parameter. | `message` |
 | `file-checksum` | plain JVM | Computes the SHA-256 checksum and size of a file in the JVM. | `input`, `expectedSha256` |
@@ -47,6 +48,16 @@ The Spark jobs also read the runtime settings `spark.master`, `spark.appName`,
 metrics and messages are specified in
 [Spark job parameters](../../design/data-contracts.md#spark-job-parameters) and
 [Plain-JVM small-file jobs](../../design/data-contracts.md#plain-jvm-small-file-jobs).
+
+For a pre-conversion quality check, run `csv-quality` on the sample file:
+
+```bash
+java -jar "$JAR" --command csv-quality --param input=sample.csv --param minRows=2 --json
+```
+
+By default it requires at least one data row and allows no blank cells or duplicate rows. A
+threshold failure retains all computed quality metrics, exits 1 and leaves the input unchanged.
+See the [CSV quality walkthrough](csv-quality.md) for counting rules, tolerances and desktop use.
 
 ## Options
 
@@ -230,7 +241,7 @@ run do not count. A run requested while the server is shutting down gets the sam
 
 `DATACRAFT_DATA_ROOT` confines job paths for the CLI and the API alike:
 
-- The `input` of `csv-profile` and `file-checksum`, and the `input` and `output` of
+- The `input` of `csv-profile`, `csv-quality` and `file-checksum`, and the `input` and `output` of
   `csv-to-parquet`, must lie strictly inside the root. `row-count`, `spark-version`, `echo` and
   `noop` are not confined.
 - The value is trimmed and read when the process builds its job catalog, at startup. Unset or blank

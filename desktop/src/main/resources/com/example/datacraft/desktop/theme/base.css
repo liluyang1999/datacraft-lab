@@ -584,6 +584,10 @@
 }
 
 /* job list: a glyph and a name per row; the summary is the tooltip */
+.job-filters {
+    -fx-padding: 12;
+}
+
 .job-list {
     -fx-fixed-cell-size: 44px;
 }

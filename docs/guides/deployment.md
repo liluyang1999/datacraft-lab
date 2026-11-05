@@ -254,7 +254,7 @@ Cloudflare Tunnel 与 Access 或其他认证网关；Tunnel 要有可用出站�
 `DATACRAFT_API_PORT`（默认 8088，仅 Compose；Swarm 不发布 JVM API）。
 
 JVM API 容器以非 root 用户（uid 10001）运行，jar 对它只读。它把 `datacraft-data` 卷只读挂载在
-`/opt/datacraft/data`，并把 `DATACRAFT_DATA_ROOT` 设为该目录，`csv-profile` 与 `file-checksum` 只能读取
+`/opt/datacraft/data`，并把 `DATACRAFT_DATA_ROOT` 设为该目录，`csv-profile`、`csv-quality` 与 `file-checksum` 只能读取
 该目录以下的文件。每个 `/jobs` 请求都要带上 `.env` 中的 `DATACRAFT_API_TOKEN`，否则得到 401，例如：
 
 ```bash

@@ -307,11 +307,11 @@ cicd/
 
 | Job | What it runs |
 | --- | --- |
-| `build` | `cicd/build/check-maven-wrapper.sh` (the wrapper refuses a Maven download with the wrong checksum); `./mvnw -B -ntp verify` on JDK 25; `cicd/build/check_test_counts.py` (test-count floors); `cicd/build/check-spark-suite.sh` (`SparkPipelineSpec` ran with no canceled tests); `cicd/build/smoke-cli-jar.sh` (`list-jobs`, `echo`, `noop`, `csv-profile`, `file-checksum`, and a failing row gate that must exit `1`); `cicd/build/check-jar-contents.sh` (Multi-Release manifest, no `module-info.class`, JSch's modern algorithms through `cicd/build/JschAlgorithmsProbe.java`, the Jackson version in `jackson.version`); `cicd/build/check-cli-exit-codes.sh` (exit codes `1` and `2`); `cicd/build/check-image-build.sh` (the Maven command of `Dockerfile.build`, run in a copy of the Docker build context that `cicd/build/docker_context.py` computes from `.dockerignore`). It then shares the verified jar with `dags` |
+| `build` | `cicd/build/check-maven-wrapper.sh` (the wrapper refuses a Maven download with the wrong checksum); `./mvnw -B -ntp verify` on JDK 25; `cicd/build/check_test_counts.py` (test-count floors); `cicd/build/check-spark-suite.sh` (`SparkPipelineSpec` ran with no canceled tests); `cicd/build/smoke-cli-jar.sh` (`list-jobs`, `echo`, `noop`, `csv-profile`, `csv-quality`, `file-checksum`, failing row/quality gates that must exit `1`, and explicit quality tolerances that must pass on the same input); `cicd/build/check-jar-contents.sh` (Multi-Release manifest, no `module-info.class`, JSch's modern algorithms through `cicd/build/JschAlgorithmsProbe.java`, the Jackson version in `jackson.version`); `cicd/build/check-cli-exit-codes.sh` (exit codes `1` and `2`); `cicd/build/check-image-build.sh` (the Maven command of `Dockerfile.build`, run in a copy of the Docker build context that `cicd/build/docker_context.py` computes from `.dockerignore`). It then shares the verified jar with `dags` |
 | `dags` | After `build`: Python 3.13 and JDK 25; `cicd/airflow/install-airflow.sh` (Airflow 3.3.2 and its providers under the official constraints for the running Python, then `pyspark==4.2.0`, then the fixed releases of `orchestration/airflow/security-overrides.txt`); `cicd/airflow/check_security_floor.py` (Airflow 3.3.2, FAB provider 3.9.0 and each override release); `tests/orchestration`; `tests/smoke/airflow_runtime_smoke.py` with the verified jar |
 | `scripts` | `cicd/lint/check-actions-pinned.sh` (every `uses:` is `owner/repo@<full commit SHA> # vX.Y.Z` or a local action, on one line, and none appears in a comment); `cicd/lint/install-shellcheck.sh` (ShellCheck 0.11.0); `cicd/lint/check-shell-scripts.sh` (`bash -n` and ShellCheck over every shell script git knows; every finding fails, sourced files are followed); the `tests/deploy`, `tests/ci` and `tests/docs` suites on Python 3.13; `node --test tests/docs/cloud-costs.test.cjs` on Node.js 24; `npx --yes pyright@1.1.414 --warnings` |
 | `compose` | `cicd/stacks/check-stack-files.sh`: `docker compose config` and `docker stack config` with test-only secrets, and that each missing secret, the API token and for the stack the Redis password included, is rejected |
-| `desktop` | Windows 2025 and Ubuntu 24.04 matrix, JDK 25 (Linux uses D-Bus and Xvfb): `./mvnw -B -ntp -Pdesktop -pl :datacraft-desktop -am verify` runs parent formatting plus desktop unit, client, store, UI and accessibility lifecycle tests. `cicd/build/check_test_counts.py --project desktop` requires Windows 116 / Linux 114 tests. `cicd/desktop/package_desktop.py` verifies the pinned JavaFX disposal patch, builds the jlink/jpackage image, trains all views/themes and checks 20 fresh/reused starts: verified AOT, no runtime diagnostics, each at most 1500 ms. UI snapshots and all startup samples are platform-specific artifacts |
+| `desktop` | Windows 2025 and Ubuntu 24.04 matrix, JDK 25 (Linux uses D-Bus and Xvfb): `./mvnw -B -ntp -Pdesktop -pl :datacraft-desktop -am verify` runs parent formatting plus desktop unit, client, store, UI and accessibility lifecycle tests. `cicd/build/check_test_counts.py --project desktop` requires Windows 141 / Linux 138 tests. `cicd/desktop/package_desktop.py` verifies the pinned JavaFX disposal patch, builds the jlink/jpackage image, trains all views/themes and checks 20 fresh/reused starts: verified AOT, no runtime diagnostics, each at most 1500 ms. UI snapshots and all startup samples are platform-specific artifacts |
 | `containers` | After `build`, `scripts` and `compose`: `cicd/images/smoke-images.sh`, then `cicd/images/smoke-compose.sh`, then `cicd/images/smoke-swarm.sh` |
 
 The `cicd/build` scripts run after `./mvnw verify` on Linux, WSL or Git Bash (they use GNU tools
@@ -361,13 +361,13 @@ pom's `<modules>`.
 | `datacraft-config` | 14 | 14 |
 | `datacraft-io` | 64 | 66 |
 | `datacraft-engine` | 34 | 34 |
-| `datacraft-jobs` | 72 | 70 |
+| `datacraft-jobs` | 91 | 89 |
 | `datacraft-spark` | 59 | 49 |
 | `datacraft-api` | 31 | 31 |
-| `datacraft-cli` | 31 | 31 |
+| `datacraft-cli` | 32 | 32 |
 
 `--project desktop` checks the desktop console instead (`desktop/target/surefire-reports`): the
-floor is 130 on Linux and 133 on Windows, which also runs three real native accessibility tests.
+floor is 138 on Linux and 141 on Windows, which also runs three real native accessibility tests.
 Each runs its own `VaultPlatformTest` case; `verify` excludes `e2e`. The desktop matrix checks the
 floor after `verify`.
 

@@ -298,6 +298,7 @@ class RunnerSpec extends AnyFunSuite with TimeLimits {
     assert(
       names == List(
         "csv-profile",
+        "csv-quality",
         "csv-to-parquet",
         "echo",
         "file-checksum",
@@ -306,6 +307,33 @@ class RunnerSpec extends AnyFunSuite with TimeLimits {
         "spark-version"
       )
     )
+  }
+
+  test("csv-quality returns failed metrics and honors explicit allowances through the CLI") {
+    withTempDir { dir =>
+      val input = Files.writeString(dir.resolve("quality.csv"), "id,name\n1,\n1,\n")
+      val args  = CommandLineArgs(
+        command = "csv-quality",
+        jsonOutput = true,
+        parameters = Map("input" -> input.toString)
+      )
+      val (failed, output, _) = captured(Runner.run(args))
+      val json                = strictUtf8(output)
+      assert(failed == 1)
+      assert(json.contains("\"status\":\"FAILED\""), json)
+      assert(json.contains("\"blankCells\":\"2\""), json)
+      assert(json.contains("\"duplicateRows\":\"1\""), json)
+      val (passed, accepted, _) = captured(
+        Runner.run(
+          args.copy(parameters =
+            args.parameters ++
+              Map("maxBlankCells" -> "2", "maxDuplicateRows" -> "1")
+          )
+        )
+      )
+      assert(passed == 0)
+      assert(strictUtf8(accepted).contains("\"status\":\"SUCCEEDED\""))
+    }
   }
 
   test("production job names are dispatchable by the CLI, the API and Airflow") {

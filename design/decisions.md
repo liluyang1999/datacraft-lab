@@ -81,6 +81,13 @@ outside; the root is never created. `csv-profile` loads a file only up to `maxBy
 64 MiB) and within a quarter of the maximum heap, and otherwise points to the Spark `row-count`
 job.
 
+**2026-11-05 extension.** `csv-quality` is registered through the same module and entry points.
+It shares bounded UTF-8 snapshot loading, shape validation and a JVM-wide memory lock with
+`csv-profile`; exact duplicate-row indexing has an additional memory allowance within the
+existing heap budget. Quality gates return aggregate metrics on failure without exposing cell
+contents or writing to the source. The original confinement decision and existing Airflow DAGs
+are unchanged; see the [quality contract](data-contracts.md#plain-jvm-small-file-jobs).
+
 **Consequences.**
 
 - Both jobs run under plain `java -jar`, in the `datacraft/jvm` image and through the API.

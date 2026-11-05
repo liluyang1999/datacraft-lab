@@ -60,10 +60,14 @@
 ## 已知参数目录
 
 两个后台都不公布参数的定义。应用内置一份目录 `job-catalog.json`，内容取自数据契约与 DAG 代码：
-每个作业（`csv-profile`、`file-checksum`、`csv-to-parquet`、`row-count`、`spark-version`、`echo`、`noop`）与
+每个作业（`csv-profile`、`csv-quality`、`file-checksum`、`csv-to-parquet`、`row-count`、`spark-version`、`echo`、`noop`）与
 每个 DAG（`datacraft_engine_jobs`、`datacraft_spark_etl`、`datacraft_sftp_ingest`）的参数名、说明、
 是否必填与默认值。目录只用于提示与表单，不限制输入：未知的作业与 DAG 仍可用自定义键值或 JSON 运行。
 后台的作业目录由 `GET /jobs` 实时取得，目录里没有的作业照常显示。
+
+`csv-quality` 沿用同一个运行接口，质量门槛不满足时仍按 FAILED / HTTP 500 返回带指标的结果；
+客户端应显示空白与重复计数，而不是将其简化成“服务无法连接”。桌面的搜索和运行位置筛选只作用于
+已经读取的目录，不增加网络请求，也不把应用内置的参数目录当作服务端当前支持的作业列表。
 
 ## 轮询
 

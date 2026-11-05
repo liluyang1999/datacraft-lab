@@ -77,6 +77,56 @@ class JobsModelTest {
   }
 
   @Test
+  void duplicateKeysCannotRunOrSaveAndSurviveSwitchingJobs() {
+    select("echo");
+    model.params().getFirst().value().set("原始内容");
+    model.addParam();
+    model.params().getLast().key().set(" message ");
+    model.params().getLast().value().set("冲突内容");
+    assertFalse(model.canRun().get());
+    assertEquals("参数名称重复：message", model.missing().get());
+    model.run();
+    assertFalse(model.running().get());
+    model.savePreset("invalid");
+    assertEquals("参数名称重复：message", model.presetProblem().get());
+    assertTrue(context.presets().list("echo").join().isEmpty());
+    select("noop");
+    select("echo");
+    assertEquals(2, model.params().size());
+    assertEquals("原始内容", model.params().getFirst().value().get());
+    assertEquals(" message ", model.params().getLast().key().get());
+    assertEquals("冲突内容", model.params().getLast().value().get());
+    model.removeParam(model.params().getLast());
+    assertTrue(model.canRun().get());
+  }
+
+  @Test
+  void unnamedValuesAreKeptAsDraftsAndCannotBeSilentlyOmitted() {
+    select("echo");
+    model.addParam();
+    model.params().getLast().value().set("尚未命名");
+    assertFalse(model.canRun().get());
+    assertEquals("请填写参数名称", model.missing().get());
+    select("noop");
+    select("echo");
+    assertEquals("尚未命名", model.params().getLast().value().get());
+    model.params().getLast().key().set("custom");
+    assertTrue(model.canRun().get());
+  }
+
+  @Test
+  void aPresetForAnotherJobCannotReplaceTheCurrentForm() {
+    select("echo");
+    model.params().getFirst().value().set("保留草稿");
+    model.applyPreset(
+        new com.example.datacraft.desktop.store.PresetRepository.Preset(
+            "csv-profile", "other", Map.of("input", "other.csv")));
+    assertEquals(1, model.params().size());
+    assertEquals("message", model.params().getFirst().key().get());
+    assertEquals("保留草稿", model.params().getFirst().value().get());
+  }
+
+  @Test
   void switchingToAProfileWhoseEngineIsDownLeavesNothingOfThePreviousOne() throws Exception {
     select("csv-profile");
     model.params().getFirst().value().set("/opt/datacraft/data/input.csv");

@@ -174,11 +174,13 @@ class DataRootConfinementTest {
   @Test
   void rejectsANullDataRootOptional() {
     assertThrows(IllegalArgumentException.class, () -> new CsvProfileJob(null));
+    assertThrows(IllegalArgumentException.class, () -> new CsvQualityJob(null));
     assertThrows(IllegalArgumentException.class, () -> new FileChecksumJob((Optional<Path>) null));
   }
 
   private static List<DataJob> jobs(Optional<Path> dataRoot) {
-    return List.of(new CsvProfileJob(dataRoot), new FileChecksumJob(dataRoot));
+    return List.of(
+        new CsvProfileJob(dataRoot), new CsvQualityJob(dataRoot), new FileChecksumJob(dataRoot));
   }
 
   private static JobExecutionResult run(DataJob job, String input) {

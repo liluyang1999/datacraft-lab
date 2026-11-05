@@ -16,17 +16,23 @@ import com.example.datacraft.desktop.ui.component.RunBars;
 import com.example.datacraft.desktop.ui.component.RunMark;
 import com.example.datacraft.desktop.ui.shell.Dialogs;
 import com.example.datacraft.desktop.util.Formats;
+import com.example.datacraft.desktop.util.Lists;
 import com.example.datacraft.desktop.viewmodel.JobsModel;
 import com.example.datacraft.desktop.viewmodel.Labels;
 import java.time.Clock;
 import java.time.Duration;
+import java.util.Locale;
 import java.util.Map;
 import javafx.animation.Animation;
 import javafx.animation.KeyFrame;
 import javafx.animation.Timeline;
 import javafx.beans.binding.Bindings;
+import javafx.collections.FXCollections;
+import javafx.collections.ListChangeListener;
+import javafx.collections.ObservableList;
 import javafx.scene.Node;
 import javafx.scene.control.Button;
+import javafx.scene.control.ComboBox;
 import javafx.scene.control.Label;
 import javafx.scene.control.ListCell;
 import javafx.scene.control.ListView;
@@ -37,6 +43,7 @@ import javafx.scene.control.OverrunStyle;
 import javafx.scene.control.ScrollPane;
 import javafx.scene.control.SeparatorMenuItem;
 import javafx.scene.control.SplitPane;
+import javafx.scene.control.TextField;
 import javafx.scene.control.Tooltip;
 import javafx.scene.input.Clipboard;
 import javafx.scene.input.ClipboardContent;
@@ -60,14 +67,41 @@ public final class JobsView implements View {
   private final Timeline elapsedTicker;
   private final BusyRing busy = new BusyRing(16);
   private final ListView<JobInfo> list;
+  private final ObservableList<JobInfo> visibleJobs = FXCollections.observableArrayList();
+  private final TextField search = new TextField();
+  private final ComboBox<KindFilter> kindFilter = new ComboBox<>();
+  private final Label filteredSelection = Controls.label("当前作业不在筛选结果中", "caption");
+  private boolean updatingList;
   private boolean visible;
+
+  private enum KindFilter {
+    ALL("全部", null),
+    JVM("JVM", JobCatalog.Kind.JVM),
+    SPARK("Spark", JobCatalog.Kind.SPARK),
+    BUILT_IN("内置", JobCatalog.Kind.BUILT_IN),
+    OTHER("其他", JobCatalog.Kind.OTHER);
+
+    private final String label;
+    private final JobCatalog.Kind kind;
+
+    KindFilter(String label, JobCatalog.Kind kind) {
+      this.label = label;
+      this.kind = kind;
+    }
+
+    @Override
+    public String toString() {
+      return label;
+    }
+  }
 
   public JobsView(JobsModel model, Clock clock, Dialogs dialogs, Runnable openSettings) {
     this.model = model;
     this.clock = clock;
     this.dialogs = dialogs;
 
-    list = new ListView<>(model.jobs());
+    list = new ListView<>(visibleJobs);
+    list.setId("job-list");
     list.getStyleClass().add("job-list");
     list.setCellFactory(view -> new JobCell(model));
     list.setMinWidth(200);
@@ -78,17 +112,20 @@ public final class JobsView implements View {
         .bind(
             Bindings.createStringBinding(
                 () ->
-                    !model.listProblem().get().isEmpty()
-                        ? model.listProblem().get()
-                        : model.loaded().get() ? "引擎上没有作业" : "正在读取作业",
+                    !model.jobs().isEmpty()
+                        ? "没有匹配的作业"
+                        : !model.listProblem().get().isEmpty()
+                            ? model.listProblem().get()
+                            : model.loaded().get() ? "引擎上没有作业" : "正在读取作业",
                 model.listProblem(),
+                model.jobs(),
                 model.loaded()));
     list.setPlaceholder(placeholder);
     list.getSelectionModel()
         .selectedItemProperty()
         .addListener(
             (property, before, job) -> {
-              if (job != null && !job.equals(model.selected().get())) {
+              if (!updatingList && job != null && !job.equals(model.selected().get())) {
                 model.select(job);
               }
             });
@@ -96,15 +133,15 @@ public final class JobsView implements View {
         .selected()
         .addListener(
             (property, before, job) -> {
-              if (job != null && !job.equals(list.getSelectionModel().getSelectedItem())) {
-                list.getSelectionModel().select(job);
-              }
+              syncSelection();
             });
 
     StackPane disc = new StackPane();
     disc.getStyleClass().add("job-disc");
     Label name = Controls.label("", "view-title", "latin");
     Label summary = Controls.label("", "secondary");
+    name.setWrapText(true);
+    summary.setWrapText(true);
     model
         .selected()
         .addListener(
@@ -118,7 +155,10 @@ public final class JobsView implements View {
                 disc.getStyleClass().add(kindClass(kind));
               }
             });
-    HBox header = Controls.row(16, disc, new VBox(4, name, summary));
+    VBox description = new VBox(4, name, summary);
+    description.setMinWidth(0);
+    HBox.setHgrow(description, Priority.ALWAYS);
+    HBox header = Controls.row(16, disc, description);
 
     ParamEditor editor = new ParamEditor(model.params(), model::addParam, model::removeParam);
 
@@ -201,7 +241,7 @@ public final class JobsView implements View {
     listError
         .visibleProperty()
         .bind(model.listProblem().isNotEmpty().and(Bindings.isNotEmpty(model.jobs())));
-    VBox listColumn = new VBox(listError, list);
+    VBox listColumn = new VBox(filters(), listError, list);
     VBox.setVgrow(list, Priority.ALWAYS);
     listColumn.setMinWidth(200);
 
@@ -213,6 +253,97 @@ public final class JobsView implements View {
     empty.visibleProperty().bind(model.connected().not());
     split.visibleProperty().bind(model.connected());
     root.getChildren().addAll(split, empty);
+    model.jobs().addListener((ListChangeListener<JobInfo>) change -> refreshJobs());
+    refreshJobs();
+  }
+
+  private VBox filters() {
+    search.setPromptText("名称或说明");
+    search.setId("job-search");
+    Label searchLabel = Controls.label("查找作业", "caption");
+    searchLabel.setLabelFor(search);
+    search.textProperty().addListener((property, before, now) -> refreshJobs());
+    kindFilter.setId("job-kind");
+    kindFilter.getItems().setAll(KindFilter.values());
+    kindFilter.setValue(KindFilter.ALL);
+    kindFilter.setMinWidth(0);
+    kindFilter.setMaxWidth(Double.MAX_VALUE);
+    Label kindLabel = Controls.label("类型", "caption");
+    kindLabel.setLabelFor(kindFilter);
+    kindFilter.valueProperty().addListener((property, before, now) -> refreshJobs());
+    HBox.setHgrow(kindFilter, Priority.ALWAYS);
+    Button clear = Controls.iconButton(Icons.close(), "清除筛选", this::clearFilters);
+    clear.setId("job-filter-clear");
+    clear
+        .disableProperty()
+        .bind(
+            search
+                .textProperty()
+                .isEmpty()
+                .and(kindFilter.valueProperty().isEqualTo(KindFilter.ALL)));
+    filteredSelection.setWrapText(true);
+    filteredSelection.managedProperty().bind(filteredSelection.visibleProperty());
+    VBox filters =
+        new VBox(
+            8,
+            searchLabel,
+            search,
+            Controls.row(8, kindLabel, kindFilter, clear),
+            filteredSelection);
+    filters.getStyleClass().add("job-filters");
+    return filters;
+  }
+
+  private void clearFilters() {
+    search.clear();
+    kindFilter.setValue(KindFilter.ALL);
+  }
+
+  private void refreshJobs() {
+    String query = search.getText().strip().toLowerCase(Locale.ROOT);
+    KindFilter filter = kindFilter.getValue();
+    updatingList = true;
+    try {
+      Lists.reconcile(
+          visibleJobs,
+          model.jobs().stream()
+              .filter(
+                  job -> filter == null || filter.kind == null || model.kind(job) == filter.kind)
+              .filter(
+                  job ->
+                      query.isEmpty()
+                          || job.name().toLowerCase(Locale.ROOT).contains(query)
+                          || model.summary(job).toLowerCase(Locale.ROOT).contains(query))
+              .toList(),
+          JobInfo::name);
+      syncSelection();
+    } finally {
+      updatingList = false;
+    }
+  }
+
+  /** Filtering changes discovery only; it never changes the draft or the running job. */
+  private void syncSelection() {
+    boolean previous = updatingList;
+    updatingList = true;
+    try {
+      JobInfo selected = model.selected().get();
+      JobInfo shown =
+          selected == null
+              ? null
+              : visibleJobs.stream()
+                  .filter(job -> job.name().equals(selected.name()))
+                  .findFirst()
+                  .orElse(null);
+      if (shown != null) {
+        list.getSelectionModel().select(shown);
+      } else {
+        list.getSelectionModel().clearSelection();
+      }
+      filteredSelection.setVisible(selected != null && shown == null);
+    } finally {
+      updatingList = previous;
+    }
   }
 
   private static Label notice(javafx.beans.value.ObservableStringValue text) {
@@ -301,7 +432,7 @@ public final class JobsView implements View {
             String value = Formats.metric(metric.getKey(), metric.getValue());
             if (value.length() <= 16) {
               Label figure = Controls.label(value, "tile-figure", "latin");
-              Label key = Controls.label(metric.getKey(), "caption", "latin");
+              Label key = Controls.label(Labels.metric(metric.getKey()), "caption");
               VBox tile = new VBox(2, figure, key);
               tile.getStyleClass().add("metric-tile");
               tiles.getChildren().add(tile);
@@ -317,7 +448,8 @@ public final class JobsView implements View {
 
   /** A value too long for a tile (a checksum, a path): one line, its key, and a copy button. */
   private static HBox longValue(String key, String value) {
-    Label name = Controls.label(key, "caption", "latin");
+    String label = Labels.metric(key);
+    Label name = Controls.label(label, "caption");
     name.setMinWidth(72);
     Label text = Controls.label(value, "mono");
     text.setTextOverrun(OverrunStyle.CENTER_ELLIPSIS);
@@ -327,7 +459,7 @@ public final class JobsView implements View {
     Button copy =
         Controls.iconButton(
             Icons.of(Glyph.COPY, 16),
-            "复制 " + key,
+            "复制 " + label,
             () -> {
               ClipboardContent content = new ClipboardContent();
               content.putString(value);
@@ -406,7 +538,12 @@ public final class JobsView implements View {
     model.jobs().stream()
         .filter(job -> job.name().equals(jobName))
         .findFirst()
-        .ifPresent(model::select);
+        .ifPresent(
+            job -> {
+              clearFilters();
+              model.select(job);
+              list.scrollTo(job);
+            });
   }
 
   @Override

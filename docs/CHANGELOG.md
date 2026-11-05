@@ -6,6 +6,37 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### CSV quality gates and job discovery (2026-11-05)
+
+#### Added
+- Added the plain-JVM `csv-quality` job with minimum-row, blank-cell and duplicate-row gates.
+  It returns aggregate metrics and the input checksum even when a quality gate fails, without
+  returning cell contents or modifying the source. Exact parsed-row comparison, bounded UTF-8
+  input and the shared CSV memory budget keep its small-file scope explicit.
+- Added job-name and Chinese-summary search, combinable JVM/Spark/built-in/other filters,
+  clear empty states and Chinese metric labels to the desktop console. Filtering preserves
+  the current job, parameter draft and running result; clearing filters restores its highlight.
+
+#### Fixed
+- Reject duplicate parameter names after stripping surrounding whitespace and values without a
+  name before running or saving a preset. Presets may still omit required values as templates.
+- Preserve parameter drafts row by row across job selection, including unfinished and duplicate
+  rows. A preset belonging to a different job cannot replace the current form.
+- Share bounded CSV loading and validation between `csv-profile` and `csv-quality`, retaining
+  the existing profiling contract and serializing their memory-intensive work together.
+
+#### Verification and documentation
+- Added 20 backend and 9 desktop regressions, including one real-backend test. Current default
+  test floors are backend Linux/Windows 332/322 and desktop 138/141; platform and end-to-end
+  suites remain separate. Windows full backend and desktop verification passed locally.
+- The local package completed all 20 startup samples, with two above the unchanged 1500 ms
+  budget (1579 ms and 1503 ms). Native-library provenance and AOT checks passed, but startup
+  acceptance did not. Windows rejected a new WPR session with `0xc5585011`; these boundaries
+  and pending platform/CI evidence are tracked in the [current review](reports/review-2026-11-05.md).
+- Added the [CSV quality guide](guides/csv-quality.md) and synchronized usage, architecture,
+  desktop interactions and test contracts. No dependency, database migration or new HTTP
+  endpoint is required; existing Airflow DAG definitions are unchanged.
+
 ### Cross-module boundary and asynchronous-state review (2026-10-29)
 
 #### Fixed

@@ -81,7 +81,7 @@ class EndToEndTest {
       assertTrue(engine.health().join().up());
       List<String> names = engine.jobs().join().stream().map(JobInfo::name).toList();
       assertTrue(
-          names.containsAll(List.of("csv-profile", "file-checksum", "echo", "noop")),
+          names.containsAll(List.of("csv-profile", "csv-quality", "file-checksum", "echo", "noop")),
           names.toString());
     }
 
@@ -109,6 +109,34 @@ class EndToEndTest {
         assertEquals(JobStatus.SUCCEEDED, result.status(), result.message());
         assertEquals("3", result.metrics().get("rows"));
         assertEquals("2", result.metrics().get("columns"));
+      } finally {
+        Files.deleteIfExists(input);
+      }
+    }
+
+    @Test
+    @EnabledIfEnvironmentVariable(named = "DATACRAFT_E2E_DATA_DIR", matches = ".+")
+    void qualityFailuresRetainMetricsAndExplicitThresholdsCanAcceptThem() throws Exception {
+      Path input = Files.createTempFile(Path.of(env("DATACRAFT_E2E_DATA_DIR")), "quality-", ".csv");
+      try {
+        Files.writeString(input, "id,note\n1,\n1,\n", StandardCharsets.UTF_8);
+        JobResult rejected =
+            engine
+                .run("csv-quality", Map.of("input", input.toString()), Duration.ofSeconds(30))
+                .join();
+        assertEquals(JobStatus.FAILED, rejected.status());
+        assertEquals("2", rejected.metrics().get("blankCells"));
+        assertEquals("1", rejected.metrics().get("duplicateRows"));
+        JobResult accepted =
+            engine
+                .run(
+                    "csv-quality",
+                    Map.of(
+                        "input", input.toString(), "maxBlankCells", "2", "maxDuplicateRows", "1"),
+                    Duration.ofSeconds(30))
+                .join();
+        assertEquals(JobStatus.SUCCEEDED, accepted.status());
+        assertEquals(rejected.metrics().get("sha256"), accepted.metrics().get("sha256"));
       } finally {
         Files.deleteIfExists(input);
       }

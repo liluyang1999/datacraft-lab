@@ -108,8 +108,10 @@ What each module is for, and its third-party dependencies:
   - `CsvFiles`: dependency-free CSV reader/writer for small, non-Spark work (RFC 4180 quoting).
 - **`datacraft-engine`**: the central, reusable execution layer: the job contract, the catalog,
   the engine, request/result and metrics, `ParameterKeys` and the built-in `echo` and `noop`.
-- **`datacraft-jobs`**: plain-JVM data jobs (`csv-profile`, `file-checksum`) registered through
-  `JvmJobs`; `InputFiles` confines their input under `DATACRAFT_DATA_ROOT`.
+- **`datacraft-jobs`**: plain-JVM data jobs (`csv-profile`, `csv-quality`, `file-checksum`) registered through
+  `JvmJobs`; `InputFiles` confines their input under `DATACRAFT_DATA_ROOT`. The two CSV jobs share
+  bounded snapshot reading, strict decoding, shape checks and JVM-wide memory ownership through
+  package-private `CsvInputs`; their own analysis and quality thresholds stay in the individual jobs.
 - **`datacraft-spark`**: Spark abstractions and Spark-backed jobs (`spark-version`,
   `csv-to-parquet`, `row-count`); third-party: `scala-library`, and `spark-sql` and `spark-hive` at
   `${spark.scope}` (`provided` unless the `bundled-spark` profile is active).
@@ -136,14 +138,15 @@ CLI / HTTP / Airflow
   -> a DataJob implementation:
        - built-in (echo, noop)                              [engine]
        - plain-JVM small-file jobs via JvmJobs              [jobs]
-         (csv-profile, file-checksum)
+         (csv-profile, csv-quality, file-checksum)
        - Spark-backed via AbstractSparkDataJob              [spark]
          (spark-version, csv-to-parquet, row-count)
 ```
 
 The CLI builds one catalog, `JvmJobs.register(SparkJobs.register(BuiltInJobs.registry()))`, and
 serves it through `serve-api`; Airflow tasks run the same CLI jar, so all three callers see the
-same seven jobs.
+same eight jobs. Registering a job makes it callable; it does not insert a task into an existing
+Airflow DAG.
 
 - **`JobExecutionEngine`** is the failure boundary: an unknown job name, a `null` result and every
   `Throwable` a job throws become a `FAILED` result, and each such `Throwable` is logged once at

@@ -37,14 +37,14 @@ FLOORS = {
     "datacraft-config": 14,
     "datacraft-engine": 34,
     "datacraft-io": 64,
-    "datacraft-jobs": 72,
-    "datacraft-cli": 31,
+    "datacraft-jobs": 91,
+    "datacraft-cli": 32,
     "datacraft-spark": 59,
 }
 
 # The same on Windows, where the build excludes the posix-only tests (symbolic links, `?` in file
 # names, Hadoop local writes) and runs datacraft-io's windows-only junction tests instead.
-WINDOWS_FLOORS = {**FLOORS, "datacraft-io": 66, "datacraft-jobs": 70, "datacraft-spark": 49}
+WINDOWS_FLOORS = {**FLOORS, "datacraft-io": 66, "datacraft-jobs": 89, "datacraft-spark": 49}
 
 PLATFORM_FLOORS = {"linux": FLOORS, "windows": WINDOWS_FLOORS}
 
@@ -66,8 +66,8 @@ MODULE_DIRS = {
 # of VaultPlatformTest's two platform tests and `verify` never runs the e2e-tagged ones, so the
 # common floor is shared; Windows additionally exercises its retained native text range.
 DESKTOP_DIRS = {"datacraft-desktop": "desktop"}
-DESKTOP_FLOORS = {"datacraft-desktop": 130}
-DESKTOP_WINDOWS_FLOORS = {"datacraft-desktop": 133}
+DESKTOP_FLOORS = {"datacraft-desktop": 138}
+DESKTOP_WINDOWS_FLOORS = {"datacraft-desktop": 141}
 
 # What --project selects: the module directories, the floors per platform, and the notice's title.
 PROJECTS = {

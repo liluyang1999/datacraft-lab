@@ -1,6 +1,20 @@
 {
   "jobs": [
     {
+      "name": "csv-quality",
+      "kind": "jvm",
+      "summary": "检查 UTF-8 CSV 的空值、空行与重复行，按质量门槛验收",
+      "params": [
+        { "key": "input", "required": true, "hint": "CSV 文件在服务端的路径，位于数据根目录下" },
+        { "key": "header", "default": "true", "choices": ["true", "false"], "hint": "首行是否为表头，不计入数据质量指标" },
+        { "key": "delimiter", "default": ",", "hint": "分隔符，一个字符" },
+        { "key": "minRows", "default": "1", "hint": "最少数据行数，允许 0" },
+        { "key": "maxBlankCells", "default": "0", "hint": "允许的空白单元格数量，空字符串与纯空白均计入" },
+        { "key": "maxDuplicateRows", "default": "0", "hint": "允许的重复行数量，按完整解析后字段精确比较" },
+        { "key": "maxBytes", "default": "67108864", "hint": "最大输入字节数；另受 JVM 内存预算限制" }
+      ]
+    },
+    {
       "name": "csv-profile",
       "kind": "jvm",
       "summary": "在 JVM 中统计一个 UTF-8 CSV 文件：行数、列数、字节数与 SHA-256",

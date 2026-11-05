@@ -301,11 +301,11 @@
 <div class="page" lang="zh-CN">
 
 <header class="masthead">
-  <p class="eyebrow">datacraft-lab · Evaluation report v4.10</p>
+  <p class="eyebrow">datacraft-lab · Evaluation report v4.11</p>
   <h1>datacraft-lab 综合评估报告</h1>
   <p class="lede">个人 JVM 数据处理平台的综合评估：技术架构与模块职责、桌面控制台、质量与验证证据、安全边界、东京与新加坡两地的云平台抉择与成本模型，以及残余风险。</p>
   <dl class="facts">
-    <div><dt>日期</dt><dd>2026-10-29</dd></div>
+    <div><dt>日期</dt><dd>2026-11-05</dd></div>
     <div><dt>分支</dt><dd><code>main</code></dd></div>
     <div><dt>作者</dt><dd>Luyang Li</dd></div>
     <div><dt>技术栈</dt><dd>Java 25 · Scala 2.13.18 · Spark 4.2.0 · Airflow 3.3.2 · Docker Compose / Swarm · JavaFX 25</dd></div>
@@ -313,10 +313,10 @@
   </dl>
   <dl class="kpis">
     <div class="kpi"><dt>后端 Maven 模块</dt><dd class="v">8</dd><dd class="d">4 个职责分组，依赖范围由构建强制</dd></div>
-    <div class="kpi"><dt>可调度作业</dt><dd class="v">7</dd><dd class="d">纯 JVM 2 · Spark 3 · 内置 2</dd></div>
-    <div class="kpi"><dt>JVM 测试用例</dt><dd class="v">464</dd><dd class="d">后端 319 · 桌面 145（含端到端 11）；按平台与标签分组执行，结果见本轮复核记录与 4.4</dd></div>
+    <div class="kpi"><dt>可调度作业</dt><dd class="v">8</dd><dd class="d">纯 JVM 3 · Spark 3 · 内置 2</dd></div>
+    <div class="kpi"><dt>JVM 测试用例</dt><dd class="v">493</dd><dd class="d">后端 339 · 桌面 154（含端到端 12）；按平台与标签分组执行，结果见本轮复核记录与 4.4</dd></div>
     <div class="kpi"><dt>Python 与 Node 测试</dt><dd class="v">271</dd><dd class="d">部署 71 · CI/CD 157 · 文档 16 · DAG 21 · 计算器 6</dd></div>
-    <div class="kpi"><dt>项目源码检查问题</dt><dd class="v">0</dd><dd class="d">源码编译、pyright、ShellCheck 无诊断；第三方首次编译提示另见 4.4</dd></div>
+    <div class="kpi"><dt>历史完整源码检查</dt><dd class="v">0</dd><dd class="d">已记录的编译、pyright、ShellCheck 无诊断；本轮执行范围与历史证据分列于 4.4</dd></div>
     <div class="kpi"><dt>综合评分</dt><dd class="v">4.4<small>/ 5</small></dd><dd class="d">13 个维度，新增桌面控制台；2026-09-25 审计前为 3.2</dd></div>
     <div class="kpi"><dt>常开月费</dt><dd class="v">$10.15</dd><dd class="d">腾讯云 Lighthouse 2 核 / 8 GB / 80 GB</dd></div>
     <div class="kpi"><dt>按需月费（60 小时）</dt><dd class="v">$4.79</dd><dd class="d">Oracle OCI A1 2 OCPU / 8 GB</dd></div>
@@ -350,16 +350,17 @@
 
 <section id="summary" aria-labelledby="h-summary">
   <h2 id="h-summary">一、执行摘要</h2>
+  <p><strong>2026-11-05 功能扩展：</strong>新增 <code>csv-quality</code> 作业，检查空白、重复及最少行数；作业页支持中文搜索、类型筛选和中文指标。补齐参数键校验与逐行草稿保留。Windows 后端 322 项和桌面 141 项完整验证通过；本机打包的 20 次启动中，1579 ms 与 1503 ms 两次超出 1500 ms，启动验收未通过。WPR 新会话仍被 Windows 以 <code>0xc5585011</code> 拒绝，预算保持不变。当前验证和待完成的远端证据见<a href="review-2026-11-05.md">本轮记录</a>，历史通过不替代本轮结果。</p>
   <p><strong>2026-10-29 复核：</strong>补齐直接 Java API 调用的非回环鉴权边界、SQLite 在 Error 下的回滚与原始错误保留、连接选择顺序、设置草稿和作业视图的异步归属。新增 15 项回归先复现旧行为再修复；Windows 后端 302 项、桌面 133 项完整门禁及真实后台 11 项通过；原生中文参数、草稿、主题与窗口恢复复核通过，最终包 20 次启动为 981–1098 ms。本轮原生运行、两平台 CI 与清理结果统一记录在<a href="review-2026-10-29.md">跨模块复核记录</a>；下面的 L8 数字属于此前交付，不替代本轮证据。模块结构、数据库格式、公共 JSON 契约和性能预算保持不变。</p>
-  <p><strong>总体结论：</strong>L8 已补齐 JavaFX 原生库，并修正 Windows UIA 不支持属性的返回契约、主题状态与长日志遍历。两平台界面门禁 Windows 120 / Linux 117 项通过；Linux 启动失败进一步暴露进程起点计时偏差。改用包含启动器和观察开销的父进程单调时钟，本机 20 次为 1000–1209 ms，中位数 1035.5 ms；新计时远端 Windows 为 520–892 ms、Linux 为 648–827 ms，分别完整 20 次全部达标。历史 2614 ms 尖峰尚未在管理员采样中复现，不能宣称单一系统成因已根治。原生操作没有异常，初次显示有两条耗时告警；保留全部失败与原有预算。逐提交结果见 4.5，测量边界见 4.4 与第八章。CLI、HTTP API 与 Airflow 共用同一个 <code>DataJob</code> 契约和执行引擎，失败语义统一；8 个 Maven 模块按职责分为 core、io、processing、interfaces 四组，越界依赖在构建的 <code>validate</code> 阶段即失败；质量门禁拒绝项目源码编译、类型检查或 Shell 检查警告，CI/CD 逻辑集中在 <code>cicd/</code>，可以脱离 GitHub Actions 在本机复现；流水线步骤的失败原因写入公开注解；Compose 栈与 Swarm 栈在 L7 本机及远端 CI 中均实际部署过；所有镜像运行按版本与校验和固定的 Temurin 25.0.5。桌面控制台“数艺工坊”在一个窗口里查看与操作两个后台，它只是客户端，默认后端构建不包含桌面工程。</p>
+  <p><strong>L8 历史结论与架构基线：</strong>L8 已补齐 JavaFX 原生库，并修正 Windows UIA 不支持属性的返回契约、主题状态与长日志遍历。两平台界面门禁 Windows 120 / Linux 117 项通过；Linux 启动失败进一步暴露进程起点计时偏差。改用包含启动器和观察开销的父进程单调时钟，本机 20 次为 1000–1209 ms，中位数 1035.5 ms；新计时远端 Windows 为 520–892 ms、Linux 为 648–827 ms，分别完整 20 次全部达标。历史 2614 ms 尖峰尚未在管理员采样中复现，不能宣称单一系统成因已根治。原生操作没有异常，初次显示有两条耗时告警；保留全部失败与原有预算。逐提交结果见 4.5，测量边界见 4.4 与第八章。CLI、HTTP API 与 Airflow 共用同一个 <code>DataJob</code> 契约和执行引擎，失败语义统一；8 个 Maven 模块按职责分为 core、io、processing、interfaces 四组，越界依赖在构建的 <code>validate</code> 阶段即失败；质量门禁拒绝项目源码编译、类型检查或 Shell 检查警告，CI/CD 逻辑集中在 <code>cicd/</code>，可以脱离 GitHub Actions 在本机复现；流水线步骤的失败原因写入公开注解；Compose 栈与 Swarm 栈在 L7 本机及远端 CI 中均实际部署过；所有镜像运行按版本与校验和固定的 Temurin 25.0.5。桌面控制台“数艺工坊”在一个窗口里查看与操作两个后台，它只是客户端，默认后端构建不包含桌面工程。</p>
   <div class="split">
     <div class="box">
       <span class="box-label">主要优势</span>
       <ul>
         <li>一个契约、一个引擎、三种入口，新作业注册一次即可在 CLI、API 与 Airflow 中使用（第三章）。</li>
         <li>模块边界、JDK 版本下限与零警告由构建强制，而不是靠约定（3.2、4.3）。</li>
-        <li>319 项后端 JVM 测试、145 项桌面测试（含 11 项端到端）与 271 项脚本、文档、DAG 测试。平台测试和端到端测试分组执行；当前门禁下限为 Linux 后端 312、Windows 后端 302，桌面 Linux 130、Windows 133 项；历史实跑数字保留原值。</li>
-        <li>桌面控制台“数艺工坊”（JavaFX 25）：本机数据只在 <code>~/.datacraft</code> 的 SQLite 里，令牌与口令加密保存；界面测试覆盖每个视图的两种主题与 FX 线程的停顿，端到端测试对真实的引擎 API 与 Compose 部署通过（3.7）。</li>
+        <li>339 项后端 JVM 测试、154 项桌面测试（含 12 项端到端）与 271 项脚本、文档、DAG 测试。平台测试和端到端测试分组执行；当前门禁下限为 Linux 后端 332、Windows 后端 322，桌面 Linux 138、Windows 141 项；历史实跑数字保留原值。</li>
+        <li>桌面控制台“数艺工坊”（JavaFX 25）：本机数据只在 <code>~/.datacraft</code> 的 SQLite 里，令牌与口令加密保存；界面测试覆盖每个视图的两种主题与 FX 线程的停顿，既有端到端测试曾对真实的引擎 API 与 Compose 部署通过；本轮扩展后的结果单列在当前复核记录（3.7、4.4）。</li>
       </ul>
     </div>
     <div class="box">
@@ -377,18 +378,19 @@
 
 <section id="scope" aria-labelledby="h-scope">
   <h2 id="h-scope">二、评估范围与方法</h2>
-  <p>评估对象包括 <code>main</code> 的 L7 基线 <code>541cf4e</code> 与 L8 启动、无障碍专项修复：JVM 源码与构建配置、Airflow DAG、部署定义、CI/CD 脚本、测试与文档。结论只来自可以复核的证据，每一项证据的来源与本轮状态如下。</p>
+  <p>当前评估覆盖从 <code>076ae95</code> 基线扩展的数据质量作业、桌面查找与参数状态，以及相关构建、测试和文档。L7 的 <code>541cf4e</code> 基线、L8 启动与无障碍专项和 L9 跨模块复核作为历史证据保留；未完成的本轮平台与远端验证不沿用历史成功状态。</p>
   <div class="table-wrap">
   <table>
-    <thead><tr><th>证据</th><th>来源</th><th>本轮状态</th></tr></thead>
+    <thead><tr><th>证据</th><th>来源</th><th>结果与时间范围</th></tr></thead>
     <tbody>
       <tr><td>代码、配置与文档</td><td>仓库 <code>main</code> 分支</td><td><span class="tag ok">已审阅</span> 关键路径逐项核对，文档与代码一致性由 <code>tests/docs</code> 检查</td></tr>
-      <tr><td>L8 构建与测试</td><td>本机 Windows 11 / Oracle JDK 25.0.5.0.3；CI Windows 2025、Ubuntu 24.04 / Temurin 25.0.5+8</td><td><span class="tag ok">通过</span> Windows 120 / Linux 117 项界面门禁通过；新单调时钟的本机及远端两平台各 20 次启动全部通过，Windows / Linux 的 54 / 10 个原生库与 AOT 使用均已确认；历史两平台记录与测量边界见 4.4 与 L8</td></tr>
-      <tr><td>Airflow 运行环境</td><td>Airflow 3.3.2、官方 constraints 与安全修订、pyspark 4.2.0</td><td><span class="tag info">本轮复核</span> 在本轮镜像内检查 DAG 契约、三条真实流水线及依赖安全下限；结果见 4.4</td></tr>
-      <tr><td>本机 Docker</td><td>Docker 29.9.2；本轮专用 Docker-in-Docker 引擎</td><td><span class="tag info">隔离演练</span> 镜像、Compose、单节点 Swarm 部署与升级、备份恢复在专用引擎运行；共享引擎的 Swarm 状态与其他项目卷保持不变</td></tr>
+      <tr><td>L10 本机验证</td><td>2026-11-05 / Windows；<a href="review-2026-11-05.md">当前复核记录</a></td><td><span class="tag warn">部分通过</span> 后端 322 项、桌面 141 项完整验证通过；CI 工具 132 项通过、25 项 POSIX 专属跳过。20 次启动有两次超出 1500 ms，原生库来源与 AOT 检查通过；部署脚本在 Windows 的 bash 入口失败，交由本轮 Linux CI 验证</td></tr>
+      <tr><td>L8 历史构建与测试</td><td>本机 Windows 11 / Oracle JDK 25.0.5.0.3；CI Windows 2025、Ubuntu 24.04 / Temurin 25.0.5+8</td><td><span class="tag ok">通过</span> Windows 120 / Linux 117 项界面门禁通过；新单调时钟的本机及远端两平台各 20 次启动全部通过，Windows / Linux 的 54 / 10 个原生库与 AOT 使用均已确认；历史两平台记录与测量边界见 4.4 与 L8</td></tr>
+      <tr><td>L7/L8 Airflow 运行环境</td><td>Airflow 3.3.2、官方 constraints 与安全修订、pyspark 4.2.0</td><td><span class="tag info">历史复核</span> 当时在镜像内检查 DAG 契约、三条真实流水线及依赖安全下限；结果见 4.4</td></tr>
+      <tr><td>L7/L8 本机 Docker</td><td>Docker 29.9.2；当时的专用 Docker-in-Docker 引擎</td><td><span class="tag info">历史演练</span> 镜像、Compose、单节点 Swarm 部署与升级、备份恢复在专用引擎运行；共享引擎的 Swarm 状态与其他项目卷保持不变</td></tr>
       <tr><td>L7 历史 CI</td><td>GitHub Actions / ubuntu-24.04</td><td><span class="tag ok">全部通过</span> 补修提交 <code>882dbfa</code> 的 <a href="https://github.com/liluyang1999/datacraft-lab/actions/runs/40628141047">40628141047</a> 六个作业成功，含后端 310 项、桌面 98 项、真实流水线、备份恢复和单节点 Swarm 升级；公告检查 <a href="https://github.com/liluyang1999/datacraft-lab/actions/runs/40628141207">40628141207</a> 成功</td></tr>
-      <tr><td>L8 已交付代码 CI</td><td><code>69a7d04</code> / <a href="https://github.com/liluyang1999/datacraft-lab/actions/runs/40688429388">40688429388</a></td><td><span class="tag ok">全部通过</span> 七个作业成功，含两平台桌面及各 20 次启动、后端 310 项、脚本与文档、真实流水线、四个镜像、Compose 备份恢复与单节点 Swarm 升级（117 s）；具体结果见 4.5</td></tr>
-      <tr><td>依赖版本与公告</td><td>OSV 与 Adoptium 官方接口</td><td><span class="tag ok">2026-10-28 核对</span> 32 个固定版本没有已知 OSV 公告；Temurin 25.0.5+8 是当前 Temurin 25 最新版，四个校验和一致；依赖版本保持锁定，JavaFX 私有修补另记录来源</td></tr>
+      <tr><td>L8 历史代码 CI</td><td><code>69a7d04</code> / <a href="https://github.com/liluyang1999/datacraft-lab/actions/runs/40688429388">40688429388</a></td><td><span class="tag ok">全部通过</span> 七个作业成功，含两平台桌面及各 20 次启动、后端 310 项、脚本与文档、真实流水线、四个镜像、Compose 备份恢复与单节点 Swarm 升级（117 s）；具体结果见 4.5</td></tr>
+      <tr><td>依赖版本与公告</td><td>OSV 与 Adoptium 官方接口</td><td><span class="tag ok">2026-10-28 核对</span> 32 个固定版本没有已知 OSV 公告；当时 Temurin 25 的最新版为 25.0.5+8，四个校验和一致；依赖版本保持锁定，JavaFX 私有修补另记录来源</td></tr>
       <tr><td>云平台价格</td><td>各厂商官方价格页、价格 API 与计费文档</td><td><span class="tag info">快照</span> 2026-09-19 核验，本轮未重新核价（<a href="pricing-evidence.md">价格依据</a>）</td></tr>
     </tbody>
   </table>
@@ -434,7 +436,7 @@
         <rect class="n n-core" x="516" y="150" width="170" height="120" rx="8"/>
         <text class="t" x="601" y="175" text-anchor="middle">JobExecutionEngine</text>
         <text class="s" x="601" y="193" text-anchor="middle">datacraft-engine</text>
-        <text class="s" x="601" y="216" text-anchor="middle">作业目录 · 7 个作业</text>
+        <text class="s" x="601" y="216" text-anchor="middle">作业目录 · 8 个作业</text>
         <text class="s" x="601" y="234" text-anchor="middle">异常 → FAILED 结果</text>
         <text class="s" x="601" y="252" text-anchor="middle">仅 VM 错误上抛</text>
 
@@ -443,7 +445,7 @@
         <text class="s" x="855" y="78" text-anchor="middle">echo · noop</text>
         <rect class="n" x="766" y="132" width="178" height="52" rx="6"/>
         <text class="t" x="855" y="154" text-anchor="middle">JvmJobs · jobs</text>
-        <text class="s" x="855" y="172" text-anchor="middle">csv-profile · file-checksum</text>
+        <text class="s" x="855" y="172" text-anchor="middle">CSV 分析与质量 · 文件校验</text>
         <rect class="n" x="766" y="224" width="178" height="64" rx="6"/>
         <text class="t" x="855" y="246" text-anchor="middle">SparkJobs · spark</text>
         <text class="s" x="855" y="263" text-anchor="middle">csv-to-parquet · row-count</text>
@@ -566,7 +568,7 @@
       <tr><td>datacraft-config</td><td>配置加载（<code>DataCraftConfig</code>）</td><td>common</td></tr>
       <tr><td>datacraft-engine</td><td><code>DataJob</code> 契约、作业目录、<code>JobExecutionEngine</code>、内置作业</td><td>common</td></tr>
       <tr><td>io</td><td>datacraft-io</td><td>存储与传输端口：<code>StorageService</code>、本地文件、CSV、SFTP</td><td>common</td></tr>
-      <tr><td rowspan="2">processing</td><td>datacraft-jobs</td><td>纯 JVM 小文件作业：<code>csv-profile</code>、<code>file-checksum</code></td><td>common、engine、io</td></tr>
+      <tr><td rowspan="2">processing</td><td>datacraft-jobs</td><td>纯 JVM 小文件作业：<code>csv-profile</code>、<code>csv-quality</code>、<code>file-checksum</code></td><td>common、engine、io</td></tr>
       <tr><td>datacraft-spark</td><td>Spark 作业：<code>csv-to-parquet</code>、<code>row-count</code>、<code>spark-version</code>（Spark 为 <code>provided</code>）</td><td>common、engine</td></tr>
       <tr><td rowspan="2">interfaces</td><td>datacraft-api</td><td>HTTP API（JDK 内置 HttpServer）</td><td>common、engine</td></tr>
       <tr><td>datacraft-cli</td><td>进程入口与组合根：命令行、<code>serve-api</code>、瘦 jar 打包</td><td>全部（不设规则）</td></tr>
@@ -705,6 +707,7 @@
     </tbody>
   </table>
   </div>
+  <p>作业页按名称和中文摘要搜索，类型筛选可与搜索组合；筛选只改变左侧目录，右侧的当前作业、逐行参数草稿与运行状态继续保留。运行及保存预设前校验重复键和有值无键，预设仍可作为未填写完整的模板；结果指标用中文短标签呈现。详见<a href="../desktop/architecture.md#作业目录与参数状态">状态归属</a>和<a href="../guides/csv-quality.md">CSV 质量指南</a>。</p>
   <p>依赖只向下：服务、客户端与存储都不引用 JavaFX。流畅度的预算（视图切换不超过 100 ms、FX 线程单次停顿不超过 50 ms、主题切换不超过 100 ms）由界面测试检查，首帧时间每轮记录；打包脚本用 jlink 与 jpackage 生成自带运行时的应用目录，并用一次启动训练 JDK 25 的 AOT 缓存。细节见附录 A.3 与 <a href="../desktop/README.md">docs/desktop</a>。</p>
 </section>
 
@@ -720,14 +723,14 @@
       <tr><td>按职责组织工程目录</td><td><code>modules/</code>、<code>tests/</code>、<code>cicd/</code>、<code>docs/</code>、<code>design/</code></td><td>文档、测试的存放位置与过时路径由 <code>tests/docs</code> 检查；流水线结构由 <code>tests/ci</code> 检查</td><td><span class="tag ok">满足</span></td></tr>
       <tr><td>Java 与 Scala 混合</td><td>Java：common、config、io、engine、jobs、api；Scala：spark、cli</td><td>同一反应堆构建，Spotless 统一格式</td><td><span class="tag ok">满足</span></td></tr>
       <tr><td>Spark 承担重量级计算</td><td><code>csv-to-parquet</code>、<code>row-count</code>、<code>spark-version</code></td><td>真实 SparkSession 测试，CI 断言没有取消</td><td><span class="tag ok">满足</span></td></tr>
-      <tr><td>纯 JVM 覆盖小场景</td><td><code>csv-profile</code>、<code>file-checksum</code></td><td>70 项模块测试；打包 jar 实测退出码 0 与 1</td><td><span class="tag ok">满足</span></td></tr>
+      <tr><td>纯 JVM 覆盖小场景</td><td><code>csv-profile</code>、<code>csv-quality</code>、<code>file-checksum</code></td><td>模块共 91 项测试，Windows 本轮执行 89 项；CLI 冒烟覆盖质量成功、失败退出码 1 和显式放宽门槛</td><td><span class="tag ok">满足</span></td></tr>
       <tr><td>同一引擎服务 CLI、HTTP 与 Airflow</td><td><code>DataJob</code> → <code>JobExecutionEngine</code></td><td>CLI、API、引擎测试与 DAG 契约测试</td><td><span class="tag ok">满足</span></td></tr>
-      <tr><td>Airflow 3.x 编排</td><td>3 个 DAG，依赖用 <code>chain()</code> 声明</td><td>17 项契约测试；CI 在真实 Airflow 中运行三条流水线</td><td><span class="tag ok">满足</span></td></tr>
+      <tr><td>Airflow 3.x 编排</td><td>3 个 DAG，依赖用 <code>chain()</code> 声明</td><td>21 项 DAG 与安全下限测试；CI 在真实 Airflow 中运行三条流水线</td><td><span class="tag ok">满足</span></td></tr>
       <tr><td>单机 Compose 与多机 Swarm</td><td>Compose 为主，Swarm 固定单数据节点</td><td>Compose 在 CI 真实启动并做备份恢复；Swarm 在 CI 的单节点上真实部署并升级，多节点未验证</td><td><span class="tag warn">部分</span></td></tr>
       <tr><td>云部署评估与成本</td><td>11 个平台、两个地域、成本模型与计算器（第六章）</td><td>价格快照 2026-09-19；计算器 6 项测试</td><td><span class="tag ok">满足</span></td></tr>
-      <tr><td>零警告构建</td><td>编译、类型检查、Shell 检查的警告都会使门禁失败</td><td>本机全量构建 0 警告；pyright、ShellCheck 0 问题</td><td><span class="tag ok">满足</span></td></tr>
-      <tr><td>在线 API 的访问控制</td><td>令牌认证（回环之外强制）、并发运行上限、回环绑定、Origin 检查、数据根约束</td><td>29 项 API 测试；镜像、Compose 与 Swarm 冒烟；没有 TLS，属于已记录的边界</td><td><span class="tag ok">满足</span></td></tr>
-      <tr><td>实时的桌面控制面板与监控界面</td><td>数艺工坊：JavaFX 25.0.5，对接引擎 API 与 Airflow；本机配置与缓存只在 <code>~/.datacraft</code> 的 SQLite</td><td>132 项测试（默认 Windows 120、Linux 117 项；另有端到端 11 项与平台专用测试）；端到端测试对真实的 <code>serve-api</code> 与本机 Compose 部署通过；FX 线程的停顿与主题切换有界面测试</td><td><span class="tag ok">满足</span></td></tr>
+      <tr><td>零警告构建</td><td>编译、类型检查、Shell 检查的警告都会使门禁失败</td><td>本轮 Windows 完整构建通过；pyright 与 ShellCheck 由当前提交的 CI 复核，历史结果见 4.4</td><td><span class="tag ok">满足</span></td></tr>
+      <tr><td>在线 API 的访问控制</td><td>令牌认证（回环之外强制）、并发运行上限、回环绑定、Origin 检查、数据根约束</td><td>31 项 API 测试；镜像、Compose 与 Swarm 冒烟；没有 TLS，属于已记录的边界</td><td><span class="tag ok">满足</span></td></tr>
+      <tr><td>实时的桌面控制面板与监控界面</td><td>数艺工坊：JavaFX 25.0.5，对接引擎 API 与 Airflow；本机配置与缓存只在 <code>~/.datacraft</code> 的 SQLite</td><td>154 项测试（默认 Windows 141、Linux 138 项；另有端到端 12 项与平台专用测试）；本轮 Windows 完整验证通过，其他当前结果见本轮复核记录；FX 线程的停顿与主题切换有界面测试</td><td><span class="tag ok">满足</span></td></tr>
     </tbody>
   </table>
   </div>
@@ -742,12 +745,12 @@
       <tr><td>datacraft-config</td><td class="num">14</td><td class="num">14</td><td class="num">14</td><td>—</td></tr>
       <tr><td>datacraft-io</td><td class="num">71</td><td class="num">64</td><td class="num">66</td><td><code>posix-only</code> 5（符号链接、含 <code>?</code> 的文件名）；<code>windows-only</code> 7（NTFS 目录联接）</td></tr>
       <tr><td>datacraft-engine</td><td class="num">34</td><td class="num">34</td><td class="num">34</td><td>—</td></tr>
-      <tr><td>datacraft-jobs</td><td class="num">72</td><td class="num">72</td><td class="num">70</td><td><code>posix-only</code> 2（符号链接）</td></tr>
+      <tr><td>datacraft-jobs</td><td class="num">91</td><td class="num">91</td><td class="num">89</td><td><code>posix-only</code> 2（符号链接）</td></tr>
       <tr><td>datacraft-spark</td><td class="num">59</td><td class="num">59</td><td class="num">49</td><td><code>posix-only</code> 10（符号链接；Windows 上 Hadoop 的本地写入与目录列举需要 winutils）</td></tr>
       <tr><td>datacraft-api</td><td class="num">31</td><td class="num">31</td><td class="num">31</td><td>—</td></tr>
-      <tr><td>datacraft-cli</td><td class="num">31</td><td class="num">31</td><td class="num">31</td><td>—</td></tr>
+      <tr><td>datacraft-cli</td><td class="num">32</td><td class="num">32</td><td class="num">32</td><td>—</td></tr>
     </tbody>
-    <tfoot><tr><th>合计</th><td class="num">319</td><td class="num">312</td><td class="num">302</td><td>平台标签分组执行；当前实跑结果见跨模块复核记录</td></tr></tfoot>
+    <tfoot><tr><th>合计</th><td class="num">339</td><td class="num">332</td><td class="num">322</td><td>平台标签分组执行；当前实跑结果见跨模块复核记录</td></tr></tfoot>
   </table>
   </div>
   <div class="table-wrap">
@@ -759,7 +762,7 @@
       <tr><td>文档一致性</td><td><code>tests/docs/test_docs_consistency.py</code></td><td class="num">16</td><td>Python 标准库</td></tr>
       <tr><td>费用计算器</td><td><code>tests/docs/cloud-costs.test.cjs</code></td><td class="num">6</td><td>Node</td></tr>
       <tr><td>DAG 契约与安全下限</td><td><code>tests/orchestration</code></td><td class="num">21</td><td>Airflow 3.3.2（安全下限的 4 项只需要 <code>packaging</code>）</td></tr>
-      <tr><td>桌面控制台</td><td><code>tests/jvm/datacraft-desktop</code></td><td class="num">145</td><td>JDK 25 与显示器（Linux CI 用 Xvfb）；Windows 默认执行 133 项、Linux 130 项（三项原生 UIA 契约测试仅 Windows，保险库测试按平台选择），<code>e2e</code> 标签的 11 项需要运行中的后台，用 <code>-Pe2e</code> 单独运行</td></tr>
+      <tr><td>桌面控制台</td><td><code>tests/jvm/datacraft-desktop</code></td><td class="num">154</td><td>JDK 25 与显示器（Linux CI 用 Xvfb）；Windows 默认执行 141 项、Linux 138 项（三项原生 UIA 契约测试仅 Windows，保险库测试按平台选择），<code>e2e</code> 标签的 12 项需要运行中的后台，用 <code>-Pe2e</code> 单独运行</td></tr>
       <tr><td>运行时冒烟</td><td><code>tests/smoke/airflow_runtime_smoke.py</code></td><td class="num">1 个脚本</td><td>Airflow、Java 与 pyspark；在 <code>dags</code> 作业与 Airflow 镜像内各运行一次。镜像、Compose 与 Swarm 的冒烟是流水线步骤，在 <code>cicd/images</code>（3.5）</td></tr>
     </tbody>
   </table>
@@ -788,7 +791,11 @@
   </table>
   </div>
 
-  <h3>4.4 本轮验证证据（2026-10-28）</h3>
+  <h3>4.4 验证证据与时间范围</h3>
+  <h4>2026-11-05：数据质量与作业查找</h4>
+  <p>本轮 Windows 后端完整 <code>verify</code> 执行 322 项，桌面完整 <code>verify</code> 执行 141 项，均通过。CI 工具共 157 项，132 项通过、25 项 POSIX 专属跳过；Windows 的 bash 入口未能运行部署套件，不能记为通过，待当前提交的 Linux CI 补齐。</p>
+  <p>本机包完成 10 次新配置和 10 次复用配置启动，54 个原生库的来源校验及每次 AOT 检查通过；新配置第 4 次为 1579 ms，复用配置第 10 次（设置页、深色）为 1503 ms，均超过未放宽的 1500 ms 门槛。当前启动验收失败。新 WPR GeneralProfile 会话实际被拒绝（<code>0xc5585011</code>），仍缺系统性能追踪权限，不能将历史管理员会话视为当前可用。完整样本、原生操作、远端 CI 与清理证据以<a href="review-2026-11-05.md">本轮记录</a>为准。</p>
+  <h4>2026-10-28：L8 历史验证</h4>
   <p>启动与 Windows 原生无障碍专项接续 L7，根因、负向实验、两平台结果与交付记录见 <a href="../desktop/loop/log.md#l8-启动与原生无障碍专项2026-10-28">L8 循环记录</a>。下方 L7 和更早记录保留当时的证据。</p>
   <ul id="review-l8-evidence">
     <li>三次管理员 WPR 均已保存并停止，事件丢失数为 0。先定位 JavaFX 原生库遗漏，再经微软公开符号定位 UIA 的提供者错误诊断。原始追踪仅在本机分析。</li>
@@ -1141,7 +1148,7 @@ bash deploy/scripts/compose-up.sh                # 预检机密与端口后启�
       <tr><td>测试与 CI</td><td><div class="db" role="img" aria-label="3.5 到 4.5"><span class="seg" style="left:62.5%;width:25%"></span><span class="pt prev" style="left:62.5%"></span><span class="pt now" style="left:87.5%"></span></div></td><td class="db-val">3.5 → 4.5 → 4.5</td><td>平台标签取代跳过；两个平台各有执行下限；JVM 套件与三条 DAG 在 Linux 本机实跑；修复做过变异检查，推送前做过独立复核；失败原因写入公开注解并经历过真实的失败；容器阶段在 CI 与本机都能运行，四个镜像都被构建和使用。两节点 Swarm 不在流水线里</td></tr>
       <tr><td>文档</td><td><div class="db" role="img" aria-label="3.0 到 4.5"><span class="seg" style="left:50%;width:37.5%"></span><span class="pt prev" style="left:50%"></span><span class="pt now" style="left:87.5%"></span></div></td><td class="db-val">3.0 → 4.0 → 4.5</td><td>文档与设计分目录；单一评估报告；链接、存放位置与过时路径有测试</td></tr>
       <tr><td>安全</td><td><div class="db" role="img" aria-label="2.5 到 4.0"><span class="seg" style="left:37.5%;width:37.5%"></span><span class="pt prev" style="left:37.5%"></span><span class="pt now" style="left:75%"></span></div></td><td class="db-val">2.5 → 3.5 → 4.0</td><td>API 在回环之外必须有令牌，并发运行有上限；Swarm 的 Redis 有口令、覆盖网络加密；固定版本每周核对公告；此前堵上 <code>.env</code> 被当作命令执行与 override 绕过预检两处。令牌经明文 HTTP 传输，机密仍在 Airflow 容器间共享</td></tr>
-      <tr><td>桌面控制台</td><td><div class="db" role="img" aria-label="新增，4.0"><span class="pt now" style="left:75%"></span></div></td><td class="db-val">— → — → 4.0</td><td>分层清楚，FX 线程只做界面，流畅度有预算并由测试检查；128 项测试（Windows 默认 116、Linux 114 项），端到端结果分轮记录，CI 两平台验证原生窗口与 20 次缓存启动；此前的 13 处审阅发现已修复，本轮补充见 4.4。新工程：只有应用目录、没有安装包，远程连接依赖隧道，尚未经过长期使用</td></tr>
+      <tr><td>桌面控制台</td><td><div class="db" role="img" aria-label="新增，4.0"><span class="pt now" style="left:75%"></span></div></td><td class="db-val">— → — → 4.0</td><td>分层清楚，FX 线程只做界面，流畅度有预算并由测试检查；154 项测试（Windows 默认 141、Linux 138 项），端到端结果分轮记录，CI 两平台验证原生窗口与 20 次缓存启动；此前的 13 处审阅发现已修复，本轮补充见 4.4。新工程：只有应用目录、没有安装包，远程连接依赖隧道，尚未经过长期使用</td></tr>
     </tbody>
   </table>
   </div>
@@ -1769,12 +1776,15 @@ bash deploy/scripts/compose-up.sh                # 预检机密与端口后启�
     <li><time datetime="2026-10-27">2026-10-27</time>镜像的 Java 改为按版本与 SHA-256 固定的 Temurin 25.0.5，构建下限提高到 25.0.5；新增 JavaFX 25 桌面控制台“数艺工坊”（<code>desktop/</code>）及其 CI 作业、测试数下限与公告检查；评估报告 v4.5。</li>
     <li><time datetime="2026-10-28">2026-10-28</time>稳定复现并修补 JavaFX 原生无障碍生命周期；按需后台初始化网络、准确首帧计时、五视图 AOT 训练与两平台 20 次启动门禁；补齐窗口工作区约束、窄窗操作、动画缓存恢复与平台编译策略；报告同步为 v4.7（L8）。</li>
     <li><time datetime="2026-10-28">2026-10-28</time>桌面门禁纳入父工程测试格式检查，补齐异步轮询、连接切换、响应协议与面板生命周期回归；限制堆内存并修复长日志阴影开销；Windows/Linux、真实后台与容器链路复核，证据和边界同步为 v4.6（4.4、L7）。</li>
+    <li><time datetime="2026-11-05">2026-11-05</time>新增 CSV 质量门槛、作业查找与参数逐行草稿保护；当前测试结构及验证边界同步为 v4.11。本机 20 次启动中两次超预算，保留失败并继续排查；远端结果单列于本轮复核记录。</li>
   </ol>
 </section>
 
 <section id="appendix-index" aria-labelledby="h-appendix-index">
   <h2 id="h-appendix-index">附录 I　文档索引</h2>
   <ul class="docs-index">
+    <li><a href="review-2026-11-05.md">2026-11-05 数据质量与作业查找</a><br><span class="small muted">本轮功能、完整验证、启动失败与远端证据边界</span></li>
+    <li><a href="../guides/csv-quality.md">CSV 质量检查</a><br><span class="small muted">质量门槛、成功与失败示例、计数规则和小文件限制</span></li>
     <li><a href="review-2026-10-29.md">2026-10-29 跨模块复核</a><br><span class="small muted">边界与异步缺陷、回归证据、当前验证、文档与清理</span></li>
     <li><a href="../README.md">项目首页</a> <code>docs/README.md</code><br><span class="small muted">概览、目录结构、快速开始、文档地图</span></li>
     <li><a href="../guides/usage.md">使用指南</a> <code>docs/guides/usage.md</code><br><span class="small muted">作业、CLI 参数与退出码、HTTP API</span></li>
