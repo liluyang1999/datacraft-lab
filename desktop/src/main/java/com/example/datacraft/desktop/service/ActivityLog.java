@@ -18,6 +18,7 @@ public final class ActivityLog {
   private final ActivityRepository repository;
   private final Clock clock;
   private final List<Consumer<Entry>> listeners = new CopyOnWriteArrayList<>();
+  private final List<Runnable> clearListeners = new CopyOnWriteArrayList<>();
 
   public ActivityLog(ActivityRepository repository, Clock clock) {
     this.repository = repository;
@@ -28,28 +29,34 @@ public final class ActivityLog {
     record(level, source, text, "");
   }
 
-  public void record(Level level, Source source, String text, String detail) {
+  public synchronized void record(Level level, Source source, String text, String detail) {
     Entry entry = new Entry(clock.instant(), level, source, text, detail == null ? "" : detail);
     repository
         .add(entry)
+        .thenRun(() -> listeners.forEach(listener -> listener.accept(entry)))
         .exceptionally(
             failure -> {
               LOG.log(System.Logger.Level.WARNING, "An activity entry was not stored", failure);
               return null;
             });
-    listeners.forEach(listener -> listener.accept(entry));
   }
 
   public CompletableFuture<List<Entry>> recent(int limit) {
     return repository.list(limit);
   }
 
-  public CompletableFuture<Void> clear() {
-    return repository.clear();
+  public synchronized CompletableFuture<Void> clear() {
+    return repository.clear().thenRun(() -> clearListeners.forEach(Runnable::run));
   }
 
-  /** Called on the thread that recorded the entry; listeners move to the FX thread themselves. */
+  /**
+   * Committed mutations are delivered in store order; listeners move to the FX thread themselves.
+   */
   public void subscribe(Consumer<Entry> listener) {
     listeners.add(listener);
+  }
+
+  public void onCleared(Runnable listener) {
+    clearListeners.add(listener);
   }
 }

@@ -13,6 +13,8 @@ from airflow.providers.standard.operators.bash import BashOperator
 from airflow.sdk import Param
 from airflow.sdk.exceptions import AirflowFailException
 
+from datacraft_paths import download_destination
+
 
 # --- Configuration resolved from the environment, with laptop-friendly defaults ---------------
 PROJECT_HOME = os.environ.get("DATACRAFT_HOME", "/opt/datacraft")
@@ -125,6 +127,30 @@ def require_verified_sftp_host(conn_id: str):
                 f"Connection {conn_id!r} must verify the SFTP host key: set the host_key extra and "
                 "do not enable no_host_key_check or allow_host_key_change"
             )
+
+    return check
+
+
+def require_safe_sftp_download(conn_id: str):
+    """Check the rendered destination and the host key before SFTP creates or writes any file.
+
+    The worker's data directory must remain trusted while the provider opens the checked path;
+    this hook cannot prevent an untrusted local process from concurrently replacing directories.
+    """
+    verify_host = require_verified_sftp_host(conn_id)
+
+    def check(context):
+        task = context.get("task")
+        local_path = getattr(task, "local_filepath", None)
+        if not isinstance(local_path, str):
+            raise AirflowFailException("The rendered SFTP download destination must be one local path")
+        try:
+            resolved = download_destination(local_path, DATA_ROOT)
+        except ValueError as error:
+            raise AirflowFailException(f"Unsafe SFTP download destination: {error}") from error
+        verify_host(context)
+        # Use the checked destination rather than following the original symlink a second time.
+        task.local_filepath = str(resolved)
 
     return check
 

@@ -28,6 +28,13 @@ public final class Controls {
     return label;
   }
 
+  /** Associates a visible label with its field without replacing the field's accessible value. */
+  public static Label labelFor(String text, Node field, String... styleClasses) {
+    Label label = label(text, styleClasses);
+    label.setLabelFor(field);
+    return label;
+  }
+
   public static Button button(String text, Runnable action, String... styleClasses) {
     Button button = new Button(text);
     button.getStyleClass().addAll(styleClasses);

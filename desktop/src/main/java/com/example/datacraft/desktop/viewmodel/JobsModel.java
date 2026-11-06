@@ -19,7 +19,6 @@ import com.example.datacraft.desktop.util.Lists;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.HashMap;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -51,49 +50,6 @@ public final class JobsModel implements Visibility {
   public static final int RIBBON = 20;
   static final Duration INTERVAL = Duration.ofSeconds(60);
 
-  /** One line of the parameter form. Known keys come from the catalogue and cannot be renamed. */
-  public static final class ParamRow {
-    private final Optional<JobCatalog.Param> spec;
-    private final StringProperty key;
-    private final StringProperty value;
-
-    ParamRow(Optional<JobCatalog.Param> spec, String key, String value) {
-      this.spec = spec;
-      this.key = new SimpleStringProperty(key);
-      this.value = new SimpleStringProperty(value);
-    }
-
-    /** A row for a known parameter, empty so that its default applies. */
-    public static ParamRow known(JobCatalog.Param spec) {
-      return new ParamRow(Optional.of(spec), spec.key(), "");
-    }
-
-    /** A row for a key the user adds. */
-    public static ParamRow custom() {
-      return new ParamRow(Optional.empty(), "", "");
-    }
-
-    public Optional<JobCatalog.Param> spec() {
-      return spec;
-    }
-
-    public boolean known() {
-      return spec.isPresent();
-    }
-
-    public boolean required() {
-      return spec.map(JobCatalog.Param::required).orElse(false);
-    }
-
-    public StringProperty key() {
-      return key;
-    }
-
-    public StringProperty value() {
-      return value;
-    }
-  }
-
   /** What the model remembers for each job while the app runs. */
   private static final class JobState {
     List<ParamDraft> draft;
@@ -122,6 +78,7 @@ public final class JobsModel implements Visibility {
   private final Poller<List<JobInfo>> poller;
   private final Map<String, JobState> states = new HashMap<>();
   private long selectionGeneration;
+  private long recentGeneration;
 
   private final ObservableList<JobInfo> jobs = FXCollections.observableArrayList();
   private final ObjectProperty<JobInfo> selected = new SimpleObjectProperty<>();
@@ -174,6 +131,13 @@ public final class JobsModel implements Visibility {
             connected);
     connected.set(session.current().isPresent());
     session.subscribe(connection -> ui.execute(() -> reset(connection.isPresent())));
+    service.onRecentCleared(
+        () ->
+            ui.execute(
+                () -> {
+                  recent.clear();
+                  loadRecent();
+                }));
   }
 
   /**
@@ -241,39 +205,12 @@ public final class JobsModel implements Visibility {
   }
 
   private List<ParamRow> rows(String jobName, Map<String, String> values) {
-    List<ParamRow> rows = new java.util.ArrayList<>();
-    Optional<JobCatalog.Entry> entry = catalog.job(jobName);
-    entry.ifPresent(
-        known ->
-            known
-                .params()
-                .forEach(
-                    param ->
-                        rows.add(
-                            new ParamRow(
-                                Optional.of(param),
-                                param.key(),
-                                values.getOrDefault(param.key(), "")))));
-    values.forEach(
-        (key, value) -> {
-          if (entry.flatMap(known -> known.param(key)).isEmpty()) {
-            rows.add(new ParamRow(Optional.empty(), key, value));
-          }
-        });
-    return rows;
+    return ParamForm.rows(catalog.job(jobName), values);
   }
 
   /** The valid form's request values; blank values use backend defaults. */
   private Map<String, String> values() {
-    Map<String, String> values = new LinkedHashMap<>();
-    for (ParamRow row : params) {
-      String key = row.key().get() == null ? "" : row.key().get().strip();
-      String value = row.value().get() == null ? "" : row.value().get();
-      if (!key.isEmpty() && !value.isBlank()) {
-        values.put(key, value);
-      }
-    }
-    return values;
+    return ParamForm.collect(params).values();
   }
 
   private void updateMissing() {
@@ -293,18 +230,7 @@ public final class JobsModel implements Visibility {
   }
 
   private String parameterProblem() {
-    java.util.Set<String> keys = new java.util.HashSet<>();
-    for (ParamRow row : params) {
-      String key = row.key().get() == null ? "" : row.key().get().strip();
-      String value = row.value().get() == null ? "" : row.value().get();
-      if (key.isEmpty() && !value.isBlank()) {
-        return "请填写参数名称";
-      }
-      if (!key.isEmpty() && !keys.add(key)) {
-        return "参数名称重复：" + key;
-      }
-    }
-    return "";
+    return ParamForm.collect(params).error();
   }
 
   public void addParam() {
@@ -432,6 +358,7 @@ public final class JobsModel implements Visibility {
 
   private void loadRecent() {
     long selection = selectionGeneration;
+    long requested = ++recentGeneration;
     JobInfo job = selected.get();
     if (job == null) {
       recent.clear();
@@ -443,7 +370,7 @@ public final class JobsModel implements Visibility {
             runs ->
                 ui.execute(
                     () -> {
-                      if (selection == selectionGeneration) {
+                      if (selection == selectionGeneration && requested == recentGeneration) {
                         Lists.reconcile(
                             recent, runs, run -> run.startedAt().toEpochMilli() + run.jobName());
                       }

@@ -12,6 +12,7 @@ import java.net.URI
 import java.nio.{ByteBuffer, CharBuffer}
 import java.nio.charset.{Charset, CharsetDecoder, CodingErrorAction, StandardCharsets}
 import java.util.Locale
+import scala.util.Using
 
 /** Reusable, format-agnostic Spark read/write helpers shared by all data jobs. */
 object DataFrames {
@@ -161,12 +162,17 @@ object DataFrames {
   }
 
   /** Reads the first three bytes of the text in `file`, decompressed like the readers do. */
-  private def startsWithUtf8Mark(file: Path, configuration: Configuration): Boolean = {
-    val codec  = new CompressionCodecFactory(configuration).getCodec(file)
-    val raw    = file.getFileSystem(configuration).open(file)
-    val stream = if (codec == null) raw else codec.createInputStream(raw)
-    try stream.readNBytes(Utf8Mark.length).sameElements(Utf8Mark)
-    finally stream.close()
+  private[spark] def startsWithUtf8Mark(file: Path, configuration: Configuration): Boolean = {
+    val codec = new CompressionCodecFactory(configuration).getCodec(file)
+    // Own the raw stream before constructing its wrapper: codec initialization can also fail.
+    // Using preserves a read/initialization failure when cleanup throws another exception.
+    Using.resource(file.getFileSystem(configuration).open(file)) { raw =>
+      if (codec == null) raw.readNBytes(Utf8Mark.length).sameElements(Utf8Mark)
+      else
+        Using.resource(codec.createInputStream(raw)) { stream =>
+          stream.readNBytes(Utf8Mark.length).sameElements(Utf8Mark)
+        }
+    }
   }
 
   /** The smaller of two file names, where an empty name stands for none. */

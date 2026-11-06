@@ -61,7 +61,10 @@ packages the jars including the shaded CLI jar, and checks formatting and Checks
   in the text files the root `pom.xml` lists, such as the Markdown in `docs/` and `design/`, the
   Python in `orchestration/`, `tests/` and `cicd/`, and the shell scripts in `cicd/`.
 - Checkstyle 14.3.0 checks the main and test Java sources against
-  `config/checkstyle/checkstyle.xml`.
+  `config/checkstyle/checkstyle.xml`: final newlines, explicit and used imports, plus naming rules
+  for packages, types, methods, fields, constants, parameters, locals and record components.
+  Catch and lambda parameters use the same lower-camel-case convention; failures are build errors.
+  The exact twelve naming checks are listed in [build and quality](../../design/build-and-quality.md#checkstyle).
 
 The Makefile wraps the common commands:
 
@@ -118,6 +121,11 @@ JVM tests live outside the modules, but each module's own build compiles and run
   tests. Moving a module directory does not move its tests; renaming an artifactId does.
 - The root project's Spotless check covers `tests/**/*.java` and `tests/**/*.scala`, and Checkstyle
   covers each module's Java test directory.
+- Desktop tests use the same external layout (`tests/jvm/datacraft-desktop/java`) and the optional
+  `-Pdesktop -pl :datacraft-desktop -am verify` reactor. Parameter mode switching, connection-test
+  revisions, cache-clear notifications, field labels and CSS contrast have focused regressions;
+  [desktop testing](../desktop/testing.md) describes their contracts. Use controlled UI/store
+  queues or backend responses to reproduce callback order instead of timing-dependent sleeps.
 - `datacraft-spark` and `datacraft-cli` hold only ScalaTest suites and skip Surefire in their
   own POM. scalatest-maven-plugin writes their JUnit XML reports and an
   `<artifactId>-scalatest.txt` summary to the module's `target/surefire-reports`.
@@ -226,6 +234,11 @@ when the Docker engine is already part of a swarm. Both stack scripts check cred
 `cicd/images/check_access.py`, which runs anywhere: given the stack's `.env` or the same values in
 the environment, `--airflow URL` requires a token for the admin password and none for another
 password, and `--api URL` requires `/jobs` to open for the API token only.
+The probe connects directly, ignores proxy environment settings and never follows redirects,
+including same-origin redirects. A `3xx` is reported as the original endpoint's unexpected
+status and makes the check fail; neither bearer credentials nor login bodies are forwarded to
+another URL. Supply the actual API base URL instead of a redirecting front page. Success proves
+that the requested endpoint itself answered the expected authentication checks.
 
 With Docker on the workstation the four container scripts also run locally, and it is worth doing
 before a push that changes an image, a stack file or a deployment script: two defects of the
@@ -311,7 +324,7 @@ cicd/
 | `dags` | After `build`: Python 3.13 and JDK 25; `cicd/airflow/install-airflow.sh` (Airflow 3.3.2 and its providers under the official constraints for the running Python, then `pyspark==4.2.0`, then the fixed releases of `orchestration/airflow/security-overrides.txt`); `cicd/airflow/check_security_floor.py` (Airflow 3.3.2, FAB provider 3.9.0 and each override release); `tests/orchestration`; `tests/smoke/airflow_runtime_smoke.py` with the verified jar |
 | `scripts` | `cicd/lint/check-actions-pinned.sh` (every `uses:` is `owner/repo@<full commit SHA> # vX.Y.Z` or a local action, on one line, and none appears in a comment); `cicd/lint/install-shellcheck.sh` (ShellCheck 0.11.0); `cicd/lint/check-shell-scripts.sh` (`bash -n` and ShellCheck over every shell script git knows; every finding fails, sourced files are followed); the `tests/deploy`, `tests/ci` and `tests/docs` suites on Python 3.13; `node --test tests/docs/cloud-costs.test.cjs` on Node.js 24; `npx --yes pyright@1.1.414 --warnings` |
 | `compose` | `cicd/stacks/check-stack-files.sh`: `docker compose config` and `docker stack config` with test-only secrets, and that each missing secret, the API token and for the stack the Redis password included, is rejected |
-| `desktop` | Windows 2025 and Ubuntu 24.04 matrix, JDK 25 (Linux uses D-Bus and Xvfb): `./mvnw -B -ntp -Pdesktop -pl :datacraft-desktop -am verify` runs parent formatting plus desktop unit, client, store, UI and accessibility lifecycle tests. `cicd/build/check_test_counts.py --project desktop` requires Windows 141 / Linux 138 tests. `cicd/desktop/package_desktop.py` verifies the pinned JavaFX disposal patch, builds the jlink/jpackage image, trains all views/themes and checks 20 fresh/reused starts: verified AOT, no runtime diagnostics, each at most 1500 ms. UI snapshots and all startup samples are platform-specific artifacts |
+| `desktop` | Windows 2025 and Ubuntu 24.04 matrix, JDK 25 (Linux uses D-Bus and Xvfb): `./mvnw -B -ntp -Pdesktop -pl :datacraft-desktop -am verify` runs parent formatting plus desktop unit, client, store, UI and accessibility lifecycle tests. `cicd/build/check_test_counts.py --project desktop` requires Windows 160 / Linux 157 tests. `cicd/desktop/package_desktop.py` verifies the pinned JavaFX disposal patch, builds the jlink/jpackage image, trains all views/themes and checks 20 fresh/reused starts: verified AOT, no runtime diagnostics, each at most 1500 ms. UI snapshots and all startup samples are platform-specific artifacts |
 | `containers` | After `build`, `scripts` and `compose`: `cicd/images/smoke-images.sh`, then `cicd/images/smoke-compose.sh`, then `cicd/images/smoke-swarm.sh` |
 
 The `cicd/build` scripts run after `./mvnw verify` on Linux, WSL or Git Bash (they use GNU tools
@@ -362,12 +375,12 @@ pom's `<modules>`.
 | `datacraft-io` | 64 | 66 |
 | `datacraft-engine` | 34 | 34 |
 | `datacraft-jobs` | 91 | 89 |
-| `datacraft-spark` | 59 | 49 |
+| `datacraft-spark` | 64 | 54 |
 | `datacraft-api` | 31 | 31 |
 | `datacraft-cli` | 32 | 32 |
 
 `--project desktop` checks the desktop console instead (`desktop/target/surefire-reports`): the
-floor is 138 on Linux and 141 on Windows, which also runs three real native accessibility tests.
+floor is 157 on Linux and 160 on Windows, which also runs three real native accessibility tests.
 Each runs its own `VaultPlatformTest` case; `verify` excludes `e2e`. The desktop matrix checks the
 floor after `verify`.
 

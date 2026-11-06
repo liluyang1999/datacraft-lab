@@ -15,6 +15,8 @@ import javafx.collections.transformation.FilteredList;
 /** The activity stream, newest first, filtered by source; new entries arrive as they happen. */
 public final class ActivityModel implements Visibility {
 
+  private static final System.Logger LOG = System.getLogger(ActivityModel.class.getName());
+
   private final ActivityLog log;
   private final Executor ui;
   private final ObservableList<Entry> entries = FXCollections.observableArrayList();
@@ -22,6 +24,7 @@ public final class ActivityModel implements Visibility {
   private final ObjectProperty<Source> filter = new SimpleObjectProperty<>();
   private boolean loaded;
   private boolean loading;
+  private long generation;
 
   /** Entries that arrive while the first load is on its way; merged when it lands. */
   private final List<Entry> early = new java.util.ArrayList<>();
@@ -33,6 +36,16 @@ public final class ActivityModel implements Visibility {
         (property, before, source) ->
             visible.setPredicate(source == null ? null : entry -> entry.source() == source));
     log.subscribe(entry -> ui.execute(() -> add(entry)));
+    log.onCleared(
+        () ->
+            ui.execute(
+                () -> {
+                  generation++;
+                  loaded = true;
+                  loading = false;
+                  early.clear();
+                  entries.clear();
+                }));
   }
 
   private void add(Entry entry) {
@@ -54,17 +67,25 @@ public final class ActivityModel implements Visibility {
       return;
     }
     loading = true;
+    long requested = ++generation;
     log.recent(ActivityRepository.KEEP)
-        .thenAccept(
-            list ->
+        .whenComplete(
+            (list, failure) ->
                 ui.execute(
                     () -> {
-                      if (!loaded) {
+                      if (requested != generation) {
+                        return;
+                      }
+                      loading = false;
+                      if (failure == null) {
                         loaded = true;
                         entries.setAll(list);
                         early.stream().filter(entry -> !list.contains(entry)).forEach(this::add);
-                        early.clear();
+                      } else {
+                        LOG.log(
+                            System.Logger.Level.WARNING, "Activity could not be loaded", failure);
                       }
+                      early.clear();
                     }));
   }
 
@@ -74,7 +95,7 @@ public final class ActivityModel implements Visibility {
   }
 
   public void clear() {
-    log.clear().thenRun(() -> ui.execute(entries::clear));
+    log.clear();
   }
 
   public ObservableList<Entry> visibleEntries() {

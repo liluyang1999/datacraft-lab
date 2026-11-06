@@ -1,6 +1,7 @@
 package com.example.datacraft.desktop.viewmodel;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.example.datacraft.desktop.api.AirflowModels.DagRun;
@@ -12,6 +13,9 @@ import com.example.datacraft.desktop.app.AppPaths;
 import com.example.datacraft.desktop.service.FakeBackends;
 import com.example.datacraft.desktop.service.ManualTicker;
 import com.example.datacraft.desktop.store.Profile;
+import com.fasterxml.jackson.databind.DeserializationFeature;
+import java.math.BigDecimal;
+import java.math.BigInteger;
 import java.nio.file.Path;
 import java.time.Duration;
 import java.util.List;
@@ -81,6 +85,92 @@ class PipelinesModelTest {
         + ETL
         + "/dagRuns/"
         + com.example.datacraft.desktop.api.HttpTransport.encode(run.runId());
+  }
+
+  @Test
+  void jsonConfigurationKeepsTypesAndNullsAndRequiresOneUnambiguousObject() {
+    var parsed =
+        model.parseConf(
+            "{\"number\":42,\"flag\":true,\"empty\":null,\"list\":[1,2],\"object\":{\"x\":\"y\"}}");
+    var conf = parsed.value().orElseThrow();
+    assertEquals(42, conf.get("number"));
+    assertEquals(true, conf.get("flag"));
+    assertTrue(conf.containsKey("empty"));
+    assertEquals(null, conf.get("empty"));
+    assertEquals(List.of(1, 2), conf.get("list"));
+    assertEquals(java.util.Map.of("x", "y"), conf.get("object"));
+    assertTrue(model.formRows(ETL, conf).value().isEmpty());
+    for (String invalid :
+        List.of("[]", "{} {}", "{\"x\":1,\"x\":2}", "{\"nested\":{\"x\":1,\"x\":2}}")) {
+      assertTrue(model.parseConf(invalid).value().isEmpty(), invalid);
+    }
+  }
+
+  @Test
+  void jsonConfigurationPreservesDecimalPrecisionAndMagnitude() throws Exception {
+    var conf =
+        model
+            .parseConf(
+                "{\"decimal\":0.12345678901234567890123456789,\"large\":1e400,"
+                    + "\"small\":1e-400,\"integer\":9223372036854775808,"
+                    + "\"nested\":[{\"value\":-9.8765432109876543210987654321}]}")
+            .value()
+            .orElseThrow();
+    assertEquals(new BigDecimal("0.12345678901234567890123456789"), conf.get("decimal"));
+    assertEquals(new BigDecimal("1e400"), conf.get("large"));
+    assertEquals(new BigDecimal("1e-400"), conf.get("small"));
+    assertEquals(new BigInteger("9223372036854775808"), conf.get("integer"));
+    assertEquals(
+        List.of(java.util.Map.of("value", new BigDecimal("-9.8765432109876543210987654321"))),
+        conf.get("nested"));
+    assertEquals(
+        conf, model.parseConf(context.json().writeValueAsString(conf)).value().orElseThrow());
+    assertFalse(context.json().isEnabled(DeserializationFeature.USE_BIG_DECIMAL_FOR_FLOATS));
+  }
+
+  @Test
+  void triggeringSendsPreciseConfigurationAsJsonNumbers() throws Exception {
+    backends.airflow.on(
+        "POST /api/v2/dags/" + ETL + "/dagRuns",
+        200,
+        "{\"dag_run_id\":\"manual-precision\",\"dag_id\":\""
+            + ETL
+            + "\",\"state\":\"queued\",\"conf\":{}}");
+    String configuration =
+        "{\"decimal\":0.12345678901234567890123456789,\"large\":1e400,\"small\":1e-400}";
+    model.trigger(ETL, model.parseConf(configuration).value().orElseThrow(), "").join();
+    String sent =
+        backends.airflow.requests().stream()
+            .filter(
+                request -> request.method().equals("POST") && request.path().endsWith("/dagRuns"))
+            .findFirst()
+            .orElseThrow()
+            .body();
+    var preciseReader =
+        context.json().reader().with(DeserializationFeature.USE_BIG_DECIMAL_FOR_FLOATS);
+    var sentConf = preciseReader.readTree(sent).path("conf");
+    assertEquals(preciseReader.readTree(configuration), sentConf);
+    assertTrue(sentConf.path("large").isNumber());
+    assertFalse(context.json().isEnabled(DeserializationFeature.USE_BIG_DECIMAL_FOR_FLOATS));
+  }
+
+  @Test
+  void jsonToFormRejectsKeysAndValuesThatTextFieldsWouldNormalize() {
+    for (String invalid :
+        List.of(
+            "{\" spaced \":\"value\"}",
+            "{\"\":\"value\"}",
+            "{\"key\":\" \"}",
+            "{\"key\":\"a\\tb\"}")) {
+      assertTrue(
+          model.formRows(ETL, model.parseConf(invalid).value().orElseThrow()).value().isEmpty(),
+          invalid);
+    }
+    var conf = model.parseConf("{\"input\":\" 输入.csv \",\"unknown\":\"值\"}").value().orElseThrow();
+    var rows = model.formRows(ETL, conf).value().orElseThrow();
+    assertEquals(conf, ParamForm.collect(rows).values());
+    assertTrue(rows.stream().anyMatch(row -> row.known() && "input".equals(row.key().get())));
+    assertTrue(rows.stream().anyMatch(row -> !row.known() && "unknown".equals(row.key().get())));
   }
 
   @Test

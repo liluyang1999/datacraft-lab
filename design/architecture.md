@@ -71,6 +71,12 @@ datacraft-lab/
 - `desktop/` is a client of the engine API and Airflow, not part of the engine: it builds with
   `./mvnw -Pdesktop -pl :datacraft-desktop -am verify`, keeps only settings and caches on the user's machine, and is
   documented in Chinese under [docs/desktop](../docs/desktop/README.md).
+  Its UI binds to view models, which use services over HTTP clients and local repositories.
+  Shared `ParamRow` / `ParamForm` types own editable parameter rows and their mapping rules;
+  pipeline forms do not depend on `JobsModel`. JSON-to-form conversion preserves meaning or keeps
+  the draft in JSON mode. Connection-test revisions and committed cache-clear notifications
+  prevent old asynchronous results from restoring stale UI state; see
+  [desktop architecture](../docs/desktop/architecture.md) for those contracts.
 
 ## Module responsibilities
 
@@ -261,6 +267,10 @@ topology and the cloud platform choice are decisions 5 to 7 in [decisions.md](de
 
 All JVM code uses base package `com.example.datacraft` plus the module name (`.common`, `.config`,
 `.io`, `.engine`, `.jobs`, `.spark`, `.api`, `.cli`).
+The desktop client uses `.desktop` with packages for its layers. Checkstyle enforces Java package,
+type, member, parameter, local and record-component naming in both main and test sources;
+[build and quality](build-and-quality.md#checkstyle) lists the checks. Naming follows the existing
+responsibility boundaries rather than introducing another directory or module hierarchy.
 
 ## Quality gates
 

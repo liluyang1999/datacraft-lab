@@ -147,12 +147,12 @@ public final class SettingsView implements View {
     fields.setHgrow(Priority.ALWAYS);
     form.getColumnConstraints().addAll(labels, fields);
     int line = 0;
-    form.addRow(line++, fieldLabel("名称"), name);
-    form.addRow(line++, fieldLabel("引擎地址"), engineUrl);
-    form.addRow(line++, fieldLabel("引擎令牌"), token);
-    form.addRow(line++, fieldLabel("Airflow 地址"), airflowUrl);
-    form.addRow(line++, fieldLabel("用户名"), user);
-    form.addRow(line++, fieldLabel("口令"), password);
+    form.addRow(line++, Controls.labelFor("名称", name, "field-label"), name);
+    form.addRow(line++, Controls.labelFor("引擎地址", engineUrl, "field-label"), engineUrl);
+    form.addRow(line++, Controls.labelFor("引擎令牌", token, "field-label"), token);
+    form.addRow(line++, Controls.labelFor("Airflow 地址", airflowUrl, "field-label"), airflowUrl);
+    form.addRow(line++, Controls.labelFor("用户名", user, "field-label"), user);
+    form.addRow(line++, Controls.labelFor("口令", password, "field-label"), password);
     form.add(rememberRow, 1, line++);
 
     Label error = Controls.label("", "notice", "failed");
@@ -333,7 +333,7 @@ public final class SettingsView implements View {
         Controls.row(10, mode, Controls.info("标准：健康检查每 5 秒一次，流水线每 10 秒刷新。节能：都放慢到三分之一。")));
     grid.addRow(
         1,
-        fieldLabel("等待上限"),
+        Controls.labelFor("等待上限", timeout, "field-label"),
         Controls.row(
             10,
             timeout,
@@ -368,7 +368,7 @@ public final class SettingsView implements View {
     HBox locationRow =
         Controls.row(8, location, open, Controls.info("这里只保存设置、连接配置、参数预设与缓存，不保存任何业务数据。"));
     HBox.setHgrow(location, Priority.ALWAYS);
-    grid.addRow(0, fieldLabel("位置"), locationRow);
+    grid.addRow(0, Controls.labelFor("位置", location, "field-label"), locationRow);
     grid.addRow(1, fieldLabel("占用"), Controls.row(12, size, clear));
     return new VBox(16, OverviewView.heading(Glyph.DATABASE, "本机数据"), grid);
   }

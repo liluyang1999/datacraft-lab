@@ -7,7 +7,9 @@ Prerequisites:
     task fails without retrying when the connection would accept any host key.
 
 ``local_path`` and ``output`` must be absolute paths inside ``DATACRAFT_DATA_ROOT``, without
-``.``/``..`` segments or Hadoop glob characters; the SFTP account bounds ``remote_path``.
+``.``/``..`` segments or Hadoop glob characters. Before download, existing symbolic links must
+also resolve within the data root; that directory must be controlled by trusted local users.
+The SFTP account bounds ``remote_path``.
 
 The download step uses Airflow's native SFTP provider (connection + secret management handled by
 Airflow). The JVM ``SftpClient`` is a library for future JVM jobs; no shipped job uses it.
@@ -21,7 +23,7 @@ from airflow.providers.sftp.operators.sftp import SFTPOperator
 from airflow.sdk import DAG, Param, chain
 
 from datacraft_common import (
-    DEFAULT_ARGS, data_path_param, encoding_param, require_verified_sftp_host, spark_task)
+    DEFAULT_ARGS, data_path_param, encoding_param, require_safe_sftp_download, spark_task)
 
 with DAG(
     dag_id="datacraft_sftp_ingest",
@@ -51,7 +53,7 @@ with DAG(
         local_filepath="{{ params.local_path }}",
         operation="get",
         create_intermediate_dirs=True,
-        pre_execute=require_verified_sftp_host("datacraft_sftp"),
+        pre_execute=require_safe_sftp_download("datacraft_sftp"),
     )
 
     convert = spark_task(

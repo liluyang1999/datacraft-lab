@@ -12,9 +12,12 @@ import com.example.datacraft.desktop.service.Poller;
 import com.example.datacraft.desktop.service.Session;
 import com.example.datacraft.desktop.service.Ticker;
 import com.example.datacraft.desktop.util.Lists;
+import com.fasterxml.jackson.core.JsonParser;
 import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.ObjectReader;
 import java.time.Duration;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -379,12 +382,19 @@ public final class PipelinesModel implements Visibility {
       return Result.ok(Map.of());
     }
     try {
-      JsonNode node = json.readTree(text);
+      // Keep arbitrary configuration numbers exact through both the tree and untyped-map stages.
+      // The shared transport mapper keeps its protocol defaults; this reader owns the override.
+      ObjectReader reader =
+          json.reader()
+              .with(JsonParser.Feature.STRICT_DUPLICATE_DETECTION)
+              .with(DeserializationFeature.FAIL_ON_TRAILING_TOKENS)
+              .with(DeserializationFeature.USE_BIG_DECIMAL_FOR_FLOATS);
+      JsonNode node = reader.readTree(text);
       if (node == null || !node.isObject()) {
         return Result.error("配置必须是一个 JSON 对象，例如 {\"input\": \"…\"}。");
       }
       @SuppressWarnings("unchecked")
-      Map<String, Object> conf = json.treeToValue(node, LinkedHashMap.class);
+      Map<String, Object> conf = reader.treeToValue(node, LinkedHashMap.class);
       return Result.ok(conf);
     } catch (JsonProcessingException malformed) {
       return Result.error(
@@ -394,6 +404,24 @@ public final class PipelinesModel implements Visibility {
               + malformed.getLocation().getColumnNr()
               + " 列。");
     }
+  }
+
+  /** Converts only configurations the text form can round-trip without changing their meaning. */
+  public Result<List<ParamRow>> formRows(String dagId, Map<String, Object> conf) {
+    Map<String, String> values = new LinkedHashMap<>();
+    for (Map.Entry<String, Object> entry : conf.entrySet()) {
+      String key = entry.getKey();
+      if (key.isBlank()
+          || !key.equals(key.strip())
+          || key.codePoints().anyMatch(Character::isISOControl)
+          || !(entry.getValue() instanceof String value)
+          || value.isBlank()
+          || value.codePoints().anyMatch(Character::isISOControl)) {
+        return Result.error("此配置包含表单无法原样保留的类型、空值或字符，请继续使用 JSON 编辑。");
+      }
+      values.put(key, value);
+    }
+    return Result.ok(ParamForm.rows(catalogEntry(dagId), values));
   }
 
   /** A value or the sentence explaining why there is none. */

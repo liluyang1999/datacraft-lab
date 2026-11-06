@@ -10,6 +10,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CopyOnWriteArrayList;
 
 /**
  * A cache of the job runs this app started, per profile: what was run, when, and how it ended. It
@@ -39,6 +40,7 @@ public final class RecentRunRepository {
   }
 
   private final LocalStore store;
+  private final List<Runnable> clearListeners = new CopyOnWriteArrayList<>();
 
   public RecentRunRepository(LocalStore store) {
     this.store = store;
@@ -116,13 +118,20 @@ public final class RecentRunRepository {
   }
 
   public CompletableFuture<Void> clear() {
-    return store.transaction(
-        connection -> {
-          try (PreparedStatement statement =
-              connection.prepareStatement("DELETE FROM recent_runs")) {
-            statement.executeUpdate();
-          }
-          return null;
-        });
+    return store
+        .<Void>transaction(
+            connection -> {
+              try (PreparedStatement statement =
+                  connection.prepareStatement("DELETE FROM recent_runs")) {
+                statement.executeUpdate();
+              }
+              return null;
+            })
+        .thenRun(() -> clearListeners.forEach(Runnable::run));
+  }
+
+  /** Notifies views only after the deletion commits; callbacks must dispatch to their UI thread. */
+  public void onCleared(Runnable listener) {
+    clearListeners.add(listener);
   }
 }

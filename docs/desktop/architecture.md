@@ -37,7 +37,7 @@
 | `desktop.api` | `HttpTransport`、`EngineClient`、`AirflowClient`、模型记录（`EngineModels`、`AirflowModels`）、`RunTone`（五类状态）、`ApiError` 与 `ApiException` |
 | `desktop.store` | `LocalStore`（连接、迁移、写入串行化）、`SettingsRepository`、`ProfileRepository` 与 `Profile`、`PresetRepository`、`RecentRunRepository`、`ActivityRepository`、`SecretVault`（`DpapiVault`、`FileKeyVault`） |
 | `desktop.service` | `Session`（当前连接与两个客户端）、`ProfileService`（连接配置、测试连接、内存中的秘密）、`ConnectionMonitor` 与 `BackendStatus`、`Poller` 与 `Ticker`（含失败退避）、`JobService`、`PipelineService`、`JobCatalog`（已知参数）、`ActivityLog`、`Messages`（出错时的说明） |
-| `desktop.viewmodel` | `StatusModel`、`OverviewModel`、`JobsModel`、`PipelinesModel`、`ActivityModel`、`SettingsModel`；`DagRow`、`Labels`（状态与类型的中文名）、`Visibility` |
+| `desktop.viewmodel` | `StatusModel`、`OverviewModel`、`JobsModel`、`PipelinesModel`、`ActivityModel`、`SettingsModel`；`ParamRow`（可观察参数行）、`ParamForm`（共享参数构造与收集规则）、`DagRow`、`Labels`（状态与类型的中文名）、`Visibility` |
 | `desktop.ui.shell` | `MainWindow`、`Navigator`（视图切换与懒加载）、`Sidebar`、`TopBar`、`Toasts`、`Drawer`（侧滑面板）、`Dialogs`、`AppIcon` |
 | `desktop.ui.view` | 五个视图，各自只做布局与绑定；`Segments`（运行柱的高度、提示与选择键） |
 | `desktop.ui.component` | 图形：`StatusRing`（状态环）、`Donut`（结果构成）、`RunBars`（运行柱）、`TimeStrip`（最近运行的时间线）、`TaskGraph` 与 `GraphLayout`（DAG 图及其纯函数布局）、`RunMark`（勾与叉）、`BusyRing`（等待中的转圈）；日志：`LogPager`（每页 100 行、末页跟随、关闭释放监听）；表单与布局：`ParamEditor`、`EmptyState`、`Rows`（短列表的就地更新）、`Controls`（含提示用的 ⓘ 与标签片）、`Icons`（`Glyph` 枚举的线条图标）、`Tones` |
@@ -60,13 +60,16 @@
   在停止或重启后同样作废，不能覆盖暂停操作或新连接的状态。
 - **连接与草稿：**`ProfileService` 在用户发起选择时分配代次，保存并启用是一个操作；较早的解密、
   保存或删除回调不能抢回较晚选中的连接。设置表单按打开代次接收结果，口令字段还记录输入修订，
-  后到的已存口令不能覆盖新输入。并发操作按计数管理忙碌状态。作业预设和最近运行同时核对选择代次，
+  后到的已存口令不能覆盖新输入。连接测试另有独立代次：修改引擎地址、令牌、Airflow 地址、用户名或口令
+  立即清除旧结果；开始新测试也使前一测试失效。回调同时核对表单与测试代次，即使输入改回原值也不能
+  接收旧结果；名称与“加密保存”不影响连接测试。并发操作按计数管理忙碌状态。作业预设和最近运行同时核对选择代次，
   即使新旧连接具有同名作业，旧回调也不得写入新视图。
 - **侧滑面板：**面板持有当前内容及一个可取消的动画；重新打开时释放旧内容并停止旧动画。
   触发请求提交和回调时均确认表单仍属于当前面板，关闭或切换连接后的旧表单不能继续操作新界面。
 
 参数表单用 `Label.labelFor` 关联名称与控件。输入框的可访问文本保留实际输入，选项保留当前选择与默认值，
-不能用静态 `accessibleText` 把这些内容覆盖成参数名；作业和流水线触发表单共用这一约束。
+不能用静态 `accessibleText` 把这些内容覆盖成参数名；作业、流水线触发表单及设置共用这一约束。
+`Controls.labelFor` 负责普通字段的关联，令牌与口令继续使用 `PasswordField`。
 
 ## 作业目录与参数状态
 
@@ -80,6 +83,15 @@
 键两端空白后不得重复，有值的行必须有键；运行另检查必填参数，预设可以保留为不完整模板。
 通过校验后才生成请求或预设的键值映射，空白值沿用后台默认值。预设应用还要核对所属作业名，
 异步读取仍遵守连接与选择代次约束。逐行草稿仅保留在当前会话内，持久预设仍使用既有存储结构。
+
+作业与流水线通过独立的 `ParamRow` 和 `ParamForm` 共享这些参数规则，`ParamEditor` 不依赖
+`JobsModel` 的嵌套类型，流水线也不再自行拼接可能覆盖重名行的映射。`ParamForm.rows` 保留已知参数的
+目录定义，并为未知键构造可编辑行；请求协议与持久预设格式不变。
+
+流水线的 JSON 模式只接受单个对象，拒绝重名字段和对象后的额外内容；空白输入表示空配置。
+切回表单必须能无损往返：键非空且无需去除两端空白，值为非空白字符串，键和值均不含控制字符。
+数字、布尔、`null`、数组、对象及空白值继续留在 JSON 模式；不能转换或解析失败时保留原文并显示原因。
+可转换的未知键和值也会保留，已知参数的目录说明继续可用。表单转 JSON 与提交都先执行共享的键结构校验。
 
 ## 数据流：一次轮询
 
@@ -111,6 +123,10 @@ Rows 只更新变化的流水线泳道
 可用环境变量 `DATACRAFT_DESKTOP_HOME` 改到其他目录（测试与便携使用）。表结构由 `PRAGMA user_version`
 记录版本，启动时按顺序迁移；缓存类数据有保留上限（最近运行每个配置 200 条且不超过 14 天，活动记录 500 条），
 “设置 → 本机数据”可以一键清除。
+
+清除事件只在数据库删除提交成功后发出，并由视图模型转到 FX 线程同步已加载的活动页、作业最近运行
+与总览；旧查询代次随之失效，不能把已删除记录重新显示。总览重算本机作业统计并保留远端流水线历史。
+活动新增通知也在写入提交后按存储顺序交付，因此清除后新产生的活动仍保留。连接、参数预设与设置不属于缓存。
 
 ## 错误模型
 

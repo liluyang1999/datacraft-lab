@@ -6,7 +6,7 @@
     -dc-surface-hover: #F0F4F8;
     -dc-surface-selected: #E3EDF6;
     -dc-input: #FFFFFF;
-    -dc-prompt: #71859A;
+    -dc-prompt: #62768A;
     -dc-text: #1C2C3B;
     -dc-text-secondary: #566A80;
     -dc-line: #D3DDE6;
@@ -35,7 +35,7 @@
     -dc-none: #C3CFDA;
     -dc-success-text: #1F7A6F;
     -dc-failed-text: #A33E56;
-    -dc-warning-text: #8C6A1E;
+    -dc-warning-text: #85631C;
     -dc-failed-wash: #F8E9EC;
     -dc-warning-wash: #F7F0E1;
 
@@ -71,5 +71,5 @@
     -fx-mark-color: #566A80;
     -fx-box-border: #D3DDE6;
     -fx-text-box-border: #C9D5E0;
-    -fx-prompt-text-fill: #71859A;
+    -fx-prompt-text-fill: #62768A;
 }

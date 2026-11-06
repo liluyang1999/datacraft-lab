@@ -12,6 +12,7 @@ under `tests/`. Paths below are relative to the repository root.
 | File | Role |
 | --- | --- |
 | `orchestration/airflow/dags/datacraft_common.py` | Reusable helpers: env-driven config + `cli_task` / `spark_task` builders. Not a DAG; excluded from discovery by `orchestration/airflow/dags/.airflowignore` (Airflow 3 glob syntax). |
+| `orchestration/airflow/dags/datacraft_paths.py` | Worker-local SFTP destination checks without importing Airflow; also excluded from DAG discovery by `.airflowignore`. |
 | `orchestration/airflow/dags/datacraft_engine_jobs.py` | Smoke test — runs `noop` then `echo` via the plain CLI jar. |
 | `orchestration/airflow/dags/datacraft_spark_etl.py` | `csv-to-parquet` then `row-count` via `spark-submit`; parameterised paths. |
 | `orchestration/airflow/dags/datacraft_sftp_ingest.py` | SFTP download → `csv-to-parquet` → `row-count`. |
@@ -62,6 +63,18 @@ because each task runs in its own temporary working directory that is deleted wh
 writing, so permission to trigger these DAGs means permission to replace or delete data inside the
 root as the Airflow user.
 
+Before an SFTP download connects or creates directories, its worker-side `pre_execute` hook
+checks the rendered `local_filepath` again. The data root must exist as a directory; existing
+parent links and an existing destination link must resolve strictly beneath its real path.
+Missing destination directories are allowed and are created by the SFTP provider only after
+the guard and host-key checks succeed. The provider receives the resolved destination, so it
+does not follow the original link again. An unsafe or unresolvable path fails the task without
+retrying, before it writes a file.
+
+This protects against existing links that escape the root. The data directory and its parents
+must remain controlled by trusted local users: a pathname check cannot prevent a hostile process
+from replacing directories between validation and the provider opening the destination.
+
 ## Running a Spark job on a real cluster
 
 `spark_task` passes the same `--master` to both `spark-submit` and the CLI, so set
@@ -84,7 +97,7 @@ See section 6 of the [deployment guide](deployment.md) (in Chinese).
 
 `datacraft_sftp_ingest` needs an Airflow connection `datacraft_sftp` (Admin → Connections, SSH/SFTP
 type). The SFTP provider is required: a missing provider is a visible DAG import error. Downloads
-create parent directories, and a failed download blocks conversion.
+create parent directories after the [data-path guard](#data-paths), and a failed download blocks conversion.
 
 The SSH provider accepts any server key unless the connection says otherwise: without `host_key` it
 defaults `no_host_key_check` to true and only logs a warning. Pin the server key in the connection

@@ -2,19 +2,25 @@ package com.example.datacraft.desktop.viewmodel;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.example.datacraft.desktop.api.StubServer;
 import com.example.datacraft.desktop.app.AppContext;
 import com.example.datacraft.desktop.app.AppPaths;
+import com.example.datacraft.desktop.service.BackendStatus;
 import com.example.datacraft.desktop.service.FakeBackends;
 import com.example.datacraft.desktop.store.Profile;
 import java.nio.file.Path;
+import java.util.List;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
+import javafx.beans.property.StringProperty;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -119,6 +125,85 @@ class SettingsModelTest {
       release.countDown();
       slow.close();
     }
+  }
+
+  @Test
+  void changingAnyConnectionInputClearsTheResultForItsPreviousValue() {
+    for (StringProperty field : connectionInputs()) {
+      var tested = model.test().join();
+      ui.drain();
+      assertNotNull(model.testResult().get());
+      model.name().set("Renamed connection");
+      model.remember().set(!model.remember().get());
+      assertSame(
+          tested, model.testResult().get(), "metadata does not change the tested connection");
+      String before = field.get();
+      try {
+        field.set(before + "-edited");
+        assertNull(model.testResult().get(), "changed connection inputs require a new test");
+      } finally {
+        field.set(before);
+      }
+    }
+  }
+
+  @Test
+  void aQueuedTestResultCannotRestoreItsStatusAfterAnyConnectionInputWasEdited() {
+    for (StringProperty field : connectionInputs()) {
+      model.test().join(); // its completion waits in UiQueue, so editing wins deterministically
+      assertTrue(model.busy().get());
+      String before = field.get();
+      field.set(before + "-edited");
+      field.set(before); // returning to the old text is still a different editing revision
+      ui.drain();
+      assertNull(model.testResult().get(), "an earlier test cannot publish into an edited draft");
+      assertFalse(model.busy().get(), "discarded results still finish their operation");
+    }
+  }
+
+  @Test
+  void anEarlierTestCannotReplaceTheResultOfALaterTestForTheSameInputs() throws Exception {
+    model.engineToken().set(FakeBackends.TOKEN);
+    AtomicInteger requests = new AtomicInteger();
+    CompletableFuture<Void> entered = new CompletableFuture<>();
+    CompletableFuture<Void> release = new CompletableFuture<>();
+    backends.engine.on(
+        "GET /health",
+        request -> {
+          if (requests.getAndIncrement() == 0) {
+            entered.complete(null);
+            release.join();
+            return StubServer.Answer.json(500, "{\"error\":\"earlier check failed\"}");
+          }
+          return StubServer.Answer.json(200, "{\"status\":\"UP\",\"service\":\"datacraft-api\"}");
+        });
+    var earlier = model.test();
+    try {
+      entered.get(10, TimeUnit.SECONDS);
+      var latest = model.test().join();
+      ui.drain();
+      assertEquals(BackendStatus.State.UP, latest.engine().state());
+      assertSame(latest, model.testResult().get());
+      assertTrue(model.busy().get(), "the earlier check still owns its operation");
+      release.complete(null);
+      earlier.join();
+      ui.drain();
+      assertSame(latest, model.testResult().get(), "completion order must not select the result");
+      assertFalse(model.busy().get());
+    } finally {
+      release.complete(null);
+      earlier.join();
+      ui.drain();
+    }
+  }
+
+  private List<StringProperty> connectionInputs() {
+    return List.of(
+        model.engineUrl(),
+        model.engineToken(),
+        model.airflowUrl(),
+        model.airflowUser(),
+        model.airflowPassword());
   }
 
   @Test

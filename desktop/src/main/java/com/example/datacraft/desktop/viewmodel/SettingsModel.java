@@ -74,6 +74,7 @@ public final class SettingsModel {
   /** Counts the profiles shown in the form; a test result for an earlier one is dropped. */
   private long formGeneration;
 
+  private long testGeneration;
   private long tokenRevision;
   private long passwordRevision;
   private int pendingOperations;
@@ -94,8 +95,19 @@ public final class SettingsModel {
     this.paths = paths;
     this.vaultDescription = vaultDescription;
     this.ui = ui;
-    engineToken.addListener((property, before, value) -> tokenRevision++);
-    airflowPassword.addListener((property, before, value) -> passwordRevision++);
+    engineUrl.addListener((property, before, value) -> invalidateTestResult());
+    engineToken.addListener(
+        (property, before, value) -> {
+          tokenRevision++;
+          invalidateTestResult();
+        });
+    airflowUrl.addListener((property, before, value) -> invalidateTestResult());
+    airflowUser.addListener((property, before, value) -> invalidateTestResult());
+    airflowPassword.addListener(
+        (property, before, value) -> {
+          passwordRevision++;
+          invalidateTestResult();
+        });
     theme = new SimpleObjectProperty<>(preferences.theme());
     theme.addListener((property, before, value) -> preferences.theme(value));
     reducedMotion = new SimpleBooleanProperty(preferences.reducedMotion());
@@ -320,8 +332,9 @@ public final class SettingsModel {
       return CompletableFuture.failedFuture(new IllegalArgumentException(formError.get()));
     }
     operationStarted();
-    testResult.set(null);
-    long tested = formGeneration;
+    invalidateTestResult();
+    long testedForm = formGeneration;
+    long testedGeneration = testGeneration;
     return service
         .test(profile.get(), secrets())
         .whenComplete(
@@ -329,8 +342,8 @@ public final class SettingsModel {
                 ui.execute(
                     () -> {
                       operationFinished();
-                      if (tested == formGeneration) {
-                        testResult.set(result); // still the profile that was tested
+                      if (testedForm == formGeneration && testedGeneration == testGeneration) {
+                        testResult.set(result);
                       }
                     }));
   }
@@ -341,6 +354,11 @@ public final class SettingsModel {
    */
   public CompletableFuture<Void> activate() {
     return save(true).thenApply(saved -> null);
+  }
+
+  private void invalidateTestResult() {
+    testGeneration++;
+    testResult.set(null);
   }
 
   private void operationStarted() {

@@ -127,6 +127,12 @@ class DagTests(unittest.TestCase):
         # The Task SDK runs this hook itself; BaseOperator.pre_execute(context) would not call it.
         guard = download._pre_execute_hook
         self.assertIsNotNone(guard)
+
+        def check():
+            with tempfile.TemporaryDirectory() as root, patch.object(common, "DATA_ROOT", root):
+                download.local_filepath = str(Path(root) / "input.csv")
+                guard({"task": download})
+
         key = "ssh-rsa " + paramiko.RSAKey.generate(2048).get_base64()
         base = {"conn_type": "sftp", "host": "127.0.0.1", "login": "u", "password": "p"}
 
@@ -138,7 +144,7 @@ class DagTests(unittest.TestCase):
             {"host_key": key, "allow_host_key_change": True},
         ):
             with self.subTest(extra=extra), connection(extra), self.assertRaises(AirflowFailException):
-                guard({})
+                check()
         # The provider rejects these while reading the connection; retrying cannot fix them either.
         for extra in (
             {"host_key": key, "no_host_key_check": True}, {"host_key": "ssh-dss AAAA"}, {"host_key": "ssh-rsa"},
@@ -146,10 +152,45 @@ class DagTests(unittest.TestCase):
         ):
             with self.subTest(extra=extra), connection(extra):
                 with self.assertRaisesRegex(AirflowFailException, "'datacraft_sftp' has invalid SSH settings"):
-                    guard({})
+                    check()
         for extra in ({"host_key": key}, {"no_host_key_check": False}):
             with self.subTest(extra=extra), connection(extra):
-                guard({})
+                check()
+
+    def test_sftp_download_checks_rendered_real_paths_before_the_provider_runs(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            base = Path(temporary)
+            root, outside = base / "data", base / "outside"
+            root.mkdir()
+            outside.mkdir()
+            sentinel = outside / "victim.csv"
+            sentinel.write_bytes(b"outside content")
+            (root / "parent-link").symlink_to(outside, target_is_directory=True)
+            (root / "file-link.csv").symlink_to(sentinel)
+            with separate_common(DATACRAFT_DATA_ROOT=str(root)):
+                bag = DagBag(dag_folder=str(DAGS))
+            self.assertEqual({}, bag.import_errors)
+            dag = bag.dags["datacraft_sftp_ingest"]
+            download = dag.get_task("download")
+            guard = download._pre_execute_hook
+            self.assertIsNotNone(guard)
+            with patch("airflow.providers.sftp.hooks.sftp.SFTPHook") as hook:
+                hook.return_value.no_host_key_check = False
+                hook.return_value.allow_host_key_change = False
+                for path in (root / "parent-link" / "victim.csv", root / "file-link.csv"):
+                    self.assertEqual(str(path), dag.params.get_param("local_path").resolve(str(path)))
+                    download.local_filepath = "{{ params.local_path }}"
+                    download.render_template_fields({"params": {"remote_path": "/upload/input.csv", "local_path": str(path)}})
+                    with self.subTest(path=path), self.assertRaisesRegex(AirflowFailException, "Unsafe SFTP download destination"):
+                        guard({"task": download})
+                hook.assert_not_called()
+                self.assertEqual(b"outside content", sentinel.read_bytes())
+                destination = root / "new" / "input.csv"
+                download.local_filepath = str(destination)
+                guard({"task": download})
+                hook.assert_called_once_with(ssh_conn_id="datacraft_sftp")
+                self.assertEqual(str(destination), download.local_filepath)
+                self.assertFalse(destination.parent.exists())
 
     def test_rendered_values_remain_single_literal_arguments(self):
         with tempfile.TemporaryDirectory() as work:

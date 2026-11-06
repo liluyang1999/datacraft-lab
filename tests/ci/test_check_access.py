@@ -54,9 +54,9 @@ def handler(faults):
 
 
 @contextlib.contextmanager
-def stack(*faults):
-    """The base URL of a running stand-in."""
-    server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), handler(faults))
+def serve(request_handler):
+    """The base URL of a running test server, closed with its worker thread."""
+    server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), request_handler)
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
     try:
@@ -65,6 +65,43 @@ def stack(*faults):
         server.shutdown()
         server.server_close()
         thread.join(timeout=10)
+
+
+@contextlib.contextmanager
+def stack(*faults):
+    """The base URL of a running stand-in."""
+    with serve(handler(faults)) as url:
+        yield url
+
+
+@contextlib.contextmanager
+def redirecting_stack(status):
+    """Two real origins; record only request paths at the redirect destination, never secrets."""
+    reached = []
+
+    class Destination(handler(())):
+        def do_GET(self):
+            reached.append((self.command, self.path))
+            super().do_GET()
+
+        def do_POST(self):
+            reached.append((self.command, self.path))
+            super().do_POST()
+
+    with serve(Destination) as destination:
+        class Redirect(handler(())):
+            def do_GET(self):
+                self.send_response(status)
+                self.send_header("Location", destination + self.path)
+                self.send_header("Content-Length", "0")
+                self.end_headers()
+
+            def do_POST(self):
+                self.rfile.read(int(self.headers.get("Content-Length", "0")))
+                self.do_GET()
+
+        with serve(Redirect) as url:
+            yield url, reached
 
 
 def run_check(*arguments, **environment):
@@ -105,6 +142,17 @@ class CheckAccessTests(unittest.TestCase):
                          (api.returncode, api.stdout), api.stderr)
         self.assertEqual((0, f"Airflow at {url} gives a token for the admin password only\n"),
                          (airflow.returncode, airflow.stdout), airflow.stderr)
+
+    def test_redirects_fail_at_the_original_endpoint_without_contacting_another_origin(self):
+        for status in (301, 302, 303, 307, 308):
+            for side in ("--api", "--airflow"):
+                with self.subTest(status=status, side=side), redirecting_stack(status) as (url, reached):
+                    result = run_check("--env-file", str(self.env_file), side, url)
+                    self.assertEqual([], reached, "an access probe must not follow a redirect")
+                    self.assertEqual(1, result.returncode, result.stdout)
+                    self.assertIn(f" got {status}, expected ", result.stderr)
+                    self.assertEqual("", result.stdout)
+                    self.assert_no_credential(result)
 
     def test_every_departure_fails_and_is_named_without_a_credential(self):
         expected = {

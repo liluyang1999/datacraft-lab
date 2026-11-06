@@ -6,6 +6,23 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Cross-module contracts and interface refinement (2026-11-06)
+
+- Enforce twelve Java naming rules without changing public job names, protocol fields or schemas.
+  Share parameter rows and validation between jobs and pipelines; preserve JSON edits and exact
+  numbers, and reject duplicate keys or conversions that would discard configuration values.
+- Invalidate connection test results when their input draft changes; synchronize committed cache
+  deletion across activity, jobs and overview, while retaining subsequent records and remote history.
+- Associate settings fields with visible labels and improve light-theme prompt/warning contrast.
+  Both themes have fifteen tested text/background pairs; this is not a full accessibility certification.
+- Make Spark session waiting interruptible and close raw input even when a decompressor fails to
+  initialize. Reject HTTP redirects in credentialed probes and resolve SFTP destination boundaries
+  before the provider writes, retaining SSH host verification and trusted-local-directory requirements.
+- Added 24 JVM and 8 Python regressions. Local Windows full gates execute backend 327 and desktop
+  160 tests; the strict twenty-start package gate passed at 920–1378 ms. Historical startup spikes
+  and one native first-settings-display watchdog warning remain explicit in the
+  [current review](reports/review-2026-11-06.md); remote and cleanup evidence are recorded separately.
+
 ### CSV quality gates and job discovery (2026-11-05)
 
 #### Added

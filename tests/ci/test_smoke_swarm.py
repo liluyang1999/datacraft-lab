@@ -212,8 +212,13 @@ class SwarmRehearsalTests(unittest.TestCase):
         for name in ("swarm-deploy.sh", "airflow-init.sh"):
             self.assertIn("datacraft", (REPOSITORY / "deploy" / "scripts" / name).read_text(encoding="utf-8"))
             self.assertIn(f"\nbash deploy/scripts/{name}\n", script)
-        dags = {path.stem for path in (REPOSITORY / "orchestration" / "airflow" / "dags").glob("datacraft_*.py")}
-        self.assertEqual(dags - {"datacraft_common"}, set(listed(script, "dags")))
+        dag_directory = REPOSITORY / "orchestration" / "airflow" / "dags"
+        helpers = {"datacraft_common.py", "datacraft_paths.py"}
+        ignored = set((dag_directory / ".airflowignore").read_text(encoding="utf-8").splitlines())
+        self.assertTrue(helpers <= ignored, "helper modules must be excluded from DAG discovery")
+        dags = {path.stem for path in dag_directory.glob("datacraft_*.py") if path.name not in helpers}
+        self.assertEqual(3, len(dags))
+        self.assertEqual(dags, set(listed(script, "dags")))
 
 
 @unittest.skipUnless(sys.platform == "linux", "runs the script with bash and GNU sed")

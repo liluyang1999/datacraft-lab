@@ -1,7 +1,7 @@
 package com.example.datacraft.desktop.ui.component;
 
 import com.example.datacraft.desktop.service.JobCatalog;
-import com.example.datacraft.desktop.viewmodel.JobsModel.ParamRow;
+import com.example.datacraft.desktop.viewmodel.ParamRow;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.function.Consumer;

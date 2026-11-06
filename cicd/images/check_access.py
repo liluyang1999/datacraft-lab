@@ -23,8 +23,17 @@ import urllib.error
 import urllib.request
 
 TIMEOUT_SECONDS = 30
-# The stack is addressed directly: a proxy from the environment has no part in the check.
-OPENER = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+
+
+class NoRedirect(urllib.request.HTTPRedirectHandler):
+    """Check the requested endpoint itself; never forward its credentials to a redirect target."""
+
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        return None
+
+
+# The stack is addressed directly: neither a proxy nor a redirect can stand in for its response.
+OPENER = urllib.request.build_opener(urllib.request.ProxyHandler({}), NoRedirect())
 
 
 def credentials(path):

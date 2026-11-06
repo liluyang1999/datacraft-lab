@@ -19,13 +19,13 @@ import com.example.datacraft.desktop.ui.shell.Drawer;
 import com.example.datacraft.desktop.ui.shell.Toasts;
 import com.example.datacraft.desktop.util.Formats;
 import com.example.datacraft.desktop.viewmodel.DagRow;
-import com.example.datacraft.desktop.viewmodel.JobsModel.ParamRow;
 import com.example.datacraft.desktop.viewmodel.Labels;
+import com.example.datacraft.desktop.viewmodel.ParamForm;
+import com.example.datacraft.desktop.viewmodel.ParamRow;
 import com.example.datacraft.desktop.viewmodel.PipelinesModel;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.time.Clock;
 import java.time.ZoneId;
-import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Optional;
 import javafx.beans.binding.Bindings;
@@ -322,6 +322,8 @@ public final class PipelinesView implements View {
     asJson.setTooltip(new Tooltip("用 JSON 编辑运行配置"));
     TextField note = new TextField();
     note.setPromptText("备注（可不填）");
+    VBox jsonField = new VBox(6, Controls.labelFor("运行配置（JSON）", jsonText, "secondary"), jsonText);
+    VBox noteField = new VBox(6, Controls.labelFor("备注", note, "secondary"), note);
     Label error = Controls.label("", "notice", "failed");
     error.setWrapText(true);
     error.setMaxWidth(Double.MAX_VALUE);
@@ -343,23 +345,48 @@ public final class PipelinesView implements View {
           body.getChildren().clear();
           body.getChildren().add(intro);
           if (asJson.isSelected()) {
-            body.getChildren().add(jsonText);
-          } else if (!rows.isEmpty() || known.isPresent()) {
-            body.getChildren().add(rows.isEmpty() ? Controls.label("没有参数", "secondary") : form);
+            body.getChildren().add(jsonField);
+          } else {
+            body.getChildren().add(form);
           }
-          body.getChildren().addAll(note, error, Controls.row(12, submit, Controls.grow(), asJson));
+          body.getChildren()
+              .addAll(noteField, error, Controls.row(12, submit, Controls.grow(), asJson));
         };
     asJson.setOnAction(
         event -> {
           if (asJson.isSelected()) {
+            ParamForm.Values values = ParamForm.collect(rows);
+            if (!values.valid()) {
+              asJson.setSelected(false);
+              showError(error, values.error());
+              return;
+            }
             try {
               jsonText.setText(
                   json.writerWithDefaultPrettyPrinter()
-                      .writeValueAsString(PipelinesModel.conf(values(rows))));
-            } catch (com.fasterxml.jackson.core.JsonProcessingException impossible) {
-              jsonText.setText("{\n}");
+                      .writeValueAsString(PipelinesModel.conf(values.values())));
+            } catch (com.fasterxml.jackson.core.JsonProcessingException failure) {
+              asJson.setSelected(false);
+              showError(error, "配置无法转换为 JSON，请检查参数后重试。");
+              return;
             }
+          } else {
+            var parsed = model.parseConf(jsonText.getText());
+            if (parsed.value().isEmpty()) {
+              asJson.setSelected(true);
+              showError(error, parsed.error());
+              return;
+            }
+            var converted = model.formRows(dagId, parsed.value().get());
+            if (converted.value().isEmpty()) {
+              asJson.setSelected(true);
+              showError(error, converted.error());
+              return;
+            }
+            rows.setAll(converted.value().get());
           }
+          error.setVisible(false);
+          error.setManaged(false);
           layout.run();
         });
     if (known.isEmpty()) {
@@ -383,7 +410,12 @@ public final class PipelinesView implements View {
             }
             conf = parsed.value().get();
           } else {
-            conf = PipelinesModel.conf(values(rows));
+            ParamForm.Values values = ParamForm.collect(rows);
+            if (!values.valid()) {
+              showError(error, values.error());
+              return;
+            }
+            conf = PipelinesModel.conf(values.values());
           }
           submit.setDisable(true);
           model
@@ -405,12 +437,6 @@ public final class PipelinesView implements View {
                           }));
         });
     drawer.open("触发 " + dagId, scroll, () -> {});
-  }
-
-  private static Map<String, String> values(ObservableList<ParamRow> rows) {
-    Map<String, String> values = new LinkedHashMap<>();
-    rows.forEach(row -> values.put(row.key().get(), row.value().get()));
-    return values;
   }
 
   private static void showError(Label error, String text) {

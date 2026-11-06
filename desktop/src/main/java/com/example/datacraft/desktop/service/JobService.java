@@ -135,6 +135,10 @@ public final class JobService {
         .orElseGet(() -> CompletableFuture.completedFuture(List.of()));
   }
 
+  public void onRecentCleared(Runnable listener) {
+    runs.onCleared(listener);
+  }
+
   private void finished(
       long profileId,
       String jobName,

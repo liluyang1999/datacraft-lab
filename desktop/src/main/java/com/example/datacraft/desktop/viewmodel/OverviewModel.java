@@ -106,6 +106,15 @@ public final class OverviewModel implements Visibility {
             () -> preferences.refresh().scale(INTERVAL),
             ui);
     connected.set(session.current().isPresent());
+    jobs.onRecentCleared(
+        () ->
+            ui.execute(
+                () -> {
+                  applyRuns(List.of());
+                  if (poller.running()) {
+                    poller.restart();
+                  }
+                }));
     session.subscribe(
         connection ->
             ui.execute(
@@ -148,8 +157,14 @@ public final class OverviewModel implements Visibility {
               }
             });
     problem.set(data.airflowProblem());
+    applyRuns(data.jobRuns());
+    loaded.set(true);
+    applied.set(applied.get() + 1);
+  }
+
+  private void applyRuns(List<RecentRun> jobRuns) {
     List<RecentItem> items = new ArrayList<>();
-    for (RecentRun run : data.jobRuns()) {
+    for (RecentRun run : jobRuns) {
       items.add(
           new RecentItem(
               "job:" + run.jobName() + ":" + run.startedAt().toEpochMilli(),
@@ -180,8 +195,6 @@ public final class OverviewModel implements Visibility {
     mix.set(counted);
     items.sort(Comparator.comparing(RecentItem::startedAt).reversed());
     Lists.reconcile(recent, items.subList(0, Math.min(RECENT, items.size())), RecentItem::key);
-    loaded.set(true);
-    applied.set(applied.get() + 1);
   }
 
   @Override

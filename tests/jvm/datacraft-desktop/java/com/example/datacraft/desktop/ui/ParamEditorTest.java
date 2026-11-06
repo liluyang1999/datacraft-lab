@@ -5,7 +5,7 @@ import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 
 import com.example.datacraft.desktop.service.JobCatalog;
 import com.example.datacraft.desktop.ui.component.ParamEditor;
-import com.example.datacraft.desktop.viewmodel.JobsModel.ParamRow;
+import com.example.datacraft.desktop.viewmodel.ParamRow;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import javafx.collections.FXCollections;
 import javafx.scene.AccessibleAction;

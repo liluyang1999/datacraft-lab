@@ -234,6 +234,14 @@ root.
   `s3a://` paths, is a `ParamValidationError`. The root itself must be an absolute directory other
   than `/` that does not start with `//`, carry surrounding whitespace or contain any of those
   characters; duplicate and trailing slashes are collapsed. Otherwise all three DAGs fail to import.
+- The SFTP download adds a worker-side guard after template rendering and before the provider
+  connects, creates directories or writes. `local_filepath` must be one absolute path beneath
+  the configured root; the root must resolve to an existing directory, and the destination,
+  including existing parent and file symbolic links, must resolve strictly inside that real root.
+  Missing destination directories are allowed. On success the provider uses the resolved path;
+  an unsafe or unresolvable destination raises `AirflowFailException` without retrying. The data
+  root and its parents must be trusted throughout the download: this pathname check does not
+  prevent a hostile local process from changing directories between validation and open.
 
 ## Plain-JVM small-file jobs
 
@@ -442,7 +450,9 @@ SFTP:
 - The Airflow SFTP connection uses its own provider-managed credentials and trust settings. The
   `datacraft_sftp_ingest` download fails without retry unless the `datacraft_sftp` connection
   verifies the server key: a `host_key` extra, or `"no_host_key_check": false` with a known_hosts
-  file for the Airflow user, and `allow_host_key_change` not enabled.
+  file for the Airflow user, and `allow_host_key_change` not enabled. Its rendered local destination
+  must also pass the worker-side [data-root guard](#data-root-datacraft_data_root) before connection
+  or file creation; the SFTP account separately bounds the remote path.
 
 ## HTTP status contract
 
