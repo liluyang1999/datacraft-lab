@@ -18,10 +18,16 @@ All notable changes to this project are documented here. The format follows
 - Make Spark session waiting interruptible and close raw input even when a decompressor fails to
   initialize. Reject HTTP redirects in credentialed probes and resolve SFTP destination boundaries
   before the provider writes, retaining SSH host verification and trusted-local-directory requirements.
-- Added 24 JVM and 8 Python regressions. Local Windows full gates execute backend 327 and desktop
+- Added 24 JVM and 11 Python regressions. Local Windows full gates execute backend 327 and desktop
   160 tests; the strict twenty-start package gate passed at 920–1378 ms. Historical startup spikes
   and one native first-settings-display watchdog warning remain explicit in the
   [current review](reports/review-2026-11-06.md); remote and cleanup evidence are recorded separately.
+- The first remote run of `a8b7558` passed both desktop platforms but exposed a Python 3.13.18
+  symlink-loop guard failure in the Airflow suite (one failure among 28 tests). Resolve the path
+  and then `stat` it, permitting only `FileNotFoundError` for a missing destination tail; loops,
+  non-directory parents and other access errors are rejected. The expanded nine-test path suite
+  failed at four assertions before the fix and passed locally on Python 3.12 afterward. Full
+  remote verification of the corrected commit remains pending; the original failure is retained.
 
 ### CSV quality gates and job discovery (2026-11-05)
 

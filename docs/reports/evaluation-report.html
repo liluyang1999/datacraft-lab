@@ -315,7 +315,7 @@
     <div class="kpi"><dt>后端 Maven 模块</dt><dd class="v">8</dd><dd class="d">4 个职责分组，依赖范围由构建强制</dd></div>
     <div class="kpi"><dt>可调度作业</dt><dd class="v">8</dd><dd class="d">纯 JVM 3 · Spark 3 · 内置 2</dd></div>
     <div class="kpi"><dt>JVM 测试用例</dt><dd class="v">517</dd><dd class="d">后端 344 · 桌面 173（含端到端 12）；按平台与标签分组执行，结果见本轮复核记录与 4.4</dd></div>
-    <div class="kpi"><dt>Python 与 Node 测试</dt><dd class="v">279</dd><dd class="d">部署 71 · CI/CD 158 · 文档 16 · DAG 28 · 计算器 6</dd></div>
+    <div class="kpi"><dt>Python 与 Node 测试</dt><dd class="v">282</dd><dd class="d">部署 71 · CI/CD 158 · 文档 16 · DAG/路径 31 · 计算器 6；库存与实跑结果分列</dd></div>
     <div class="kpi"><dt>历史完整源码检查</dt><dd class="v">0</dd><dd class="d">已记录的编译、pyright、ShellCheck 无诊断；本轮执行范围与历史证据分列于 4.4</dd></div>
     <div class="kpi"><dt>综合评分</dt><dd class="v">4.4<small>/ 5</small></dd><dd class="d">13 个维度，新增桌面控制台；2026-09-25 审计前为 3.2</dd></div>
     <div class="kpi"><dt>常开月费</dt><dd class="v">$10.15</dd><dd class="d">腾讯云 Lighthouse 2 核 / 8 GB / 80 GB</dd></div>
@@ -351,6 +351,7 @@
 <section id="summary" aria-labelledby="h-summary">
   <h2 id="h-summary">一、执行摘要</h2>
   <p><strong>2026-11-06 衔接复核：</strong>统一参数模型与命名门禁，修复 JSON 精度/切换、连接草稿、缓存同步、Spark 取消与资源释放、探针重定向及 SFTP 真实路径边界。Windows 后端 327 项、桌面 160 项完整验证通过；正式 20 次启动全部低于 1500 ms（中位 983、最大 1378 ms）。管理员轻量追踪十次未重现历史超时；原生首次设置显示有一条超过 50 ms 的告警，无 UIA 异常。两平台当前交付与清理见<a href="review-2026-11-06.md">本轮记录</a>，历史失败保留。</p>
+  <p><strong>首次远端验收与补修：</strong><code>a8b7558</code> 的 <a href="https://github.com/liluyang1999/datacraft-lab/actions/runs/42157275526">CI 42157275526</a> 中桌面 Windows 160 / Linux 157 项通过，两平台各 20 次启动中位/最大为 554/842 ms、563/693 ms；逐张查看 19 张 Linux 截图未发现明确遮挡。但 Airflow Python 3.13.18 的 28 项中循环链接回归失败一项，整次 CI 不能记为通过。生产检查补充 <code>stat</code>，仅允许 <code>FileNotFoundError</code> 表示缺失尾部；新增三项测试后，本机 Python 3.12 路径九项由四处失败转为全部通过。修复后的新 SHA 及完整 31 项 Airflow/路径套件仍待远端验收，首次失败和性能历史保留。</p>
   <p><strong>2026-11-05 功能扩展：</strong>新增 <code>csv-quality</code> 作业，检查空白、重复及最少行数；作业页支持中文搜索、类型筛选和中文指标。补齐参数键校验与逐行草稿保留。Windows 后端 322 项和桌面 141 项完整验证通过；本机打包的 20 次启动中，1579 ms 与 1503 ms 两次超出 1500 ms，启动验收未通过。WPR 新会话仍被 Windows 以 <code>0xc5585011</code> 拒绝，预算保持不变。当前验证和远端交付证据见<a href="review-2026-11-05.md">本轮记录</a>，历史通过不替代本轮结果。</p>
   <p><strong>2026-10-29 复核：</strong>补齐直接 Java API 调用的非回环鉴权边界、SQLite 在 Error 下的回滚与原始错误保留、连接选择顺序、设置草稿和作业视图的异步归属。新增 15 项回归先复现旧行为再修复；Windows 后端 302 项、桌面 133 项完整门禁及真实后台 11 项通过；原生中文参数、草稿、主题与窗口恢复复核通过，最终包 20 次启动为 981–1098 ms。本轮原生运行、两平台 CI 与清理结果统一记录在<a href="review-2026-10-29.md">跨模块复核记录</a>；下面的 L8 数字属于此前交付，不替代本轮证据。模块结构、数据库格式、公共 JSON 契约和性能预算保持不变。</p>
   <p><strong>L8 历史结论与架构基线：</strong>L8 已补齐 JavaFX 原生库，并修正 Windows UIA 不支持属性的返回契约、主题状态与长日志遍历。两平台界面门禁 Windows 120 / Linux 117 项通过；Linux 启动失败进一步暴露进程起点计时偏差。改用包含启动器和观察开销的父进程单调时钟，本机 20 次为 1000–1209 ms，中位数 1035.5 ms；新计时远端 Windows 为 520–892 ms、Linux 为 648–827 ms，分别完整 20 次全部达标。历史 2614 ms 尖峰尚未在管理员采样中复现，不能宣称单一系统成因已根治。原生操作没有异常，初次显示有两条耗时告警；保留全部失败与原有预算。逐提交结果见 4.5，测量边界见 4.4 与第八章。CLI、HTTP API 与 Airflow 共用同一个 <code>DataJob</code> 契约和执行引擎，失败语义统一；8 个 Maven 模块按职责分为 core、io、processing、interfaces 四组，越界依赖在构建的 <code>validate</code> 阶段即失败；质量门禁拒绝项目源码编译、类型检查或 Shell 检查警告，CI/CD 逻辑集中在 <code>cicd/</code>，可以脱离 GitHub Actions 在本机复现；流水线步骤的失败原因写入公开注解；Compose 栈与 Swarm 栈在 L7 本机及远端 CI 中均实际部署过；所有镜像运行按版本与校验和固定的 Temurin 25.0.5。桌面控制台“数艺工坊”在一个窗口里查看与操作两个后台，它只是客户端，默认后端构建不包含桌面工程。</p>
@@ -360,7 +361,7 @@
       <ul>
         <li>一个契约、一个引擎、三种入口，新作业注册一次即可在 CLI、API 与 Airflow 中使用（第三章）。</li>
         <li>模块边界、JDK 版本下限与零警告由构建强制，而不是靠约定（3.2、4.3）。</li>
-        <li>344 项后端 JVM 测试、173 项桌面测试（含 12 项端到端）与 279 项脚本、文档、DAG 测试。平台测试和端到端测试分组执行；当前门禁下限为 Linux 后端 337、Windows 后端 327，桌面 Linux 157、Windows 160 项；历史实跑数字保留原值。</li>
+        <li>344 项后端 JVM 测试、173 项桌面测试（含 12 项端到端）与 282 项脚本、文档、DAG/路径测试。平台测试和端到端测试分组执行；当前门禁下限为 Linux 后端 337、Windows 后端 327，桌面 Linux 157、Windows 160 项；历史实跑数字保留原值。</li>
         <li>桌面控制台“数艺工坊”（JavaFX 25）：本机数据只在 <code>~/.datacraft</code> 的 SQLite 里，令牌与口令加密保存；界面测试覆盖每个视图的两种主题与 FX 线程的停顿，既有端到端测试曾对真实的引擎 API 与 Compose 部署通过；本轮扩展后的结果单列在当前复核记录（3.7、4.4）。</li>
       </ul>
     </div>
@@ -386,6 +387,7 @@
     <tbody>
       <tr><td>代码、配置与文档</td><td>仓库 <code>main</code> 分支</td><td><span class="tag ok">已审阅</span> 关键路径逐项核对，文档与代码一致性由 <code>tests/docs</code> 检查</td></tr>
       <tr><td>L11 本机验证</td><td>2026-11-06 / Windows 与 WSL；<a href="review-2026-11-06.md">当前复核记录</a></td><td><span class="tag ok">门禁通过</span> 后端 327、桌面 160；Windows/Linux CI 工具 133/157 项通过、25/1 项平台跳过；Linux 部署 71 项通过。正式 20 次启动最大 1378 ms，追踪诊断另列；原生首次显示告警及历史尖峰边界保留</td></tr>
+      <tr><td>L11 首次远端 CI</td><td><code>a8b7558</code> / <a href="https://github.com/liluyang1999/datacraft-lab/actions/runs/42157275526">42157275526</a></td><td><span class="tag warn">部分通过</span> 桌面 Windows 160 / Linux 157 项与各 20 次启动通过，中位/最大分别为 554/842、563/693 ms；19 张截图未见明确遮挡。Airflow Python 3.13.18 契约 28 项中一项失败；补修路径九项本机红四处后全绿，新 SHA 远端 CI 待验</td></tr>
       <tr><td>L10 本机验证</td><td>2026-11-05 / Windows；<a href="review-2026-11-05.md">当前复核记录</a></td><td><span class="tag warn">部分通过</span> 后端 322 项、桌面 141 项完整验证通过；CI 工具 132 项通过、25 项 POSIX 专属跳过。20 次启动有两次超出 1500 ms，原生库来源与 AOT 检查通过；部署脚本在 Windows 的 bash 入口失败，随后当前代码提交的 Linux CI 71 项部署测试通过</td></tr>
       <tr><td>L8 历史构建与测试</td><td>本机 Windows 11 / Oracle JDK 25.0.5.0.3；CI Windows 2025、Ubuntu 24.04 / Temurin 25.0.5+8</td><td><span class="tag ok">通过</span> Windows 120 / Linux 117 项界面门禁通过；新单调时钟的本机及远端两平台各 20 次启动全部通过，Windows / Linux 的 54 / 10 个原生库与 AOT 使用均已确认；历史两平台记录与测量边界见 4.4 与 L8</td></tr>
       <tr><td>L7/L8 Airflow 运行环境</td><td>Airflow 3.3.2、官方 constraints 与安全修订、pyspark 4.2.0</td><td><span class="tag info">历史复核</span> 当时在镜像内检查 DAG 契约、三条真实流水线及依赖安全下限；结果见 4.4</td></tr>
@@ -727,7 +729,7 @@
       <tr><td>Spark 承担重量级计算</td><td><code>csv-to-parquet</code>、<code>row-count</code>、<code>spark-version</code></td><td>真实 SparkSession 测试，CI 断言没有取消</td><td><span class="tag ok">满足</span></td></tr>
       <tr><td>纯 JVM 覆盖小场景</td><td><code>csv-profile</code>、<code>csv-quality</code>、<code>file-checksum</code></td><td>模块共 91 项测试，Windows 本轮执行 89 项；CLI 冒烟覆盖质量成功、失败退出码 1 和显式放宽门槛</td><td><span class="tag ok">满足</span></td></tr>
       <tr><td>同一引擎服务 CLI、HTTP 与 Airflow</td><td><code>DataJob</code> → <code>JobExecutionEngine</code></td><td>CLI、API、引擎测试与 DAG 契约测试</td><td><span class="tag ok">满足</span></td></tr>
-      <tr><td>Airflow 3.x 编排</td><td>3 个 DAG，依赖用 <code>chain()</code> 声明</td><td>21 项 DAG 与安全下限测试；CI 在真实 Airflow 中运行三条流水线</td><td><span class="tag ok">满足</span></td></tr>
+      <tr><td>Airflow 3.x 编排</td><td>3 个 DAG，依赖用 <code>chain()</code> 声明</td><td>当前 DAG、路径与安全下限库存 31 项；首次远端 28 项中循环链接回归失败一项，补修路径九项本机通过，完整新 SHA CI 待验</td><td><span class="tag warn">补修待验</span></td></tr>
       <tr><td>单机 Compose 与多机 Swarm</td><td>Compose 为主，Swarm 固定单数据节点</td><td>Compose 在 CI 真实启动并做备份恢复；Swarm 在 CI 的单节点上真实部署并升级，多节点未验证</td><td><span class="tag warn">部分</span></td></tr>
       <tr><td>云部署评估与成本</td><td>11 个平台、两个地域、成本模型与计算器（第六章）</td><td>价格快照 2026-09-19；计算器 6 项测试</td><td><span class="tag ok">满足</span></td></tr>
       <tr><td>零警告构建</td><td>编译、类型检查、Shell 检查的警告都会使门禁失败</td><td>本轮 Windows 完整构建通过；当前代码提交 CI 的 pyright 无诊断，24 个 Shell 脚本语法与 ShellCheck 通过</td><td><span class="tag ok">满足</span></td></tr>

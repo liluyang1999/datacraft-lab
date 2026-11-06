@@ -71,6 +71,11 @@ the guard and host-key checks succeed. The provider receives the resolved destin
 does not follow the original link again. An unsafe or unresolvable path fails the task without
 retrying, before it writes a file.
 
+Non-strict resolution alone is insufficient on Python 3.13, where a loop can remain unresolved.
+The guard also calls `stat` on the resolved destination and permits only `FileNotFoundError` for
+a missing tail. A loop, a regular file used as a parent, a permission error or an I/O error fails
+closed; dangling links are accepted only when their resolved target remains beneath the root.
+
 This protects against existing links that escape the root. The data directory and its parents
 must remain controlled by trusted local users: a pathname check cannot prevent a hostile process
 from replacing directories between validation and the provider opening the destination.

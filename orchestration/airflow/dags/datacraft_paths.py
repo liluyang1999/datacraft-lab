@@ -23,6 +23,11 @@ def download_destination(raw: str, data_root: str) -> Path:
         if not real_root.is_dir():
             raise ValueError("DATACRAFT_DATA_ROOT must be an existing directory")
         resolved = destination.resolve(strict=False)
+        try:
+            # Non-strict resolution suppresses loops on Python 3.13; permit only a missing tail.
+            resolved.stat()
+        except FileNotFoundError:
+            pass
     except (OSError, RuntimeError) as error:
         raise ValueError("Download destination or DATACRAFT_DATA_ROOT cannot be resolved") from error
     if resolved == real_root or not resolved.is_relative_to(real_root):
