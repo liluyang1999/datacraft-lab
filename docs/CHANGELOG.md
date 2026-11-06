@@ -34,8 +34,9 @@ All notable changes to this project are documented here. The format follows
   Wait for the initial and exact ETL graphs in test setup before triggering task polling; retain all
   queue-size and stale-run assertions, with no product or inventory change. Windows full verification
   then passed 160 tests with no failures, errors or skips, plus formatting and Checkstyle, in 49.794 s.
-  The container job was still running when recorded; the test-setup fix needs complete remote
-  verification on its new commit. Both remote failures and historical performance evidence remain.
+  Final code `55764ee` passed all seven CI jobs and advisories, including both desktop packages,
+  real pipelines, backup recovery and a 43-second single-node upgrade. The superseded container
+  job for `201f51b` was cancelled, not counted as a pass. Both failures and performance history remain.
 - Checked the evaluation report at 1440, 768 and 390 px without page overflow, plus 17 anchors,
   43 local links and calculator interaction. Synchronize its current inventory and desktop gate
   counts against source and the gate script while preserving historical tables.
