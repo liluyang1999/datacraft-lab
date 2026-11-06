@@ -26,8 +26,19 @@ All notable changes to this project are documented here. The format follows
   symlink-loop guard failure in the Airflow suite (one failure among 28 tests). Resolve the path
   and then `stat` it, permitting only `FileNotFoundError` for a missing destination tail; loops,
   non-directory parents and other access errors are rejected. The expanded nine-test path suite
-  failed at four assertions before the fix and passed locally on Python 3.12 afterward. Full
-  remote verification of the corrected commit remains pending; the original failure is retained.
+  failed at four assertions before the fix and passed locally on Python 3.12 afterward.
+- In `201f51b` / CI `42158577159`, all 31 Airflow/path tests passed on Python 3.13.18, followed by
+  real engine, ETL, retry, GBK and SFTP runs with output and host-key checks. Windows desktop passed
+  160 tests and all twenty starts (median 704 ms, maximum 785 ms). Linux failed one of 157 tests:
+  an unfinished graph callback made an isolated task-reply queue contain two callbacks instead of one.
+  Wait for the initial and exact ETL graphs in test setup before triggering task polling; retain all
+  queue-size and stale-run assertions, with no product or inventory change. Windows full verification
+  then passed 160 tests with no failures, errors or skips, plus formatting and Checkstyle, in 49.794 s.
+  The container job was still running when recorded; the test-setup fix needs complete remote
+  verification on its new commit. Both remote failures and historical performance evidence remain.
+- Checked the evaluation report at 1440, 768 and 390 px without page overflow, plus 17 anchors,
+  43 local links and calculator interaction. Synchronize its current inventory and desktop gate
+  counts against source and the gate script while preserving historical tables.
 
 ### CSV quality gates and job discovery (2026-11-05)
 

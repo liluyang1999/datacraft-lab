@@ -235,7 +235,16 @@ class PipelinesModelTest {
 
   @Test
   void tasksFetchedForTheRunSelectedBeforeAreNotShownForTheNextOne() throws Exception {
+    // Graph requests also enqueue UI callbacks. Finish both graphs before isolating a task reply.
+    ui.until("the initial graph is loaded", () -> !model.structure().isEmpty());
     List<DagRun> runs = etlRuns();
+    ui.until(
+        "the ETL graph is loaded",
+        () ->
+            model.structure().stream()
+                .map(task -> task.taskId())
+                .toList()
+                .equals(List.of("csv_to_parquet", "row_count")));
     DagRun running = runs.getFirst();
     DagRun failed = runs.get(1);
     assertEquals(RunTone.RUNNING, running.tone());
