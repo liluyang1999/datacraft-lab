@@ -27,6 +27,8 @@ below are relative to `docs/`.
 
 ## Repository layout
 
+最新工程复核：[2026-11-09 紧凑交互、状态一致性与交付](reports/review-2026-11-09.md)。
+
 ```text
 datacraft-lab/
 ├── pom.xml, mvnw, mvnw.cmd, .mvn/   Maven build, pinned wrapper, Maven JVM options

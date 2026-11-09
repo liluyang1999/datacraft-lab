@@ -113,20 +113,28 @@ def chunks(process):
     """The output of process as it arrives.
 
     It ends with the pipe. A process the command left running keeps the pipe open, and the step
-    must not wait for that one: where the platform can wait on a pipe, reading stops DRAIN_SECONDS
-    after the command has exited. Everything the command itself wrote is in the pipe by then.
+    must not wait for that one: reading stops DRAIN_SECONDS after the command has exited on both
+    platforms. Everything the command itself wrote is in the pipe by then.
     """
     stream = process.stdout
-    if os.name != "posix":
-        yield from iter(lambda: stream.read(CHUNK), b"")
-        return
     descriptor, exited = stream.fileno(), None
+    if os.name != "posix":
+        # Windows select accepts sockets only. Python 3.12+ supports nonblocking pipe descriptors,
+        # so the sole reader can poll without a blocking read or an unowned reader thread.
+        os.set_blocking(descriptor, False)
     while exited is None or time.monotonic() - exited < DRAIN_SECONDS:
-        readable, _, _ = select.select([descriptor], [], [], POLL_SECONDS)
-        if readable:
-            chunk = os.read(descriptor, CHUNK)
-            if not chunk:
-                return
+        if os.name == "posix":
+            readable, _, _ = select.select([descriptor], [], [], POLL_SECONDS)
+            chunk = os.read(descriptor, CHUNK) if readable else None
+        else:
+            try:
+                chunk = os.read(descriptor, CHUNK)
+            except BlockingIOError:
+                chunk = None
+                time.sleep(POLL_SECONDS)
+        if chunk == b"":
+            return
+        if chunk is not None:
             yield chunk
         if exited is None and process.poll() is not None:
             exited = time.monotonic()

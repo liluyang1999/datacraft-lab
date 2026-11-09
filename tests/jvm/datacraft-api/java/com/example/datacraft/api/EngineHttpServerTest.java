@@ -149,6 +149,59 @@ class EngineHttpServerTest {
   }
 
   @Test
+  void rejectsMalformedUtf8JobPathsInsteadOfExecutingAReplacementCharacterJob() throws Exception {
+    JobRegistry registry = new JobRegistry();
+    AtomicInteger executions = new AtomicInteger();
+    for (String name : List.of("\ufffd", "\ufffd\ufffd")) {
+      registry.register(
+          new FunctionJob(
+              name,
+              request -> {
+                executions.incrementAndGet();
+                return JobExecutionResult.success(
+                    name, "ok", request.startedAt(), request.startedAt());
+              }));
+    }
+    try (HttpClient client = HttpClient.newHttpClient();
+        EngineHttpServer server =
+            EngineHttpServer.start(EngineHttpServerConfig.localEphemeral(), registry)) {
+      for (String encoded : List.of("%FF", "%C3", "%C0%AF", "%ED%A0%80")) {
+        HttpResponse<String> response = send(client, post(server, "/jobs/" + encoded + "/runs"));
+
+        assertEquals(400, response.statusCode(), encoded);
+        assertEquals("{\"error\":\"invalid_request\"}", response.body(), encoded);
+        assertEquals(0, executions.get(), "Malformed UTF-8 must never select another job");
+      }
+
+      // U+FFFD is still a valid job name when the client encodes that actual character correctly.
+      assertEquals(200, send(client, post(server, "/jobs/%EF%BF%BD/runs")).statusCode());
+      assertEquals(1, executions.get());
+    }
+  }
+
+  @Test
+  void decodesUtf8JobNamesWithoutChangingLiteralPlusOrDoubleEncodedCharacters() throws Exception {
+    JobRegistry registry = new JobRegistry();
+    String name = "作业+%20";
+    registry.register(
+        new FunctionJob(
+            name,
+            request ->
+                JobExecutionResult.success(
+                    request.jobName(), "ok", request.startedAt(), request.startedAt())));
+    try (HttpClient client = HttpClient.newHttpClient();
+        EngineHttpServer server =
+            EngineHttpServer.start(EngineHttpServerConfig.localEphemeral(), registry)) {
+      for (String encoded : List.of("%E4%BD%9C%E4%B8%9A+%2520", "%E4%BD%9C%E4%B8%9A%2B%2520")) {
+        HttpResponse<String> response = send(client, post(server, "/jobs/" + encoded + "/runs"));
+
+        assertEquals(200, response.statusCode(), encoded);
+        assertTrue(response.body().contains("\"jobName\":\"" + name + "\""), response.body());
+      }
+    }
+  }
+
+  @Test
   void decodesJobPathExactlyOnceAndKeepsPlusCharacters() throws Exception {
     JobRegistry registry = new JobRegistry();
     registry.register(

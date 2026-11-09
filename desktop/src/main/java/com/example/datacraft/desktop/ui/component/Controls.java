@@ -1,8 +1,10 @@
 package com.example.datacraft.desktop.ui.component;
 
 import java.util.List;
+import java.util.function.BiConsumer;
 import java.util.function.Consumer;
 import javafx.beans.property.ObjectProperty;
+import javafx.beans.value.ObservableStringValue;
 import javafx.geometry.Pos;
 import javafx.scene.Node;
 import javafx.scene.control.Button;
@@ -26,6 +28,36 @@ public final class Controls {
     Label label = new Label(text);
     label.getStyleClass().addAll(styleClasses);
     return label;
+  }
+
+  /** A single-line name that yields to its container while retaining its full value on hover. */
+  public static Label compactLabel(String text, String... styleClasses) {
+    Label label = label(text, styleClasses);
+    label.setMinWidth(0);
+    label.setMaxWidth(Double.MAX_VALUE);
+    Tooltip tip = new Tooltip();
+    tip.textProperty().bind(label.textProperty());
+    tip.setWrapText(true);
+    tip.setMaxWidth(420);
+    label.setTooltip(tip);
+    return label;
+  }
+
+  /** Keeps variable-length diagnostics behind a concise, keyboard-accessible action. */
+  public static Button details(
+      String shortText,
+      String title,
+      ObservableStringValue detail,
+      BiConsumer<String, String> show,
+      String... styleClasses) {
+    Button button = button(shortText, () -> show.accept(title, detail.get()), styleClasses);
+    button.setGraphic(Icons.of(Icons.Glyph.INFO, 16));
+    button.setMinWidth(0);
+    button.setMaxWidth(Region.USE_PREF_SIZE);
+    button.setTooltip(new Tooltip("查看详情"));
+    button.visibleProperty().bind(detail.map(value -> value != null && !value.isBlank()));
+    button.managedProperty().bind(button.visibleProperty());
+    return button;
   }
 
   /** Associates a visible label with its field without replacing the field's accessible value. */

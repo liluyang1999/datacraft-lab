@@ -14,6 +14,39 @@ public final class Formats {
 
   private Formats() {}
 
+  /** A one-line preview bounded in Unicode code points, without changing the stored value. */
+  public static String preview(String value, int limit) {
+    if (limit < 1) {
+      throw new IllegalArgumentException("limit must be positive");
+    }
+    String text = value == null ? "" : value.replaceAll("\\s+", " ").strip();
+    return text.codePointCount(0, text.length()) <= limit
+        ? text
+        : text.substring(0, text.offsetByCodePoints(0, limit - 1)) + "…";
+  }
+
+  /** Compact display for known count metrics; the original remains available in details. */
+  public static String compactMetric(String key, String value) {
+    if (key.equals("rows") || key.equals("columns") || key.equals("expectedRows")) {
+      try {
+        long count = Long.parseLong(value);
+        double magnitude = Math.abs((double) count);
+        if (magnitude >= 1_000_000_000_000L) {
+          return String.format(Locale.ROOT, "%.2e", (double) count);
+        }
+        if (magnitude >= 100_000_000) {
+          return String.format(Locale.ROOT, "%.1f 亿", count / 100_000_000.0);
+        }
+        if (magnitude >= 10_000) {
+          return String.format(Locale.ROOT, "%.1f 万", count / 10_000.0);
+        }
+      } catch (NumberFormatException notANumber) {
+        return value;
+      }
+    }
+    return metric(key, value);
+  }
+
   /** {@code 23 ms}: a round-trip time. */
   public static String latency(Duration latency) {
     return Math.max(0, latency.toMillis()) + " ms";
@@ -21,16 +54,20 @@ public final class Formats {
 
   /** {@code 0.4 s}, {@code 1.2 s}, {@code 48 s}, {@code 3 min 05 s}, {@code 2 h 07 min}. */
   public static String duration(Duration duration) {
-    long millis = Math.max(0, duration.toMillis());
-    if (millis < 10_000) {
+    long seconds = Math.max(0, duration.getSeconds());
+    if (seconds < 10) {
+      long millis = duration.isNegative() ? 0 : duration.toMillis();
       return String.format(Locale.ROOT, "%.1f s", millis / 1000.0);
     }
-    long seconds = millis / 1000;
     if (seconds < 60) {
       return seconds + " s";
     }
     if (seconds < 3600) {
       return String.format(Locale.ROOT, "%d min %02d s", seconds / 60, seconds % 60);
+    }
+    if (seconds >= 86_400) {
+      double days = seconds / 86_400.0;
+      return String.format(Locale.ROOT, days < 1_000_000 ? "%.1f d" : "%.2e d", days);
     }
     return String.format(Locale.ROOT, "%d h %02d min", seconds / 3600, (seconds % 3600) / 60);
   }

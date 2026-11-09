@@ -91,6 +91,8 @@ public final class JobsModel implements Visibility {
   private final StringProperty runError = new SimpleStringProperty("");
   private final ObservableList<Preset> presets = FXCollections.observableArrayList();
   private final ObservableList<RecentRun> recent = FXCollections.observableArrayList();
+  private final BooleanProperty recentLoading = new SimpleBooleanProperty(false);
+  private final StringProperty recentProblem = new SimpleStringProperty("");
   private final StringProperty listProblem = new SimpleStringProperty("");
   private final StringProperty presetProblem = new SimpleStringProperty("");
   private final BooleanProperty loaded = new SimpleBooleanProperty(false);
@@ -152,6 +154,8 @@ public final class JobsModel implements Visibility {
     params.clear();
     presets.clear();
     recent.clear();
+    recentLoading.set(false);
+    recentProblem.set("");
     jobs.clear();
     listProblem.set("");
     presetProblem.set("");
@@ -180,8 +184,12 @@ public final class JobsModel implements Visibility {
     }
     selected.set(job);
     presetProblem.set("");
+    recent.clear();
+    recentProblem.set("");
     if (job == null) {
       params.clear();
+      recentLoading.set(false);
+      showState(new JobState());
       return;
     }
     JobState state = state(job.name());
@@ -362,17 +370,29 @@ public final class JobsModel implements Visibility {
     JobInfo job = selected.get();
     if (job == null) {
       recent.clear();
+      recentLoading.set(false);
       return;
     }
+    recentLoading.set(true);
     service
         .recent(job.name(), RIBBON)
-        .thenAccept(
-            runs ->
+        .whenComplete(
+            (runs, failure) ->
                 ui.execute(
                     () -> {
                       if (selection == selectionGeneration && requested == recentGeneration) {
-                        Lists.reconcile(
-                            recent, runs, run -> run.startedAt().toEpochMilli() + run.jobName());
+                        recentLoading.set(false);
+                        if (failure == null) {
+                          recentProblem.set("");
+                          Lists.reconcile(
+                              recent, runs, run -> run.startedAt().toEpochMilli() + run.jobName());
+                        } else {
+                          LOG.log(
+                              System.Logger.Level.WARNING,
+                              "Recent job runs could not be loaded",
+                              failure);
+                          recentProblem.set("本机运行记录暂时无法读取，请刷新重试。");
+                        }
                       }
                     }));
   }
@@ -394,6 +414,9 @@ public final class JobsModel implements Visibility {
   @Override
   public void shown() {
     poller.start();
+    if (selected.get() != null) {
+      loadRecent();
+    }
   }
 
   @Override
@@ -403,6 +426,7 @@ public final class JobsModel implements Visibility {
 
   public void refresh() {
     poller.refresh();
+    loadRecent();
   }
 
   public ObservableList<JobInfo> jobs() {
@@ -447,6 +471,14 @@ public final class JobsModel implements Visibility {
 
   public ObservableList<RecentRun> recent() {
     return recent;
+  }
+
+  public ReadOnlyBooleanProperty recentLoading() {
+    return recentLoading;
+  }
+
+  public ReadOnlyStringProperty recentProblem() {
+    return recentProblem;
   }
 
   public ReadOnlyStringProperty listProblem() {

@@ -34,6 +34,8 @@ import javafx.collections.ObservableList;
 /** The overview: every DAG with its last ten runs, and the newest runs of jobs and pipelines. */
 public final class OverviewModel implements Visibility {
 
+  private static final System.Logger LOG = System.getLogger(OverviewModel.class.getName());
+
   public static final int RIBBON = 10;
   static final int RECENT = 8;
   static final Duration INTERVAL = Duration.ofSeconds(10);
@@ -74,12 +76,15 @@ public final class OverviewModel implements Visibility {
   }
 
   /** What one poll brings: the DAG rows (absent when Airflow failed) and the cached job runs. */
-  record Data(Optional<List<DagRow>> dags, String airflowProblem, List<RecentRun> jobRuns) {}
+  record Data(
+      Optional<List<DagRow>> dags, String airflowProblem, Optional<List<RecentRun>> jobRuns) {}
 
   private final ObservableList<DagRow> dags = FXCollections.observableArrayList();
   private final ObservableList<RecentItem> recent = FXCollections.observableArrayList();
   private final ObjectProperty<Mix> mix = new SimpleObjectProperty<>(Mix.NONE);
   private final StringProperty problem = new SimpleStringProperty("");
+  private final StringProperty recentProblem = new SimpleStringProperty("");
+  private List<RecentRun> knownJobRuns = List.of();
   private final ObjectProperty<Instant> staleSince = new SimpleObjectProperty<>();
   private final BooleanProperty loaded = new SimpleBooleanProperty(false);
   private final BooleanProperty connected = new SimpleBooleanProperty(false);
@@ -110,7 +115,9 @@ public final class OverviewModel implements Visibility {
         () ->
             ui.execute(
                 () -> {
-                  applyRuns(List.of());
+                  knownJobRuns = List.of();
+                  recentProblem.set("");
+                  applyRuns(knownJobRuns);
                   if (poller.running()) {
                     poller.restart();
                   }
@@ -124,6 +131,8 @@ public final class OverviewModel implements Visibility {
                   recent.clear();
                   mix.set(Mix.NONE);
                   problem.set("");
+                  recentProblem.set("");
+                  knownJobRuns = List.of();
                   staleSince.set(null);
                   loaded.set(false);
                   if (poller.running()) {
@@ -135,13 +144,22 @@ public final class OverviewModel implements Visibility {
   static CompletableFuture<Data> fetch(PipelineService pipelines, JobService jobs) {
     CompletableFuture<Data> airflow =
         DagRow.fetch(pipelines, RIBBON)
-            .thenApply(rows -> new Data(Optional.of(rows), "", List.of()))
+            .thenApply(rows -> new Data(Optional.of(rows), "", Optional.empty()))
             .exceptionally(
                 failure ->
-                    new Data(Optional.empty(), PipelineService.describe(failure), List.of()));
+                    new Data(
+                        Optional.empty(), PipelineService.describe(failure), Optional.empty()));
+    CompletableFuture<Optional<List<RecentRun>>> history =
+        jobs.recent(null, RECENT)
+            .thenApply(Optional::of)
+            .exceptionally(
+                failure -> {
+                  LOG.log(
+                      System.Logger.Level.WARNING, "Recent job runs could not be loaded", failure);
+                  return Optional.empty();
+                });
     return airflow.thenCombine(
-        jobs.recent(null, RECENT).exceptionally(failure -> List.of()),
-        (data, runs) -> new Data(data.dags(), data.airflowProblem(), runs));
+        history, (data, runs) -> new Data(data.dags(), data.airflowProblem(), runs));
   }
 
   void apply(Data data) {
@@ -157,7 +175,12 @@ public final class OverviewModel implements Visibility {
               }
             });
     problem.set(data.airflowProblem());
-    applyRuns(data.jobRuns());
+    data.jobRuns().ifPresent(runs -> knownJobRuns = List.copyOf(runs));
+    recentProblem.set(
+        data.jobRuns().isPresent()
+            ? ""
+            : "本机运行记录暂时无法读取" + (knownJobRuns.isEmpty() ? "" : "，已保留上次记录") + "，请刷新重试。");
+    applyRuns(knownJobRuns);
     loaded.set(true);
     applied.set(applied.get() + 1);
   }
@@ -227,6 +250,11 @@ public final class OverviewModel implements Visibility {
   /** Why Airflow's data is missing or old, or empty when it is current. */
   public ReadOnlyStringProperty problem() {
     return problem;
+  }
+
+  /** A failed local history read never turns known runs into an empty history. */
+  public ReadOnlyStringProperty recentProblem() {
+    return recentProblem;
   }
 
   /** When the shown DAG data stopped being refreshed; null while it is current. */

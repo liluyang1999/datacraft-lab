@@ -4,6 +4,11 @@
 
 参数与状态回归覆盖以下稳定契约：
 
+- `ViewContentTest`、`CompactContentTest`、`PipelinesViewTest` 和 `SettingsViewTest` 验证长名称
+  不挤走操作、短详情入口可聚焦、打开后保留完整指标与多行诊断，详情控件的可访问文本仍为原文。
+  `JobsModelTest`、`OverviewModelTest` 分别控制读取完成顺序，验证切换作业、读取失败、恢复与清空后的历史。
+  `RunBarsTest` 与 `FormatsTest` 覆盖负耗时、超大时长、Unicode 预览及只缩略已知计数的规则。
+
 - `PipelinesModelTest`、`PipelinesViewTest` 验证表单与 JSON 往返保留字符串和未知字段，重名键、
   无名值、畸形 JSON、重复 JSON 字段和尾随内容不能提交；表单不能表达的类型、空白值或控制字符保留在
   JSON 模式，修正后可继续切换。作业与流水线使用同一组 `ParamForm` / `ParamRow` 规则。
@@ -52,7 +57,7 @@
 `./mvnw -Pdesktop -pl :datacraft-desktop -am verify` 运行；这个可选反应堆同时运行父工程，
 因此包含位于 `tests/jvm/` 下的测试源码格式检查，默认后端反应堆仍不构建桌面。CI 的 `desktop` 矩阵在
 Windows 与 Linux/Xvfb 下运行它，用 `cicd/build/check_test_counts.py --project desktop` 核对实际执行数：
-Linux 至少 138 项，Windows 至少 141 项；后者另测真实控件、本机文本范围与 UIA 属性契约。各自只运行本平台保险库测试，
+Linux 至少 180 项，Windows 至少 183 项；后者另测真实控件、本机文本范围与 UIA 属性契约。各自只运行本平台保险库测试，
 `verify` 不运行 `e2e` 测试。通过时把数目写成公开注解；再运行打包脚本，
 把界面截图、全部启动样本和原生库来源清单保存为带平台名称的构件。
 

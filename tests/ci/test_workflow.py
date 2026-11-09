@@ -116,6 +116,27 @@ class WorkflowTests(unittest.TestCase):
                     if "run" in order:
                         self.assertEqual("checkout", order[0])
 
+    def test_desktop_sets_up_python_before_any_wrapped_command_on_both_platforms(self):
+        # Windows nonblocking pipe descriptors require Python 3.12+. Use the same explicit
+        # Python 3.13 line as the other CI jobs, rather than the hosted runner's default PATH.
+        workflow = without_comments((WORKFLOWS / "ci.yml").read_text(encoding="utf-8"))
+        desktop = re.search(r"(?ms)^  desktop:\n(.*?)(?=^  [\w-]+:\n|\Z)", workflow)
+        self.assertIsNotNone(desktop, "the desktop matrix must exist")
+        assert desktop is not None
+        steps = re.split(r"(?m)^      - ", desktop.group(1))[1:]
+        setup = [index for index, step in enumerate(steps)
+                 if re.search(r"(?m)^\s*uses:\s*actions/setup-python@", step)]
+        self.assertEqual(1, len(setup), "desktop must select its Python runtime explicitly")
+        index = setup[0]
+        self.assertRegex(steps[index], r'''(?m)^\s+python-version:\s*["']3\.13["']\s*$''')
+        self.assertNotRegex(steps[index], r"(?m)^\s*if:", "both desktop platforms need Python")
+        checkout = next(i for i, step in enumerate(steps)
+                        if re.search(r"(?m)^\s*uses:\s*actions/checkout@", step))
+        first_run = next(i for i, step in enumerate(steps)
+                         if re.search(r"(?m)^\s*run:\s*\S", step))
+        self.assertLess(checkout, index)
+        self.assertLess(index, first_run, "the wrapper itself needs the selected interpreter")
+
     def test_compound_commands_are_recognised(self):
         for command in ("a && b", "a || b", "a; b", "a | b", "echo `date`", "echo $(date)",
                         "command -v x || { apt-get install x; }", "( cd x && y )"):

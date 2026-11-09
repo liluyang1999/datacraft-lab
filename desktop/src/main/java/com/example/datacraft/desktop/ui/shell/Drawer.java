@@ -24,7 +24,7 @@ public final class Drawer extends StackPane {
 
   private final Region scrim = new Region();
   private final VBox panel = new VBox();
-  private final Label title = Controls.label("", "section-title");
+  private final Label title = Controls.compactLabel("", "section-title");
   private Runnable onClose = () -> {};
   private Node shownContent;
   private Animation motion;

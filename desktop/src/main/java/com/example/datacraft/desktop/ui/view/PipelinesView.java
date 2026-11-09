@@ -15,6 +15,7 @@ import com.example.datacraft.desktop.ui.component.RunBars;
 import com.example.datacraft.desktop.ui.component.StatusRing;
 import com.example.datacraft.desktop.ui.component.TaskGraph;
 import com.example.datacraft.desktop.ui.component.Tones;
+import com.example.datacraft.desktop.ui.shell.Dialogs;
 import com.example.datacraft.desktop.ui.shell.Drawer;
 import com.example.datacraft.desktop.ui.shell.Toasts;
 import com.example.datacraft.desktop.util.Formats;
@@ -29,6 +30,9 @@ import java.time.ZoneId;
 import java.util.Map;
 import java.util.Optional;
 import javafx.beans.binding.Bindings;
+import javafx.beans.property.SimpleStringProperty;
+import javafx.beans.property.StringProperty;
+import javafx.beans.value.ObservableStringValue;
 import javafx.collections.FXCollections;
 import javafx.collections.ListChangeListener;
 import javafx.collections.ObservableList;
@@ -59,6 +63,7 @@ public final class PipelinesView implements View {
   private final Drawer drawer;
   private final Toasts toasts;
   private final ObjectMapper json;
+  private final Dialogs dialogs;
   private final StackPane root = new StackPane();
   private final TaskGraph graph;
   private final VBox lanes = new VBox(4);
@@ -69,15 +74,16 @@ public final class PipelinesView implements View {
       Drawer drawer,
       Toasts toasts,
       ObjectMapper json,
-      Runnable openSettings) {
+      Runnable openSettings,
+      Dialogs dialogs) {
     this.model = model;
     this.clock = clock;
     this.drawer = drawer;
     this.toasts = toasts;
     this.json = json;
+    this.dialogs = dialogs;
 
-    Label dagProblem = notice(model.dagProblem().isNotEmpty());
-    dagProblem.textProperty().bind(model.dagProblem());
+    Button dagProblem = notice("流水线读取失败", model.dagProblem());
     Rows.bind(lanes, model.dags(), this::lane, this::updateLane);
     model
         .selectedDag()
@@ -93,7 +99,9 @@ public final class PipelinesView implements View {
     noDags.visibleProperty().bind(Bindings.isEmpty(model.dags()));
     noDags.managedProperty().bind(noDags.visibleProperty());
 
-    Label title = Controls.label("", "section-title", "latin");
+    Label title = Controls.compactLabel("", "section-title", "latin");
+    title.setMaxWidth(420);
+    HBox.setHgrow(title, Priority.ALWAYS);
     title
         .textProperty()
         .bind(
@@ -104,8 +112,7 @@ public final class PipelinesView implements View {
     trigger.setGraphic(Icons.of(Glyph.PLAY));
     trigger.disableProperty().bind(model.selectedDag().isNull());
     HBox header = Controls.row(12, Icons.of(Glyph.PIPELINES, 18), title, Controls.grow(), trigger);
-    Label detailProblem = notice(model.detailProblem().isNotEmpty());
-    detailProblem.textProperty().bind(model.detailProblem());
+    Button detailProblem = notice("运行信息读取失败", model.detailProblem());
 
     RunBars runBars =
         new RunBars(PipelinesModel.RUNS, 12, 4, 48)
@@ -162,13 +169,8 @@ public final class PipelinesView implements View {
     root.getChildren().addAll(scroll, empty);
   }
 
-  private static Label notice(javafx.beans.value.ObservableBooleanValue visible) {
-    Label notice = Controls.label("", "notice", "failed");
-    notice.setWrapText(true);
-    notice.setMaxWidth(Double.MAX_VALUE);
-    notice.visibleProperty().bind(visible);
-    notice.managedProperty().bind(visible);
-    return notice;
+  private Button notice(String title, ObservableStringValue detail) {
+    return Controls.details(title, title, detail, dialogs::details, "notice", "failed");
   }
 
   /** The picked run in a few chips: how it started, when, how long, how it stands. */
@@ -203,12 +205,9 @@ public final class PipelinesView implements View {
     Tooltip scheduleTip = new Tooltip();
     Tooltip.install(schedule, scheduleTip);
     schedule.setUserData(scheduleTip);
-    Label name = Controls.label("", "name", "latin");
-    name.setMinWidth(120);
+    Label name = Controls.compactLabel("", "name", "latin");
     name.setPrefWidth(220);
-    Tooltip nameTip = new Tooltip();
-    nameTip.textProperty().bind(name.textProperty());
-    name.setTooltip(nameTip);
+    name.setMaxWidth(220);
     RunBars bars = RunBars.compact(PipelinesModel.RIBBON);
     StatusRing last = StatusRing.dot();
     Label ago = Controls.label("", "secondary");
@@ -324,11 +323,8 @@ public final class PipelinesView implements View {
     note.setPromptText("备注（可不填）");
     VBox jsonField = new VBox(6, Controls.labelFor("运行配置（JSON）", jsonText, "secondary"), jsonText);
     VBox noteField = new VBox(6, Controls.labelFor("备注", note, "secondary"), note);
-    Label error = Controls.label("", "notice", "failed");
-    error.setWrapText(true);
-    error.setMaxWidth(Double.MAX_VALUE);
-    error.setVisible(false);
-    error.setManaged(false);
+    StringProperty errorText = new SimpleStringProperty("");
+    Button error = notice("运行未提交", errorText);
     Button submit = Controls.button("触发运行", () -> {}, "primary");
     submit.setGraphic(Icons.of(Glyph.PLAY));
     VBox body = new VBox(16);
@@ -358,7 +354,7 @@ public final class PipelinesView implements View {
             ParamForm.Values values = ParamForm.collect(rows);
             if (!values.valid()) {
               asJson.setSelected(false);
-              showError(error, values.error());
+              errorText.set(values.error());
               return;
             }
             try {
@@ -367,26 +363,25 @@ public final class PipelinesView implements View {
                       .writeValueAsString(PipelinesModel.conf(values.values())));
             } catch (com.fasterxml.jackson.core.JsonProcessingException failure) {
               asJson.setSelected(false);
-              showError(error, "配置无法转换为 JSON，请检查参数后重试。");
+              errorText.set("配置无法转换为 JSON，请检查参数后重试。");
               return;
             }
           } else {
             var parsed = model.parseConf(jsonText.getText());
             if (parsed.value().isEmpty()) {
               asJson.setSelected(true);
-              showError(error, parsed.error());
+              errorText.set(parsed.error());
               return;
             }
             var converted = model.formRows(dagId, parsed.value().get());
             if (converted.value().isEmpty()) {
               asJson.setSelected(true);
-              showError(error, converted.error());
+              errorText.set(converted.error());
               return;
             }
             rows.setAll(converted.value().get());
           }
-          error.setVisible(false);
-          error.setManaged(false);
+          errorText.set("");
           layout.run();
         });
     if (known.isEmpty()) {
@@ -405,14 +400,14 @@ public final class PipelinesView implements View {
           if (asJson.isSelected()) {
             var parsed = model.parseConf(jsonText.getText());
             if (parsed.value().isEmpty()) {
-              showError(error, parsed.error());
+              errorText.set(parsed.error());
               return;
             }
             conf = parsed.value().get();
           } else {
             ParamForm.Values values = ParamForm.collect(rows);
             if (!values.valid()) {
-              showError(error, values.error());
+              errorText.set(values.error());
               return;
             }
             conf = PipelinesModel.conf(values.values());
@@ -432,17 +427,11 @@ public final class PipelinesView implements View {
                               drawer.close();
                               toasts.success("已触发 " + dagId);
                             } else {
-                              showError(error, PipelineService.describe(failure));
+                              errorText.set(PipelineService.describe(failure));
                             }
                           }));
         });
     drawer.open("触发 " + dagId, scroll, () -> {});
-  }
-
-  private static void showError(Label error, String text) {
-    error.setText(text);
-    error.setVisible(true);
-    error.setManaged(true);
   }
 
   // ---------- logs ----------
@@ -464,8 +453,7 @@ public final class PipelinesView implements View {
     more.visibleProperty().bind(model.logNext().isNotEmpty());
     more.managedProperty().bind(more.visibleProperty());
     more.disableProperty().bind(model.logLoading());
-    Label problem = notice(model.logProblem().isNotEmpty());
-    problem.textProperty().bind(model.logProblem());
+    Button problem = notice("日志读取失败", model.logProblem());
     VBox body = new VBox(12, problem, lines, Controls.row(12, status, Controls.grow(), more));
     VBox.setVgrow(lines, Priority.ALWAYS);
     body.setAlignment(Pos.TOP_LEFT);

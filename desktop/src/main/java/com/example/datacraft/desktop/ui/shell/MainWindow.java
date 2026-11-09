@@ -43,7 +43,7 @@ public final class MainWindow {
   private final Stage stage;
   private final ThemeManager theme;
   private final Dialogs dialogs;
-  private final Toasts toasts = new Toasts();
+  private final Toasts toasts;
   private final Drawer drawer = new Drawer();
   private final StackPane viewHost = new StackPane();
   private final StatusModel status;
@@ -65,6 +65,7 @@ public final class MainWindow {
     Motion.reduced(preferences.reducedMotion());
     this.theme = new ThemeManager(preferences);
     this.dialogs = new Dialogs(theme);
+    this.toasts = new Toasts(dialogs::details);
     this.status = new StatusModel(context.monitor(), Fx.UI);
     this.navigator = new Navigator(viewHost, this::create);
     this.sidebar =
@@ -143,7 +144,8 @@ public final class MainWindow {
               this::openPipeline,
               this::triggerPipeline,
               this::openJob,
-              () -> go(Destination.SETTINGS));
+              () -> go(Destination.SETTINGS),
+              dialogs);
       case JOBS -> {
         jobsView =
             new JobsView(
@@ -175,7 +177,8 @@ public final class MainWindow {
                 drawer,
                 toasts,
                 context.json(),
-                () -> go(Destination.SETTINGS));
+                () -> go(Destination.SETTINGS),
+                dialogs);
         yield pipelinesView;
       }
       case ACTIVITY ->

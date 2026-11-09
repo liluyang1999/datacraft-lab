@@ -216,8 +216,8 @@ public final class TaskGraph extends Pane {
   private final class Card extends HBox {
     final String id;
     private final StatusRing ring = StatusRing.dot();
-    private final Label name = new Label();
-    private final Label meta = new Label();
+    private final Label name = Controls.compactLabel("");
+    private final Label meta = Controls.compactLabel("");
     private final Tooltip tip = new Tooltip();
     private RunTone tone;
     private TaskInstance current;
@@ -229,11 +229,15 @@ public final class TaskGraph extends Pane {
       name.getStyleClass().addAll("task-name", "latin");
       meta.getStyleClass().add("caption");
       VBox text = new VBox(2, name, meta);
+      text.setMinWidth(0);
+      HBox.setHgrow(text, javafx.scene.layout.Priority.ALWAYS);
       getChildren().addAll(ring, text);
       setMinSize(CARD_WIDTH, CARD_HEIGHT);
       setPrefSize(CARD_WIDTH, CARD_HEIGHT);
       setMaxSize(CARD_WIDTH, CARD_HEIGHT);
       Tooltip.install(this, tip);
+      tip.setWrapText(true);
+      tip.setMaxWidth(420);
       Controls.activatable(
           this,
           () -> {

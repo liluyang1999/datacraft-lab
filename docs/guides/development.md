@@ -25,8 +25,9 @@ is covered in [the usage guide](usage.md); the reasoning behind the build rules 
   tests.
 - **Python 3.12 or newer.** CI runs the Python suites and Airflow on 3.13, the Python of the
   `apache/airflow:3.3.2` image; its `build` job runs the two Python checks in `cicd/build` on the
-  runner's own Python 3.12. The deployment, CI and documentation suites need only the standard
-  library.
+  runner's own Python 3.12. Both desktop matrix legs explicitly select Python 3.13 before the
+  first wrapped command; the Windows output-pipe implementation needs at least Python 3.12.
+  The deployment, CI and documentation suites need only the standard library.
 - **Linux or WSL** for Airflow, which does not run on Windows, and for the deployment tests, several
   of which run the Bash scripts or need POSIX terminals and file modes.
 - **Node.js** (CI uses 24) for the cost calculator test and for running pyright through `npx`.
@@ -281,6 +282,9 @@ or a developer runs (including the tests of the `cicd/` scripts, in `tests/ci`),
 Every `run:` step goes through `cicd/step.py`, which the workflow sets as its default shell
 (`python3 -B cicd/step.py bash -e {0}`, with `python` for the desktop matrix). On Windows it locates
 Bash beside the installed Git executable, avoiding the system's WSL launcher without changing PATH.
+After the command exits, the wrapper drains output for at most two seconds on both platforms,
+even if a background process retains the pipe. Windows uses nonblocking pipes (Python 3.12 or
+newer); the wrapper neither leaves a reader thread running nor terminates background processes.
 The step runs unchanged; when it fails on a runner, the
 script adds an error annotation with the step's command, the first lines that name a failure and
 the last 30 lines of output. A script that tears a failed stack down reports its state first with
@@ -300,7 +304,9 @@ A passing run records notices there too: the number of tests each module execute
 runtime of the images and what the stack check verified. Because the script comes from the
 checkout, the checkout must be the first step of every job. A platform-specific `shell` override
 may select `python` instead of `python3`, but must keep the same `cicd/step.py bash -e {0}` wrapper;
-`tests/ci/test_workflow.py` checks both requirements.
+`tests/ci/test_workflow.py` checks both requirements and requires the desktop matrix to select
+Python 3.13 after checkout and before its first wrapped command. The workflows contain 20
+action references, each pinned to a full commit SHA.
 
 ```text
 cicd/
@@ -324,7 +330,7 @@ cicd/
 | `dags` | After `build`: Python 3.13 and JDK 25; `cicd/airflow/install-airflow.sh` (Airflow 3.3.2 and its providers under the official constraints for the running Python, then `pyspark==4.2.0`, then the fixed releases of `orchestration/airflow/security-overrides.txt`); `cicd/airflow/check_security_floor.py` (Airflow 3.3.2, FAB provider 3.9.0 and each override release); `tests/orchestration`; `tests/smoke/airflow_runtime_smoke.py` with the verified jar |
 | `scripts` | `cicd/lint/check-actions-pinned.sh` (every `uses:` is `owner/repo@<full commit SHA> # vX.Y.Z` or a local action, on one line, and none appears in a comment); `cicd/lint/install-shellcheck.sh` (ShellCheck 0.11.0); `cicd/lint/check-shell-scripts.sh` (`bash -n` and ShellCheck over every shell script git knows; every finding fails, sourced files are followed); the `tests/deploy`, `tests/ci` and `tests/docs` suites on Python 3.13; `node --test tests/docs/cloud-costs.test.cjs` on Node.js 24; `npx --yes pyright@1.1.414 --warnings` |
 | `compose` | `cicd/stacks/check-stack-files.sh`: `docker compose config` and `docker stack config` with test-only secrets, and that each missing secret, the API token and for the stack the Redis password included, is rejected |
-| `desktop` | Windows 2025 and Ubuntu 24.04 matrix, JDK 25 (Linux uses D-Bus and Xvfb): `./mvnw -B -ntp -Pdesktop -pl :datacraft-desktop -am verify` runs parent formatting plus desktop unit, client, store, UI and accessibility lifecycle tests. `cicd/build/check_test_counts.py --project desktop` requires Windows 160 / Linux 157 tests. `cicd/desktop/package_desktop.py` verifies the pinned JavaFX disposal patch, builds the jlink/jpackage image, trains all views/themes and checks 20 fresh/reused starts: verified AOT, no runtime diagnostics, each at most 1500 ms. UI snapshots and all startup samples are platform-specific artifacts |
+| `desktop` | Windows 2025 and Ubuntu 24.04 matrix, JDK 25 and explicitly selected Python 3.13 (Linux uses D-Bus and Xvfb): `./mvnw -B -ntp -Pdesktop -pl :datacraft-desktop -am verify` runs parent formatting plus desktop unit, client, store, UI and accessibility lifecycle tests. `cicd/build/check_test_counts.py --project desktop` requires Windows 183 / Linux 180 tests. `cicd/desktop/package_desktop.py` verifies the pinned JavaFX disposal patch, builds the jlink/jpackage image, trains all views/themes and checks 20 fresh/reused starts: verified AOT, no runtime diagnostics, each at most 1500 ms. UI snapshots and all startup samples are platform-specific artifacts |
 | `containers` | After `build`, `scripts` and `compose`: `cicd/images/smoke-images.sh`, then `cicd/images/smoke-compose.sh`, then `cicd/images/smoke-swarm.sh` |
 
 The `cicd/build` scripts run after `./mvnw verify` on Linux, WSL or Git Bash (they use GNU tools
@@ -376,11 +382,11 @@ pom's `<modules>`.
 | `datacraft-engine` | 34 | 34 |
 | `datacraft-jobs` | 91 | 89 |
 | `datacraft-spark` | 64 | 54 |
-| `datacraft-api` | 31 | 31 |
+| `datacraft-api` | 33 | 33 |
 | `datacraft-cli` | 32 | 32 |
 
 `--project desktop` checks the desktop console instead (`desktop/target/surefire-reports`): the
-floor is 157 on Linux and 160 on Windows, which also runs three real native accessibility tests.
+floor is 180 on Linux and 183 on Windows, which also runs three real native accessibility tests.
 Each runs its own `VaultPlatformTest` case; `verify` excludes `e2e`. The desktop matrix checks the
 floor after `verify`.
 

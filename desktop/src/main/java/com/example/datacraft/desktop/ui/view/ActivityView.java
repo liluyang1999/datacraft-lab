@@ -16,6 +16,7 @@ import java.util.Arrays;
 import java.util.List;
 import javafx.beans.property.ObjectProperty;
 import javafx.beans.property.SimpleObjectProperty;
+import javafx.beans.property.SimpleStringProperty;
 import javafx.scene.Node;
 import javafx.scene.control.Label;
 import javafx.scene.control.ListCell;
@@ -83,18 +84,28 @@ public final class ActivityView implements View {
     list.setPlaceholder(placeholder);
     VBox.setVgrow(list, Priority.ALWAYS);
 
-    Label detail = Controls.label("", "secondary");
-    detail.setWrapText(true);
-    detail.setMaxWidth(Double.MAX_VALUE);
-    VBox detailBox = new VBox(6, detail);
+    var detail = new SimpleStringProperty("");
+    Label selectedText = Controls.compactLabel("", "secondary");
+    HBox.setHgrow(selectedText, Priority.ALWAYS);
+    var showDetail = Controls.details("查看详情", "活动详情", detail, dialogs::details);
+    HBox detailBox = Controls.row(12, selectedText, showDetail);
     detailBox.getStyleClass().add("panel");
     detailBox.setStyle("-fx-padding: 12 16 12 16;");
     list.getSelectionModel()
         .selectedItemProperty()
         .addListener(
             (property, before, entry) -> {
-              boolean show = entry != null && !entry.detail().isBlank();
-              detail.setText(show ? entry.detail() : "");
+              boolean show = entry != null;
+              selectedText.setText(show ? entry.text() : "");
+              detail.set(
+                  show
+                      ? source(entry.source())
+                          + " · "
+                          + Formats.when(entry.at(), clock.instant(), ZoneId.systemDefault())
+                          + "\n\n"
+                          + entry.text()
+                          + (entry.detail().isBlank() ? "" : "\n\n" + entry.detail())
+                      : "");
               detailBox.setVisible(show);
               detailBox.setManaged(show);
             });
@@ -133,13 +144,14 @@ public final class ActivityView implements View {
   private static final class EntryCell extends ListCell<Entry> {
     private final Clock clock;
     private final StackPane glyph = new StackPane();
-    private final Label text = Controls.label("", "");
+    private final Label text = Controls.compactLabel("", "");
     private final Label time = Controls.label("", "secondary");
     private final HBox row = Controls.row(12, glyph, text, Controls.grow(), time);
     private final Tooltip tip = new Tooltip();
 
     EntryCell(Clock clock) {
       this.clock = clock;
+      setPrefWidth(0);
       glyph.getStyleClass().add("activity-glyph");
       time.setMinWidth(96);
       time.setAlignment(javafx.geometry.Pos.CENTER_RIGHT);
@@ -160,7 +172,7 @@ public final class ActivityView implements View {
       glyph.getChildren().setAll(Icons.of(glyph(entry.source()), 18));
       glyph.getStyleClass().removeAll(Tones.ALL);
       glyph.getStyleClass().add(tone(entry.level()));
-      tip.setText(source(entry.source()) + (entry.detail().isBlank() ? "" : "\n" + entry.detail()));
+      tip.setText(source(entry.source()) + " · " + Formats.preview(entry.text(), 80));
       setTooltip(tip);
       text.setText(entry.text());
       text.getStyleClass().removeAll("text-failed", "text-warning");

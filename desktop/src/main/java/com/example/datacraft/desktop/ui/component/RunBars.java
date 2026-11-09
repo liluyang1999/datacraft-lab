@@ -139,9 +139,9 @@ public final class RunBars extends Region {
     shown.addAll(newestFirst.subList(0, Math.min(size, newestFirst.size())));
     double longest =
         shown.stream()
-            .map(segment -> segment.duration().map(Duration::toMillis).orElse(0L))
-            .max(Long::compare)
-            .orElse(0L);
+            .mapToDouble(segment -> segment.duration().map(RunBars::millis).orElse(0.0))
+            .max()
+            .orElse(0.0);
     boolean animate = !Motion.reduced() && getScene() != null;
     for (int slot = 0; slot < size; slot++) {
       Segment segment = segmentAt(slot);
@@ -189,8 +189,14 @@ public final class RunBars extends Region {
     if (longestMillis <= 0) {
       return maxHeight;
     }
-    double share = Math.sqrt(segment.duration().get().toMillis() / longestMillis);
+    double share = Math.sqrt(millis(segment.duration().get()) / longestMillis);
     return MIN_HEIGHT * 2 + (maxHeight - MIN_HEIGHT * 2) * Math.min(1, share);
+  }
+
+  private static double millis(Duration duration) {
+    return duration.isNegative()
+        ? 0
+        : duration.getSeconds() * 1000.0 + duration.getNano() / 1_000_000.0;
   }
 
   private Timeline grow(Rectangle bar, double height) {

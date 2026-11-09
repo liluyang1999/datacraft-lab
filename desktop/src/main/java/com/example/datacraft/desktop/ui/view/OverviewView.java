@@ -11,6 +11,7 @@ import com.example.datacraft.desktop.ui.component.RunBars;
 import com.example.datacraft.desktop.ui.component.StatusRing;
 import com.example.datacraft.desktop.ui.component.TimeStrip;
 import com.example.datacraft.desktop.ui.component.Tones;
+import com.example.datacraft.desktop.ui.shell.Dialogs;
 import com.example.datacraft.desktop.util.Formats;
 import com.example.datacraft.desktop.viewmodel.DagRow;
 import com.example.datacraft.desktop.viewmodel.Labels;
@@ -30,6 +31,7 @@ import javafx.scene.control.Label;
 import javafx.scene.control.ScrollPane;
 import javafx.scene.control.Tooltip;
 import javafx.scene.input.MouseEvent;
+import javafx.scene.layout.FlowPane;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.Priority;
 import javafx.scene.layout.StackPane;
@@ -47,6 +49,7 @@ public final class OverviewView implements View {
 
   private final OverviewModel model;
   private final Clock clock;
+  private final Dialogs dialogs;
   private final StackPane root = new StackPane();
 
   public OverviewView(
@@ -56,38 +59,39 @@ public final class OverviewView implements View {
       Consumer<String> openPipeline,
       Consumer<String> triggerPipeline,
       Consumer<String> openJob,
-      Runnable openSettings) {
+      Runnable openSettings,
+      Dialogs dialogs) {
     this.model = model;
     this.clock = clock;
+    this.dialogs = dialogs;
 
-    HBox tiles =
-        new HBox(
+    FlowPane tiles =
+        new FlowPane(
+            16,
             16,
             backendTile("引擎 API", Glyph.ENGINE, status.engine()),
             backendTile("Airflow", Glyph.AIRFLOW, status.airflow()),
             mixTile());
 
-    Label problem = Controls.label("", "notice");
-    problem.setWrapText(true);
-    problem.setMaxWidth(Double.MAX_VALUE);
-    Runnable showProblem =
-        () -> {
-          String text = model.problem().get();
-          boolean stale = model.staleSince().get() != null && !model.dags().isEmpty();
-          problem.setText(
-              stale
-                  ? "数据停在 "
-                      + Formats.clock(model.staleSince().get(), ZoneId.systemDefault())
-                      + "。"
-                      + text
-                  : text);
-          boolean visible = !text.isEmpty() && model.connected().get();
-          problem.setVisible(visible);
-          problem.setManaged(visible);
-        };
-    model.problem().addListener((property, before, now) -> showProblem.run());
-    model.staleSince().addListener((property, before, now) -> showProblem.run());
-    showProblem.run();
+    var problemText =
+        Bindings.createStringBinding(
+            () -> {
+              String text = model.problem().get();
+              boolean stale = model.staleSince().get() != null && !model.dags().isEmpty();
+              return text.isEmpty()
+                  ? ""
+                  : stale
+                      ? "数据停在 "
+                          + Formats.clock(model.staleSince().get(), ZoneId.systemDefault())
+                          + "。"
+                          + text
+                      : text;
+            },
+            model.problem(),
+            model.staleSince(),
+            model.dags());
+    Button problem =
+        Controls.details("流水线数据未更新", "流水线状态", problemText, dialogs::details, "text-warning");
 
     VBox lanes = new VBox(4);
     var laneRows =
@@ -131,11 +135,20 @@ public final class OverviewView implements View {
               showStrip.run();
             });
     Label noRuns = Controls.label("还没有运行", "secondary");
-    noRuns.visibleProperty().bind(Bindings.isEmpty(model.recent()).and(model.loaded()));
+    noRuns
+        .visibleProperty()
+        .bind(
+            Bindings.isEmpty(model.recent())
+                .and(model.loaded())
+                .and(model.recentProblem().isEmpty()));
     noRuns.managedProperty().bind(noRuns.visibleProperty());
     strip.visibleProperty().bind(Bindings.isNotEmpty(model.recent()));
     strip.managedProperty().bind(strip.visibleProperty());
-    VBox recent = new VBox(10, heading(Glyph.ACTIVITY, "最近运行"), strip, recentRows, noRuns);
+    Button recentProblem =
+        Controls.details(
+            "运行记录未更新", "本机运行记录", model.recentProblem(), dialogs::details, "text-warning");
+    VBox recent =
+        new VBox(10, heading(Glyph.ACTIVITY, "最近运行"), recentProblem, strip, recentRows, noRuns);
 
     VBox page = new VBox(28, tiles, pipelines, recent);
     page.getStyleClass().add("view-content");
@@ -155,25 +168,29 @@ public final class OverviewView implements View {
     return heading;
   }
 
-  private static Node backendTile(String name, Glyph glyph, ObservableValue<BackendStatus> value) {
+  private Node backendTile(String name, Glyph glyph, ObservableValue<BackendStatus> value) {
     StatusRing ring = new StatusRing(60, 4, Icons.of(glyph, 26));
     Label title = Controls.label(name, "tile-title");
     Label latency = Controls.label("", "figure");
-    Label state = Controls.label("", "caption");
-    VBox text = new VBox(2, title, latency, state);
+    Label state = Controls.compactLabel("", "caption");
+    var detail = Bindings.createStringBinding(() -> value.getValue().summary(), value);
+    Button details = Controls.details("连接详情", name, detail, dialogs::details);
+    VBox text = new VBox(2, title, latency, state, details);
+    text.setMinWidth(0);
+    HBox.setHgrow(text, Priority.ALWAYS);
     HBox tile = Controls.row(16, ring, text);
+    tile.setPrefWidth(260);
+    tile.setMaxWidth(260);
+    tile.setPrefHeight(140);
     tile.getStyleClass().add("tile");
     HBox.setHgrow(tile, Priority.ALWAYS);
-    Tooltip tooltip = new Tooltip();
-    Tooltip.install(tile, tooltip);
     Runnable show =
         () -> {
           BackendStatus status = value.getValue();
           boolean up = status.state() == BackendStatus.State.UP;
           ring.set(Tones.of(status), name + " " + Labels.status(status));
           latency.setText(up ? status.latency().map(Formats::latency).orElse("—") : "—");
-          state.setText(up ? status.summary() : Labels.status(status));
-          tooltip.setText(status.summary());
+          state.setText(up ? Formats.preview(status.summary(), 32) : Labels.status(status));
         };
     value.addListener((property, before, now) -> show.run());
     show.run();
@@ -184,7 +201,8 @@ public final class OverviewView implements View {
     Label share = Controls.label("—", "donut-figure");
     Donut donut = new Donut(60, 7, List.of("success", "failed", "running", "waiting"), share);
     Label title = Controls.label("近期成功率", "tile-title");
-    HBox legend = new HBox(12);
+    FlowPane legend = new FlowPane(12, 6);
+    legend.setPrefWrapLength(140);
     Label[] counts = new Label[4];
     String[] tones = {"success", "failed", "running", "waiting"};
     String[] words = {"成功", "失败", "运行中", "等待"};
@@ -197,7 +215,12 @@ public final class OverviewView implements View {
       legend.getChildren().add(entry);
     }
     VBox text = new VBox(6, title, legend);
+    text.setMinWidth(0);
+    HBox.setHgrow(text, Priority.ALWAYS);
     HBox tile = Controls.row(16, donut, text);
+    tile.setPrefWidth(260);
+    tile.setMaxWidth(260);
+    tile.setPrefHeight(140);
     tile.getStyleClass().add("tile");
     HBox.setHgrow(tile, Priority.ALWAYS);
     Runnable show =
@@ -226,12 +249,10 @@ public final class OverviewView implements View {
     Tooltip scheduleTip = new Tooltip();
     Tooltip.install(schedule, scheduleTip);
     schedule.setUserData(scheduleTip);
-    Label name = Controls.label("", "name", "latin");
-    name.setMinWidth(120);
+    Label name = Controls.compactLabel("", "name", "latin");
+    name.setMinWidth(80);
     name.setPrefWidth(220);
-    Tooltip nameTip = new Tooltip();
-    nameTip.textProperty().bind(name.textProperty());
-    name.setTooltip(nameTip);
+    name.setMaxWidth(220);
     RunBars bars = RunBars.compact(OverviewModel.RIBBON);
     StatusRing last = StatusRing.dot();
     Label ago = Controls.label("", "secondary");
@@ -315,14 +336,16 @@ public final class OverviewView implements View {
   private HBox recentRow() {
     StackPane kind = new StackPane();
     kind.getStyleClass().add("lane-glyph");
-    Label name = Controls.label("", "name", "latin");
-    name.setMinWidth(220);
+    Label name = Controls.compactLabel("", "name", "latin");
     name.setPrefWidth(220);
+    name.setMaxWidth(220);
+    HBox.setHgrow(name, Priority.ALWAYS);
     StatusRing state = StatusRing.dot();
     Label time = Controls.label("", "secondary");
     time.setMinWidth(96);
-    Label duration = Controls.label("", "secondary", "latin");
-    duration.setMinWidth(64);
+    Label duration = Controls.compactLabel("", "secondary", "latin");
+    duration.setPrefWidth(100);
+    duration.setMaxWidth(120);
     HBox row = Controls.row(14, kind, name, state, time, duration);
     row.getStyleClass().add("recent-row");
     return row;

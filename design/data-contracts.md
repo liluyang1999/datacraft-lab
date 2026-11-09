@@ -464,7 +464,7 @@ SFTP:
 | `POST /jobs/{name}/runs`, job failed | 500 with the same result body, including parameter rejections such as "Missing required parameter: input" and a missing Spark runtime |
 | Any request under `/jobs` without the configured token | 401 `{"error":"unauthorized"}` with `WWW-Authenticate: Bearer realm="datacraft-api"` |
 | Run request while `--max-concurrent-runs` runs are in progress, or while the server is closing | 503 `{"error":"busy"}` with `Retry-After: 1`; nothing runs |
-| Malformed run request | 400 `{"error":"invalid_request"}`: a missing, blank or nested job path, an unknown `lifecycle`, a percent-escape that does not decode as UTF-8, or raw non-ASCII bytes in the query |
+| Malformed run request | 400 `{"error":"invalid_request"}`: a missing, blank or nested job path, an unknown `lifecycle`, percent-encoded bytes that are not valid UTF-8, or raw non-ASCII bytes in the run path or query |
 | Run request with an `Origin` header | 403 `{"error":"cross_origin_forbidden"}`, whatever the value (`null` included) |
 | Unknown job | 404 `{"error":"unknown_job"}` |
 | Unknown route, e.g. `/`, `/healthz`, `/api/...` | 404 `{"error":"not_found"}` |
@@ -520,7 +520,11 @@ A key given more than once keeps its last value, a pair with a blank key is igno
 without `=` gets the empty string. `lifecycle` is the request's own parameter, so a job parameter
 of that name cannot be sent over HTTP.
 
-Path segments are decoded once and keep `+`. JSON escaping is shared with the CLI. The JDK server
+Run paths are decoded strictly from the raw URI exactly once and keep `+` as a literal character,
+unlike query components. Invalid UTF-8, including truncated, overlong and surrogate sequences, gets
+400 `invalid_request` before job lookup or execution; it must not become U+FFFD and select a different
+registered job. Valid Unicode names, including an explicitly encoded U+FFFD, remain valid; `%2520`
+decodes to the literal text `%20`, not a space. JSON escaping is shared with the CLI. The JDK server
 itself refuses request targets that `java.net.URI` cannot parse, such as a malformed percent-escape
 or raw bytes 0x80-0xA0 (present in unencoded UTF-8 for `€`, `日` or `à`), with its plain HTML 400
 before any handler runs; other raw non-ASCII bytes reach the handler and get the JSON 400. A request

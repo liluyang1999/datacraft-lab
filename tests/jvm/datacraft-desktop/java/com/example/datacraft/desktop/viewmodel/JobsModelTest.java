@@ -77,6 +77,105 @@ class JobsModelTest {
   }
 
   @Test
+  void changingJobsImmediatelyRemovesThePreviousJobsRecentRuns() throws Exception {
+    Instant now = Instant.now();
+    context
+        .recentRuns()
+        .add(
+            new RecentRun(
+                a.id(),
+                "echo",
+                Map.of(),
+                "SUCCEEDED",
+                "echo only",
+                Map.of(),
+                now,
+                Duration.ofMillis(1)),
+            now)
+        .join();
+    select("echo");
+    ui.until("echo history loaded", () -> model.recent().size() == 1);
+    CompletableFuture<Void> gate = new CompletableFuture<>();
+    context
+        .store()
+        .submit(
+            connection -> {
+              gate.join();
+              return null;
+            });
+    try {
+      select("noop");
+      assertTrue(
+          model.recent().isEmpty(), "echo's history cannot appear under noop while it loads");
+      assertTrue(model.recentLoading().get());
+    } finally {
+      gate.complete(null);
+      context.store().submit(connection -> null).join();
+    }
+    ui.until("noop history loaded", () -> !model.recentLoading().get());
+    assertTrue(model.recent().isEmpty());
+  }
+
+  @Test
+  void aFailedHistoryReadIsVisibleAndCanBeRetriedWithoutSwitchingJobs() throws Exception {
+    select("echo");
+    ui.until("echo history loaded", () -> !model.recentLoading().get());
+    renameRuns("recent_runs", "unavailable_runs");
+    model.refresh();
+    ui.until("history failure is shown", () -> !model.recentProblem().get().isEmpty());
+    assertFalse(model.recentLoading().get());
+    renameRuns("unavailable_runs", "recent_runs");
+    Instant now = Instant.now();
+    context
+        .recentRuns()
+        .add(
+            new RecentRun(
+                a.id(),
+                "echo",
+                Map.of(),
+                "SUCCEEDED",
+                "recovered",
+                Map.of(),
+                now,
+                Duration.ofMillis(1)),
+            now)
+        .join();
+    model.refresh();
+    ui.until("history recovered", () -> !model.recentLoading().get());
+    assertEquals("", model.recentProblem().get());
+    assertEquals("recovered", model.recent().getFirst().message());
+  }
+
+  @Test
+  void aHistoryFailureQueuedBeforeASelectionChangeCannotMarkTheNewJob() throws Exception {
+    select("echo");
+    ui.until("echo history loaded", () -> !model.recentLoading().get());
+    renameRuns("recent_runs", "unavailable_runs");
+    model.refresh();
+    context.store().submit(connection -> null).join();
+    renameRuns("unavailable_runs", "recent_runs");
+    select("noop");
+    context.store().submit(connection -> null).join();
+    ui.drain();
+    assertEquals("", model.recentProblem().get());
+    assertFalse(model.recentLoading().get());
+    assertTrue(model.recent().isEmpty());
+  }
+
+  private void renameRuns(String from, String to) {
+    context
+        .store()
+        .transaction(
+            connection -> {
+              try (var statement = connection.createStatement()) {
+                statement.execute("ALTER TABLE " + from + " RENAME TO " + to);
+              }
+              return null;
+            })
+        .join();
+  }
+
+  @Test
   void duplicateKeysCannotRunOrSaveAndSurviveSwitchingJobs() {
     select("echo");
     model.params().getFirst().value().set("原始内容");

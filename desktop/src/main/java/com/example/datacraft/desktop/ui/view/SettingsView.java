@@ -19,6 +19,7 @@ import java.util.List;
 import java.util.function.Consumer;
 import javafx.beans.binding.Bindings;
 import javafx.beans.property.ObjectProperty;
+import javafx.beans.property.SimpleStringProperty;
 import javafx.scene.Node;
 import javafx.scene.control.Button;
 import javafx.scene.control.ContentDisplay;
@@ -31,7 +32,6 @@ import javafx.scene.control.Spinner;
 import javafx.scene.control.TextField;
 import javafx.scene.control.ToggleButton;
 import javafx.scene.control.ToggleGroup;
-import javafx.scene.control.Tooltip;
 import javafx.scene.layout.ColumnConstraints;
 import javafx.scene.layout.GridPane;
 import javafx.scene.layout.HBox;
@@ -73,13 +73,14 @@ public final class SettingsView implements View {
     ListView<Profile> list = new ListView<>(model.profiles());
     list.setPrefWidth(200);
     list.setMinWidth(180);
+    list.setMaxWidth(200);
     list.setPrefHeight(36 * 5 + 8);
     list.getStyleClass().add("profile-list");
     list.setPlaceholder(Controls.label("还没有连接", "secondary"));
     list.setCellFactory(
         view ->
             new ListCell<>() {
-              private final Label name = new Label();
+              private final Label name = Controls.compactLabel("");
               private final Label current = Controls.label("当前", "caption");
               private final HBox row = Controls.row(8, name, Controls.grow(), current);
 
@@ -90,6 +91,7 @@ public final class SettingsView implements View {
                   setGraphic(null);
                   return;
                 }
+                name.setMaxWidth(120);
                 name.setText(profile.name());
                 current.setVisible(profile.id() == model.activeId().get());
                 setGraphic(row);
@@ -155,12 +157,8 @@ public final class SettingsView implements View {
     form.addRow(line++, Controls.labelFor("口令", password, "field-label"), password);
     form.add(rememberRow, 1, line++);
 
-    Label error = Controls.label("", "notice", "failed");
-    error.setWrapText(true);
-    error.setMaxWidth(Double.MAX_VALUE);
-    error.textProperty().bind(model.formError());
-    error.visibleProperty().bind(model.formError().isNotEmpty());
-    error.managedProperty().bind(error.visibleProperty());
+    Button error =
+        Controls.details("设置未完成", "连接设置", model.formError(), dialogs::details, "notice", "failed");
 
     Button save =
         Controls.button(
@@ -213,7 +211,9 @@ public final class SettingsView implements View {
     HBox buttons = Controls.row(12, save, test, connect, Controls.grow(), delete);
 
     HBox testResult = new HBox(24);
-    model.testResult().addListener((property, before, result) -> showTest(testResult, result));
+    model
+        .testResult()
+        .addListener((property, before, result) -> showTest(testResult, result, dialogs));
 
     VBox right = new VBox(16, form, error, buttons, testResult);
     HBox.setHgrow(right, Priority.ALWAYS);
@@ -221,19 +221,19 @@ public final class SettingsView implements View {
     return new VBox(16, OverviewView.heading(Glyph.LINK, "连接"), body);
   }
 
-  private static void showTest(HBox box, TestResult result) {
+  private static void showTest(HBox box, TestResult result, Dialogs dialogs) {
     box.getChildren().clear();
     if (result == null) {
       return;
     }
     box.getChildren()
         .addAll(
-            testTile("引擎 API", Glyph.ENGINE, result.engine()),
-            testTile("Airflow", Glyph.AIRFLOW, result.airflow()));
+            testTile("引擎 API", Glyph.ENGINE, result.engine(), dialogs),
+            testTile("Airflow", Glyph.AIRFLOW, result.airflow(), dialogs));
   }
 
-  /** One backend's answer to the test: its ring, its name and latency; the details on hover. */
-  private static Node testTile(String name, Glyph glyph, BackendStatus status) {
+  /** One backend's status and latency, with complete diagnostic text available on demand. */
+  private static Node testTile(String name, Glyph glyph, BackendStatus status, Dialogs dialogs) {
     StatusRing ring = new StatusRing(36, 3, Icons.of(glyph, 16));
     ring.set(Tones.of(status), name + " " + Labels.status(status));
     boolean up = status.state() == BackendStatus.State.UP;
@@ -242,9 +242,16 @@ public final class SettingsView implements View {
         Controls.label(
             up ? status.latency().map(Formats::latency).orElse("") : Labels.status(status),
             up ? "latin" : "text-failed");
-    HBox tile = Controls.row(10, ring, new VBox(2, title, detail));
+    Button details =
+        Controls.details(
+            "查看详情",
+            name + " 连接测试",
+            new SimpleStringProperty(status.summary()),
+            dialogs::details,
+            "quiet");
+    details.setAccessibleText(name + " 详情");
+    HBox tile = Controls.row(10, ring, new VBox(2, title, detail, details));
     tile.getStyleClass().add("test-tile");
-    Tooltip.install(tile, new Tooltip(status.summary()));
     return tile;
   }
 

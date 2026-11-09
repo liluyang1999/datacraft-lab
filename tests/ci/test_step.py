@@ -180,20 +180,46 @@ class StepTests(unittest.TestCase):
         short = run_step(python(f"print('start'); print({failure!r}); print('end'); raise SystemExit(1)"))
         self.assertEqual([f"start\n{failure}\nend"], [text for _, text in annotations(short.stdout)])
 
-    @unittest.skipUnless(os.name == "posix", "the wrapper can wait on a pipe only on POSIX; a runner is Linux")
     def test_a_step_ends_with_its_command_and_not_with_a_process_it_left_running(self):
         # A process started in the background inherits the step's output and keeps it open. The
-        # runner's own shell ends the step when the command ends, and so must the wrapper.
-        child = "import time; time.sleep(25)"
-        code = ("import subprocess, sys\n"
-                f"subprocess.Popen([sys.executable, '-c', {child!r}])\n"
-                "print('started', flush=True)\n"
-                "raise SystemExit(3)\n")
-        began = time.monotonic()
-        result = run_step(python(code))
-        self.assertLess(time.monotonic() - began, 15)
-        self.assertEqual(3, result.returncode)
-        self.assertEqual(["started"], [text for _, text in annotations(result.stdout)])
+        # wrapper must return before that process is released on both Windows and POSIX. The
+        # handshake also lets the child exit normally, including after a regression fails.
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            child = ("from pathlib import Path\nimport time\n"
+                     f"root = Path({directory!r})\n"
+                     "(root / 'ready').touch()\n"
+                     "deadline = time.monotonic() + 30\n"
+                     "while not (root / 'release').exists() and time.monotonic() < deadline:\n"
+                     "    time.sleep(0.02)\n"
+                     "(root / 'done').touch()\n")
+            code = ("import subprocess, sys, time\nfrom pathlib import Path\n"
+                    f"subprocess.Popen([sys.executable, '-c', {child!r}])\n"
+                    f"ready = Path({directory!r}) / 'ready'\n"
+                    "deadline = time.monotonic() + 10\n"
+                    "while not ready.exists() and time.monotonic() < deadline:\n"
+                    "    time.sleep(0.02)\n"
+                    "assert ready.exists()\n"
+                    "print('started', flush=True)\nraise SystemExit(3)\n")
+            env = {**os.environ, "GITHUB_ACTIONS": "true"}
+            with subprocess.Popen([sys.executable, '-B', str(STEP), *python(code)],
+                                  stdout=subprocess.PIPE, stderr=subprocess.PIPE, env=env) as process:
+                returned_before_release = False
+                try:
+                    stdout, stderr = process.communicate(timeout=10)
+                    returned_before_release = True
+                except subprocess.TimeoutExpired:
+                    pass
+                finally:
+                    (root / "release").touch()
+                    stdout, stderr = process.communicate(timeout=10)
+                    deadline = time.monotonic() + 10
+                    while not (root / "done").exists() and time.monotonic() < deadline:
+                        time.sleep(0.02)
+                self.assertTrue((root / "done").exists(), "background child did not finish")
+                self.assertTrue(returned_before_release, "wrapper waited for the background child")
+                self.assertEqual(3, process.returncode, stderr)
+                self.assertEqual(["started"], [text for _, text in annotations(stdout)])
 
     def test_output_arrives_while_the_step_runs_and_a_long_line_is_passed_through_whole(self):
         # Longer than a pipe holds, so it reaches the wrapper in several pieces.

@@ -225,7 +225,7 @@ public final class EngineHttpServer implements AutoCloseable {
       }
       JobExecutionRequest request;
       try {
-        request = runRequest(exchange.getRequestURI(), path);
+        request = runRequest(exchange.getRequestURI());
       } catch (IllegalArgumentException exception) {
         HttpJsonResponse.write(exchange, 400, EngineJson.error("invalid_request"));
         return;
@@ -242,8 +242,10 @@ public final class EngineHttpServer implements AutoCloseable {
    *
    * @throws IllegalArgumentException when the job path, the lifecycle or the query is malformed
    */
-  private static JobExecutionRequest runRequest(URI uri, String path) {
-    // URI.getPath() is already percent-decoded, and '+' is a literal path character.
+  private static JobExecutionRequest runRequest(URI uri) {
+    // URI.getPath() replaces malformed UTF-8 with U+FFFD, which could name a different job.
+    // Decode the raw path strictly and exactly once; '+' remains a literal path character.
+    String path = decode(uri.getRawPath(), false);
     if (path.length() <= "/jobs/".length() + "/runs".length()) {
       throw new IllegalArgumentException("Missing job name.");
     }
@@ -320,7 +322,7 @@ public final class EngineHttpServer implements AutoCloseable {
     }
   }
 
-  private static String decode(String value) {
+  private static String decode(String value, boolean queryComponent) {
     ByteArrayOutputStream bytes = new ByteArrayOutputStream();
     for (int i = 0; i < value.length(); ) {
       char ch = value.charAt(i);
@@ -339,9 +341,9 @@ public final class EngineHttpServer implements AutoCloseable {
         // The JDK server maps each raw request-line byte to one char, so a char above 0x7F is a
         // byte of unencoded UTF-8; re-encoding it would silently double-decode the value.
         if (ch > 0x7F) {
-          throw new IllegalArgumentException("Query must be percent-encoded UTF-8.");
+          throw new IllegalArgumentException("URI component must be percent-encoded UTF-8.");
         }
-        bytes.write(ch == '+' ? ' ' : ch);
+        bytes.write(ch == '+' && queryComponent ? ' ' : ch);
         i++;
       }
     }
@@ -352,7 +354,7 @@ public final class EngineHttpServer implements AutoCloseable {
           .decode(ByteBuffer.wrap(bytes.toByteArray()))
           .toString();
     } catch (CharacterCodingException exception) {
-      throw new IllegalArgumentException("Query must use UTF-8.", exception);
+      throw new IllegalArgumentException("URI component must use UTF-8.", exception);
     }
   }
 
@@ -363,8 +365,8 @@ public final class EngineHttpServer implements AutoCloseable {
     }
     for (String pair : rawQuery.split("&")) {
       String[] parts = pair.split("=", 2);
-      String key = decode(parts[0]);
-      String value = parts.length == 2 ? decode(parts[1]) : "";
+      String key = decode(parts[0], true);
+      String value = parts.length == 2 ? decode(parts[1], true) : "";
       if (!key.isBlank()) {
         parameters.put(key, value);
       }

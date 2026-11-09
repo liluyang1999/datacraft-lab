@@ -17,6 +17,8 @@
 | `run(name, params, timeout)` | `POST /jobs/{name}/runs?k=v…` | 200 结果体；500 同样的结果体 | `JobResult(jobName, status, message, metrics)` |
 
 - 令牌：`Authorization: Bearer <token>`，只用于 `/jobs` 下的请求。
+- 作业名逐段按 UTF-8 百分号编码。服务端从原始路径严格解码一次：非法 UTF-8 返回 400 `invalid_request`，
+  不替换成 U+FFFD 后查找作业；合法中文与 U+FFFD 可正常匹配，路径中的 `+` 保持字面值，`%2520` 只解为 `%20`。
 - 参数：作为查询串发送，键与值都按 UTF-8 百分号编码（空格编码为 `%20`，不用 `+`）；`lifecycle`
   是请求自身的参数，不作为作业参数发送。
 - 运行是同步的：请求一直等到作业结束。总时限默认 30 min，可在设置里调整；超过时限是 `TIMED_OUT`，
@@ -26,7 +28,8 @@
   503 `busy` → `BUSY`（附 `Retry-After`，界面提示“运行数已满，稍后再试”，不自动重试，避免重复运行）；
   400 → `REJECTED`；其他 5xx 且没有结果体 → `SERVER`。
 - 指标值在协议里是字符串（如 `"rows":"2"`），界面按键名格式化：`durationMillis` 显示为时长，
-  `bytes` 显示为大小，`rows`、`columns` 按千分位。
+  `bytes` 显示为大小；`rows`、`columns`、`expectedRows` 的小计数按千分位，大计数可缩写为万、亿或科学计数法。
+  “指标详情”保留全部原始键和值，复制不使用缩写后的显示值；未知指标不按计数猜测转换。
 
 ## Airflow 3.3.2 REST API v2（`AirflowClient`）
 

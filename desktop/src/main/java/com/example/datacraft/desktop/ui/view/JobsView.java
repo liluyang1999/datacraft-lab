@@ -115,7 +115,7 @@ public final class JobsView implements View {
                     !model.jobs().isEmpty()
                         ? "没有匹配的作业"
                         : !model.listProblem().get().isEmpty()
-                            ? model.listProblem().get()
+                            ? "作业目录读取失败"
                             : model.loaded().get() ? "引擎上没有作业" : "正在读取作业",
                 model.listProblem(),
                 model.jobs(),
@@ -138,10 +138,16 @@ public final class JobsView implements View {
 
     StackPane disc = new StackPane();
     disc.getStyleClass().add("job-disc");
-    Label name = Controls.label("", "view-title", "latin");
-    Label summary = Controls.label("", "secondary");
-    name.setWrapText(true);
-    summary.setWrapText(true);
+    Label name = Controls.compactLabel("", "view-title", "latin");
+    Label summary = Controls.compactLabel("", "secondary");
+    var jobDescription =
+        Bindings.createStringBinding(
+            () -> {
+              JobInfo job = model.selected().get();
+              return job == null ? "" : job.name() + "\n\n" + model.summary(job);
+            },
+            model.selected());
+    Button descriptionDetails = Controls.details("作业说明", "作业说明", jobDescription, dialogs::details);
     model
         .selected()
         .addListener(
@@ -158,7 +164,7 @@ public final class JobsView implements View {
     VBox description = new VBox(4, name, summary);
     description.setMinWidth(0);
     HBox.setHgrow(description, Priority.ALWAYS);
-    HBox header = Controls.row(16, disc, description);
+    HBox header = Controls.row(16, disc, description, descriptionDetails);
 
     ParamEditor editor = new ParamEditor(model.params(), model::addParam, model::removeParam);
 
@@ -181,8 +187,8 @@ public final class JobsView implements View {
     presets.setOnShowing(event -> fillPresets(presets));
     presets.disableProperty().bind(model.selected().isNull());
 
-    Label missing = Controls.label("", "caption", "text-failed");
-    missing.textProperty().bind(model.missing());
+    Button missing =
+        Controls.details("检查参数", "参数检查", model.missing(), dialogs::details, "text-failed");
     Label elapsed = Controls.label("", "figure-small", "latin");
     HBox actions = Controls.row(12, run, elapsed, presets, missing);
 
@@ -207,8 +213,8 @@ public final class JobsView implements View {
               }
             });
 
-    Label presetError = notice(model.presetProblem());
-    Label error = notice(model.runError());
+    Button presetError = notice("预设操作失败", "预设详情", model.presetProblem());
+    Button error = notice("运行未完成", "运行详情", model.runError());
 
     VBox result = resultSection();
 
@@ -219,9 +225,25 @@ public final class JobsView implements View {
             (javafx.collections.ListChangeListener<RecentRun>)
                 change -> bars.set(Segments.ofJobRuns(model.recent(), clock.instant())));
     Label noRecent = Controls.label("还没有运行", "secondary");
-    noRecent.visibleProperty().bind(Bindings.isEmpty(model.recent()));
+    noRecent
+        .visibleProperty()
+        .bind(
+            Bindings.isEmpty(model.recent())
+                .and(model.recentLoading().not())
+                .and(model.recentProblem().isEmpty()));
     noRecent.managedProperty().bind(noRecent.visibleProperty());
-    VBox recent = new VBox(12, OverviewView.heading(Glyph.ACTIVITY, "最近运行"), bars, noRecent);
+    Label loadingRecent = Controls.label("正在读取运行记录", "secondary");
+    loadingRecent.visibleProperty().bind(model.recentLoading());
+    loadingRecent.managedProperty().bind(loadingRecent.visibleProperty());
+    Button recentError = notice("运行记录读取失败", "运行记录", model.recentProblem());
+    VBox recent =
+        new VBox(
+            12,
+            OverviewView.heading(Glyph.ACTIVITY, "最近运行"),
+            bars,
+            loadingRecent,
+            recentError,
+            noRecent);
 
     VBox detail =
         new VBox(
@@ -237,10 +259,7 @@ public final class JobsView implements View {
     detail.visibleProperty().bind(model.selected().isNotNull());
 
     // A refresh that fails while an earlier list is shown: say so above the (stale) list.
-    Label listError = notice(model.listProblem());
-    listError
-        .visibleProperty()
-        .bind(model.listProblem().isNotEmpty().and(Bindings.isNotEmpty(model.jobs())));
+    Button listError = notice("作业目录读取失败", "作业目录", model.listProblem());
     VBox listColumn = new VBox(filters(), listError, list);
     VBox.setVgrow(list, Priority.ALWAYS);
     listColumn.setMinWidth(200);
@@ -346,14 +365,9 @@ public final class JobsView implements View {
     }
   }
 
-  private static Label notice(javafx.beans.value.ObservableStringValue text) {
-    Label notice = Controls.label("", "notice", "failed");
-    notice.setWrapText(true);
-    notice.setMaxWidth(Double.MAX_VALUE);
-    notice.textProperty().bind(text);
-    notice.visibleProperty().bind(Bindings.isNotEmpty(text));
-    notice.managedProperty().bind(notice.visibleProperty());
-    return notice;
+  private Button notice(
+      String shortText, String title, javafx.beans.value.ObservableStringValue text) {
+    return Controls.details(shortText, title, text, dialogs::details, "text-failed");
   }
 
   static Glyph glyph(JobCatalog.Kind kind) {
@@ -392,18 +406,35 @@ public final class JobsView implements View {
     RunMark mark = new RunMark();
     Label word = Controls.label("", "section-title");
     Label duration = Controls.label("", "figure-small", "latin");
-    Label message = Controls.label("", "secondary");
-    message.setTextOverrun(OverrunStyle.ELLIPSIS);
-    message.setMaxWidth(640);
-    Tooltip messageTip = new Tooltip();
-    messageTip.setWrapText(true);
-    messageTip.setMaxWidth(480);
-    message.setTooltip(messageTip);
+    Label message = Controls.compactLabel("", "secondary");
+    var resultMessage =
+        Bindings.createStringBinding(
+            () -> model.result().get() == null ? "" : model.result().get().message(),
+            model.result());
+    Button messageDetails = Controls.details("结果详情", "运行结果", resultMessage, dialogs::details);
+    var metricText =
+        Bindings.createStringBinding(
+            () -> {
+              JobResult result = model.result().get();
+              if (result == null) {
+                return "";
+              }
+              return result.metrics().entrySet().stream()
+                  .map(metric -> metric.getKey() + " = " + metric.getValue())
+                  .collect(java.util.stream.Collectors.joining("\n"));
+            },
+            model.result());
+    Button metricDetails = Controls.details("指标详情", "结果指标", metricText, dialogs::details);
     FlowPane tiles = new FlowPane(12, 12);
     VBox longValues = new VBox(6);
     VBox section =
         new VBox(
-            14, Controls.row(14, mark, new VBox(2, word, duration)), message, tiles, longValues);
+            14,
+            Controls.row(14, mark, new VBox(2, word, duration), messageDetails),
+            message,
+            tiles,
+            longValues,
+            metricDetails);
     section.getStyleClass().add("result");
     Runnable show =
         () -> {
@@ -419,8 +450,7 @@ public final class JobsView implements View {
           word.getStyleClass().removeAll("text-success", "text-failed");
           word.getStyleClass().add(ok ? "text-success" : "text-failed");
           duration.setText(result.duration().isZero() ? "" : Formats.duration(result.duration()));
-          message.setText(result.message());
-          messageTip.setText(result.message());
+          message.setText(Formats.preview(result.message(), 100));
           message.setVisible(!result.message().isBlank());
           message.setManaged(!result.message().isBlank());
           tiles.getChildren().clear();
@@ -429,15 +459,20 @@ public final class JobsView implements View {
             if (metric.getKey().equals("durationMillis")) {
               continue;
             }
-            String value = Formats.metric(metric.getKey(), metric.getValue());
+            String value = Formats.compactMetric(metric.getKey(), metric.getValue());
             if (value.length() <= 16) {
-              Label figure = Controls.label(value, "tile-figure", "latin");
-              Label key = Controls.label(Labels.metric(metric.getKey()), "caption");
+              Label figure = Controls.compactLabel(value, "tile-figure", "latin");
+              Label key = Controls.compactLabel(Labels.metric(metric.getKey()), "caption");
+              key.setPrefWidth(140);
+              key.setMaxWidth(140);
+              figure.setMaxWidth(140);
               VBox tile = new VBox(2, figure, key);
+              tile.setMinWidth(0);
+              tile.setMaxWidth(172);
               tile.getStyleClass().add("metric-tile");
               tiles.getChildren().add(tile);
             } else {
-              longValues.getChildren().add(longValue(metric.getKey(), value));
+              longValues.getChildren().add(longValue(metric.getKey(), metric.getValue()));
             }
           }
         };
@@ -449,17 +484,16 @@ public final class JobsView implements View {
   /** A value too long for a tile (a checksum, a path): one line, its key, and a copy button. */
   private static HBox longValue(String key, String value) {
     String label = Labels.metric(key);
-    Label name = Controls.label(label, "caption");
-    name.setMinWidth(72);
-    Label text = Controls.label(value, "mono");
+    Label name = Controls.compactLabel(label, "caption");
+    name.setPrefWidth(96);
+    name.setMaxWidth(96);
+    Label text = Controls.compactLabel(Formats.preview(value, 96), "mono");
     text.setTextOverrun(OverrunStyle.CENTER_ELLIPSIS);
-    text.setTooltip(new Tooltip(value));
     HBox.setHgrow(text, Priority.ALWAYS);
-    text.setMaxWidth(520);
     Button copy =
         Controls.iconButton(
             Icons.of(Glyph.COPY, 16),
-            "复制 " + label,
+            "复制指标原值",
             () -> {
               ClipboardContent content = new ClipboardContent();
               content.putString(value);
@@ -501,7 +535,7 @@ public final class JobsView implements View {
   private static final class JobCell extends ListCell<JobInfo> {
     private final JobsModel model;
     private final StackPane glyph = new StackPane();
-    private final Label name = Controls.label("", "name", "latin");
+    private final Label name = Controls.compactLabel("", "name", "latin");
     private final HBox box = Controls.row(12, glyph, name);
     private final Tooltip tip = new Tooltip();
 

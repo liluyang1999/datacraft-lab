@@ -1,6 +1,8 @@
 package com.example.datacraft.desktop.util;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.example.datacraft.desktop.service.Messages;
 import java.time.Duration;
@@ -12,6 +14,30 @@ import java.util.concurrent.Executor;
 import org.junit.jupiter.api.Test;
 
 class FormatsTest {
+
+  @Test
+  void previewsPreserveUnicodeAndBoundMultilineContent() {
+    assertEquals("中文 😀…", Formats.preview(" 中文\n 😀 hello ", 5));
+    assertEquals("…", Formats.preview("很长", 1));
+    assertEquals("", Formats.preview(null, 10));
+    assertThrows(IllegalArgumentException.class, () -> Formats.preview("abc", 0));
+  }
+
+  @Test
+  void compactMetricsOnlyAbbreviateKnownCounts() {
+    assertEquals("1.2 万", Formats.compactMetric("rows", "12000"));
+    assertEquals("1.2 亿", Formats.compactMetric("expectedRows", "120000000"));
+    assertEquals("9.22e+18", Formats.compactMetric("rows", Long.toString(Long.MAX_VALUE)));
+    assertEquals("3.5.1", Formats.compactMetric("sparkVersion", "3.5.1"));
+    assertEquals("1234567890123456789", Formats.compactMetric("identifier", "1234567890123456789"));
+    assertEquals("unknown", Formats.compactMetric("rows", "unknown"));
+  }
+
+  @Test
+  void extremeDurationsRemainFiniteReadableAndDoNotOverflow() {
+    assertTrue(Formats.duration(Duration.ofSeconds(Long.MAX_VALUE)).length() <= 16);
+    assertEquals("0.0 s", Formats.duration(Duration.ofSeconds(Long.MIN_VALUE)));
+  }
 
   @Test
   void durationsReadInTheirLargestUsefulUnit() {

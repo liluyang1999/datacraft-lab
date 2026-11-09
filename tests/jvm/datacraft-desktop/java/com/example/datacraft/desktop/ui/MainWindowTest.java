@@ -38,9 +38,11 @@ import javafx.scene.Parent;
 import javafx.scene.Scene;
 import javafx.scene.control.Button;
 import javafx.scene.control.Label;
+import javafx.scene.control.TextArea;
 import javafx.scene.control.TextField;
 import javafx.scene.robot.Robot;
 import javafx.stage.Stage;
+import javafx.stage.Window;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
@@ -286,8 +288,26 @@ class MainWindowTest {
         "the outcome is a success mark with the metrics as figures",
         () ->
             find(root, RunMark.class).stream().anyMatch(mark -> "success".equals(mark.tone()))
-                && shows(root, "12,480")
+                && shows(root, "1.2 万")
                 && shows(root, "1.8 MB"));
+    onFx(
+        () -> {
+          List<Window> existing = List.copyOf(Window.getWindows());
+          button(root, "指标详情").fire();
+          List<Window> opened =
+              Window.getWindows().stream()
+                  .filter(candidate -> !existing.contains(candidate))
+                  .toList();
+          try {
+            assertEquals(1, opened.size());
+            TextArea detail =
+                find(opened.getFirst().getScene().getRoot(), TextArea.class).getFirst();
+            assertTrue(detail.getText().contains("rows = 12480"));
+            assertFalse(detail.isEditable());
+          } finally {
+            opened.forEach(Window::hide);
+          }
+        });
     waitUntil(
         "the run is a bar of the recent runs",
         () ->

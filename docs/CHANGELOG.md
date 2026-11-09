@@ -6,6 +6,16 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Compact interactions and reliable boundaries (2026-11-09)
+
+- Keep long names, diagnostics and result values out of the main layout; offer keyboard-accessible
+  details with complete text, scrolling and exact copying. Bound metric cards and task labels.
+- Clear previous job history immediately on selection; retain known overview history on read
+  failure and distinguish loading, failure and empty states. Handle extreme durations without overflow.
+- Reject malformed UTF-8 job paths without dispatching to a replacement-character job, retaining
+  literal plus and single-decoding semantics.
+- Bound Windows CI output draining when background children inherit a command's pipe.
+
 ### Cross-module contracts and interface refinement (2026-11-06)
 
 - Enforce twelve Java naming rules without changing public job names, protocol fields or schemas.
