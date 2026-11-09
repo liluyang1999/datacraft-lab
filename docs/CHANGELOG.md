@@ -15,6 +15,11 @@ All notable changes to this project are documented here. The format follows
 - Reject malformed UTF-8 job paths without dispatching to a replacement-character job, retaining
   literal plus and single-decoding semantics.
 - Bound Windows CI output draining when background children inherit a command's pipe.
+- Verified local backend 329 and desktop 183 tests, native interactions, and all eight remote jobs
+  for `09ce38b` (remote backend 339, Windows/Linux desktop 183/180). Keep the default renderer after
+  WPR/JFR diagnosis and an inconclusive software-rendering experiment; local startup variability
+  and six native timing warnings remain explicit. Evidence, UI review and scoped cleanup are in the
+  [2026-11-09 review](reports/review-2026-11-09.md).
 
 ### Cross-module contracts and interface refinement (2026-11-06)
 

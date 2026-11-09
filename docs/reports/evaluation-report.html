@@ -350,7 +350,7 @@
 
 <section id="summary" aria-labelledby="h-summary">
   <h2 id="h-summary">一、执行摘要</h2>
-  <p><strong>2026-11-09 当前完善：</strong>严格解码 HTTP 作业路径，拒绝非法 UTF-8；补齐作业历史加载、失败与重试状态，总览在读取失败时保留最后成功快照。五个页面以短详情入口呈现长诊断，完整内容可滚动阅读和复制；限制长名称、图节点与多位统计的占宽，处理负数和超大耗时。Windows 步骤包装器使用非阻塞管道落实两秒收尾上限，桌面 CI 明确选择 Python 3.13。当前测试库存与下限已同步；完整本机、原生、两平台远端与清理结果仍待验收，见<a href="review-2026-11-09.md">本轮复核记录</a>。历史成功与失败均保留原始范围。</p>
+  <p><strong>2026-11-09 当前完善：</strong>严格解码 HTTP 作业路径，拒绝非法 UTF-8；补齐作业历史加载、失败与重试状态，总览在读取失败时保留最后成功快照。五个页面以短详情入口呈现长诊断，完整内容可滚动阅读和复制；限制长名称、图节点与多位统计的占宽，处理负数和超大耗时。Windows 步骤包装器使用非阻塞管道落实两秒收尾上限，桌面 CI 明确选择 Python 3.13。当前测试库存与下限已同步；本机、原生和代码提交的 8 项远端作业已复核；本机启动波动与原生耗时告警如实保留，清理明细见<a href="review-2026-11-09.md">本轮复核记录</a>。历史成功与失败均保留原始范围。</p>
   <p><strong>2026-11-06 衔接复核：</strong>统一参数模型与命名门禁，修复 JSON 精度/切换、连接草稿、缓存同步、Spark 取消与资源释放、探针重定向及 SFTP 真实路径边界。Windows 后端 327 项、桌面 160 项完整验证通过；正式 20 次启动全部低于 1500 ms（中位 983、最大 1378 ms）。管理员轻量追踪十次未重现历史超时；原生首次设置显示有一条超过 50 ms 的告警，无 UIA 异常。两平台当前交付与清理见<a href="review-2026-11-06.md">本轮记录</a>，历史失败保留。</p>
   <p><strong>首次远端验收与补修：</strong><code>a8b7558</code> 的 <a href="https://github.com/liluyang1999/datacraft-lab/actions/runs/42157275526">CI 42157275526</a> 中桌面 Windows 160 / Linux 157 项通过，两平台各 20 次启动中位/最大为 554/842 ms、563/693 ms；逐张查看 19 张 Linux 截图未发现明确遮挡。但 Airflow Python 3.13.18 的 28 项中循环链接回归失败一项，整次 CI 不能记为通过。生产检查补充 <code>stat</code>，仅允许 <code>FileNotFoundError</code> 表示缺失尾部；新增三项测试后，本机 Python 3.12 路径九项由四处失败转为全部通过。修复提交 <code>201f51b</code> 已通过完整 31 项 Airflow/路径与真实流水线；该次 Linux 桌面暴露旧测试准备顺序问题。补齐明确状态等待后，Windows 完整 160 项再次通过，最终代码 <code>55764ee</code> 的七项 CI 与公告全部通过；首次失败和性能历史保留。</p>
   <p><strong>2026-11-05 功能扩展：</strong>新增 <code>csv-quality</code> 作业，检查空白、重复及最少行数；作业页支持中文搜索、类型筛选和中文指标。补齐参数键校验与逐行草稿保留。Windows 后端 322 项和桌面 141 项完整验证通过；本机打包的 20 次启动中，1579 ms 与 1503 ms 两次超出 1500 ms，启动验收未通过。WPR 新会话仍被 Windows 以 <code>0xc5585011</code> 拒绝，预算保持不变。当前验证和远端交付证据见<a href="review-2026-11-05.md">本轮记录</a>，历史通过不替代本轮结果。</p>
@@ -381,12 +381,12 @@
 
 <section id="scope" aria-labelledby="h-scope">
   <h2 id="h-scope">二、评估范围与方法</h2>
-  <p>当前评估覆盖从 <code>cb600c7</code> 基线完善的严格路径解码、历史与失败状态、紧凑界面和完整详情、耗时显示、Windows 管道收尾及桌面 Python 版本约束。L7 至 L11 作为历史证据保留；未完成的本轮平台与远端验证不沿用历史成功状态。</p>
+  <p>当前评估覆盖从 <code>cb600c7</code> 基线完善的严格路径解码、历史与失败状态、紧凑界面和完整详情、耗时显示、Windows 管道收尾及桌面 Python 版本约束。L7 至 L11 作为历史证据保留；本轮结果以代码提交 <code>09ce38b</code> 的实际执行为依据。启动策略按用户确认以稳定合理运行为先，不停止其他任务或放宽 CI 门槛。</p>
   <div class="table-wrap">
   <table>
     <thead><tr><th>证据</th><th>来源</th><th>结果与时间范围</th></tr></thead>
     <tbody>
-      <tr><td>2026-11-09 当前变更</td><td><code>cb600c7</code> 之后的工作区；<a href="review-2026-11-09.md">当前复核记录</a></td><td><span class="tag warn">验收中</span> 当前库存与平台下限已按源码同步；完整本机、原生、两平台远端 CI 与清理结果待逐项复核</td></tr>
+      <tr><td>2026-11-09 当前变更</td><td>代码 <code>09ce38b</code>；<a href="review-2026-11-09.md">当前复核记录</a></td><td><span class="tag info">已复核</span> 后端 329（本机）/339（远端）、桌面 Windows 183/Linux 180；代码提交 8 项远端作业通过。启动波动、原生告警与清理范围见记录</td></tr>
       <tr><td>L11 最终代码</td><td><code>55764ee</code> / <a href="https://github.com/liluyang1999/datacraft-lab/actions/runs/42160038374">CI 42160038374</a> / <a href="https://github.com/liluyang1999/datacraft-lab/actions/runs/42160062576">公告检查</a></td><td><span class="tag ok">全部通过</span> 七项 CI 均有实际运行机器与完成步骤；后端 337、桌面 Windows/Linux 160/157、编排 31 项通过。两平台各 20 次启动最大 784/849 ms；真实流水线、备份恢复与单节点 43 s 升级通过。本轮残留已清理，历史失败及性能边界保留</td></tr>
       <tr><td>代码、配置与文档</td><td>仓库 <code>main</code> 分支</td><td><span class="tag info">检查范围</span> 关键路径逐项核对，文档与代码一致性由 <code>tests/docs</code> 检查；当前执行结果见本轮复核记录</td></tr>
       <tr><td>L11 本机验证</td><td>2026-11-06 / Windows 与 WSL；<a href="review-2026-11-06.md">当前复核记录</a></td><td><span class="tag ok">门禁通过</span> 后端 327、桌面 160；Windows/Linux CI 工具 133/157 项通过、25/1 项平台跳过；Linux 部署 71 项通过。正式 20 次启动最大 1378 ms，追踪诊断另列；原生首次显示告警及历史尖峰边界保留</td></tr>
@@ -1793,7 +1793,7 @@ bash deploy/scripts/compose-up.sh                # 预检机密与端口后启�
 <section id="appendix-index" aria-labelledby="h-appendix-index">
   <h2 id="h-appendix-index">附录 I　文档索引</h2>
   <ul class="docs-index">
-    <li><a href="review-2026-11-09.md">2026-11-09 紧凑交互、状态一致性与交付复核</a><br><span class="small muted">路径与管道边界、清晰界面、当前验证与清理进度</span></li>
+    <li><a href="review-2026-11-09.md">2026-11-09 紧凑交互、状态一致性与交付复核</a><br><span class="small muted">路径与管道边界、清晰界面、验证证据与清理范围</span></li>
     <li><a href="review-2026-11-06.md">2026-11-06 结构规范与跨模块衔接</a><br><span class="small muted">共享参数、异步状态、资源与安全边界、当前验证与交付</span></li>
     <li><a href="review-2026-11-05.md">2026-11-05 数据质量与作业查找</a><br><span class="small muted">本轮功能、完整验证、启动失败与远端证据边界</span></li>
     <li><a href="../guides/csv-quality.md">CSV 质量检查</a><br><span class="small muted">质量门槛、成功与失败示例、计数规则和小文件限制</span></li>
