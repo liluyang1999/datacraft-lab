@@ -32,8 +32,8 @@ import xml.etree.ElementTree as ET
 # counts: adding tests needs no change, but deliberately removing tests needs a lower floor in the
 # same commit.
 FLOORS = {
-    "datacraft-api": 33,
-    "datacraft-common": 7,
+    "datacraft-api": 36,
+    "datacraft-common": 10,
     "datacraft-config": 14,
     "datacraft-engine": 34,
     "datacraft-io": 64,
@@ -66,8 +66,8 @@ MODULE_DIRS = {
 # of VaultPlatformTest's two platform tests and `verify` never runs the e2e-tagged ones, so the
 # common floor is shared; Windows additionally exercises its retained native text range.
 DESKTOP_DIRS = {"datacraft-desktop": "desktop"}
-DESKTOP_FLOORS = {"datacraft-desktop": 180}
-DESKTOP_WINDOWS_FLOORS = {"datacraft-desktop": 183}
+DESKTOP_FLOORS = {"datacraft-desktop": 203}
+DESKTOP_WINDOWS_FLOORS = {"datacraft-desktop": 206}
 
 # What --project selects: the module directories, the floors per platform, and the notice's title.
 PROJECTS = {

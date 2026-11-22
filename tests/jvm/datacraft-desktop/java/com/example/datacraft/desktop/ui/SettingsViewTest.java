@@ -113,7 +113,12 @@ class SettingsViewTest {
                 ThemeManager theme = new ThemeManager(context.preferences());
                 Dialogs dialogs = new Dialogs(theme);
                 SettingsView view =
-                    new SettingsView(model, dialogs, new Toasts(dialogs::details), ignored -> {});
+                    new SettingsView(
+                        model,
+                        dialogs,
+                        new Toasts(dialogs::details),
+                        ignored -> {},
+                        SettingsView.About.none());
                 Parent page = (Parent) view.node();
                 Scene scene = new Scene(page, 760, 700);
                 scene.getStylesheets().setAll(theme.stylesheets());
@@ -186,7 +191,12 @@ class SettingsViewTest {
             ThemeManager theme = new ThemeManager(context.preferences());
             Dialogs dialogs = new Dialogs(theme);
             SettingsView view =
-                new SettingsView(model, dialogs, new Toasts(dialogs::details), ignored -> {});
+                new SettingsView(
+                    model,
+                    dialogs,
+                    new Toasts(dialogs::details),
+                    ignored -> {},
+                    SettingsView.About.none());
             Parent root = (Parent) view.node();
             Scene scene = new Scene(root, 760, 700);
             scene.getStylesheets().setAll(theme.stylesheets());

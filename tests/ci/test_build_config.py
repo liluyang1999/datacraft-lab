@@ -90,7 +90,7 @@ class DesktopFormattingTests(unittest.TestCase):
         self.assertEqual(["desktop"], modules)
         self.assertNotIn("desktop", [node.text for node in root.findall("{*}modules/{*}module")])
         command = "-Pdesktop -pl :datacraft-desktop -am verify"
-        for name in (".github/workflows/ci.yml", "Makefile"):
+        for name in (".github/workflows/test.yml", "Makefile"):
             self.assertIn(command, (REPOSITORY / name).read_text(encoding="utf-8"), name)
         makefile = (REPOSITORY / "Makefile").read_text(encoding="utf-8")
         self.assertIn("$(MVN) -B -ntp -Pdesktop spotless:apply", makefile)

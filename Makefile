@@ -4,7 +4,7 @@ MVN ?= ./mvnw
 PYTHON ?= python3
 PYRIGHT ?= npx --yes pyright@1.1.414 --warnings
 
-.PHONY: help build test verify desktop-verify checks format package images up down swarm dags test-scripts typecheck lint clean
+.PHONY: help build test verify desktop-verify checks format package design images up down swarm dags test-scripts typecheck lint clean
 
 help: ## Show available targets
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN{FS=":.*?## "}{printf "  \033[36m%-14s\033[0m %s\n", $$1, $$2}'
@@ -35,6 +35,9 @@ format: ## Apply Spotless formatting to all sources
 package: ## Build the shaded CLI jar
 	$(MVN) -B -ntp -pl :datacraft-cli -am package -DskipTests
 
+design: ## Write the desktop themes and the prototype tokens from design/ui/tokens.json
+	$(PYTHON) -B design/ui/build.py
+
 images: ## Build all container images
 	bash deploy/scripts/build-images.sh
 
@@ -50,9 +53,10 @@ swarm: ## Deploy the multi-host stack (Docker Swarm)
 dags: ## Verify DAGs with real Airflow and providers installed
 	$(PYTHON) -B -m unittest discover -s tests/orchestration -v
 
-test-scripts: ## Run the deployment, CI and documentation suites (Python stdlib + Node)
+test-scripts: ## Run the deployment, CI, design and documentation suites (Python stdlib + Node)
 	$(PYTHON) -B -m unittest discover -s tests/deploy
 	$(PYTHON) -B -m unittest discover -s tests/ci
+	$(PYTHON) -B -m unittest discover -s tests/design
 	$(PYTHON) -B -m unittest discover -s tests/docs
 	node --test tests/docs/cloud-costs.test.cjs
 

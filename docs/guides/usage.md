@@ -217,7 +217,7 @@ runs still going after that are cut off. When the socket cannot be opened, becau
 use or the host cannot be bound, it prints one stderr line,
 `serve-api cannot listen on <host>:<port>: <cause>`, and exits `1`.
 
-**Token.** When `DATACRAFT_API_TOKEN` is set, every request under `/jobs` must carry
+**Token.** When `DATACRAFT_API_TOKEN` is set, every request under `/jobs` and `/status` must carry
 `Authorization: Bearer <token>` and gets 401 otherwise; `/health` stays open for health checks. The
 value is trimmed, and a blank one counts as unset. A token is 32 to 512 characters from
 `A-Z a-z 0-9 - . _ ~ + /`, optionally ending in `=`; `openssl rand -hex 32` produces one. Any other
@@ -236,8 +236,8 @@ non-loopback.
 
 **Concurrency.** The API executes at most `--max-concurrent-runs` job runs at one time, 4 by
 default. A run request beyond that is not queued: it gets 503 `{"error":"busy"}` with
-`Retry-After: 1`, and nothing runs. `/health`, `/jobs` and requests that are rejected before they
-run do not count. A run requested while the server is shutting down gets the same 503.
+`Retry-After: 1`, and nothing runs. `/health`, `/status`, `/jobs` and requests that are rejected
+before they run do not count. A run requested while the server is shutting down gets the same 503.
 
 `DATACRAFT_DATA_ROOT` confines job paths for the CLI and the API alike:
 
@@ -261,6 +261,7 @@ The complete rules are in
 | Request | Response |
 | --- | --- |
 | `GET` or `HEAD /health` | 200 `{"status":"UP","service":"datacraft-api"}` |
+| `GET` or `HEAD /status` | 200 with the version, `startedAt`, `uptimeMillis`, the number of jobs, `maxConcurrentRuns`, the run counters (`active`, `started`, `succeeded`, `failed`, `rejected`) and `activeRuns` (job name, start, elapsed milliseconds) |
 | `GET` or `HEAD /jobs` | 200 `{"jobs":[{"name":...,"description":...}]}` |
 | `POST /jobs/{name}/runs?lifecycle=dev&key=value` | The job result JSON: 200 when the job SUCCEEDED, 500 when it FAILED |
 

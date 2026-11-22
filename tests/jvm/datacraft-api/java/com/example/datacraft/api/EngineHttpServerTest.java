@@ -8,6 +8,7 @@ import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import com.example.datacraft.common.AppInfo;
 import com.example.datacraft.engine.DataJob;
 import com.example.datacraft.engine.JobCatalog;
 import com.example.datacraft.engine.JobExecutionRequest;
@@ -892,6 +893,108 @@ class EngineHttpServerTest {
         // Before the server closes: close() waits for the run in flight.
         release.countDown();
       }
+    }
+  }
+
+  @Test
+  void statusReportsVersionActiveRunsAndCountersSinceStart() throws Exception {
+    CountDownLatch started = new CountDownLatch(1);
+    CountDownLatch release = new CountDownLatch(1);
+    JobRegistry registry = new JobRegistry();
+    registry.register(new EchoJob());
+    registry.register(
+        new FunctionJob(
+            "slow",
+            request -> {
+              started.countDown();
+              awaitUninterruptibly(release);
+              return JobExecutionResult.success(
+                  request.jobName(), "done", request.startedAt(), Instant.now());
+            }));
+    try (HttpClient client = HttpClient.newHttpClient();
+        EngineHttpServer server =
+            EngineHttpServer.start(
+                EngineHttpServerConfig.localEphemeral().withMaxConcurrentRuns(1), registry)) {
+      try {
+        HttpResponse<String> idle = send(client, request(server, "/status").GET());
+        assertEquals(200, idle.statusCode());
+        assertEquals(Optional.of(JSON), idle.headers().firstValue("Content-Type"));
+        assertTrue(idle.body().contains("\"service\":\"datacraft-api\""), idle.body());
+        assertTrue(idle.body().contains("\"version\":\"" + AppInfo.version()), idle.body());
+        assertTrue(idle.body().contains("\"jobs\":2,\"maxConcurrentRuns\":1"), idle.body());
+        assertTrue(
+            idle.body()
+                .contains(
+                    "\"runs\":{\"active\":0,\"started\":0,\"succeeded\":0,\"failed\":0,"
+                        + "\"rejected\":0},\"activeRuns\":[]"),
+            idle.body());
+
+        assertEquals(200, send(client, post(server, "/jobs/echo/runs?message=hi")).statusCode());
+        CompletableFuture<HttpResponse<String>> inFlight =
+            client.sendAsync(
+                post(server, "/jobs/slow/runs?secret=value").build(),
+                HttpResponse.BodyHandlers.ofString());
+        assertTrue(started.await(5, TimeUnit.SECONDS), "job did not start");
+        assertEquals(503, send(client, post(server, "/jobs/echo/runs")).statusCode());
+
+        HttpResponse<String> busy = send(client, request(server, "/status").GET());
+        assertTrue(
+            busy.body()
+                .contains(
+                    "\"runs\":{\"active\":1,\"started\":2,\"succeeded\":1,\"failed\":0,"
+                        + "\"rejected\":1}"),
+            busy.body());
+        assertTrue(busy.body().contains("\"activeRuns\":[{\"job\":\"slow\",\"startedAt\":\""));
+        // Only the job name and times: parameters may hold paths or secrets.
+        assertFalse(busy.body().contains("secret"), busy.body());
+
+        release.countDown();
+        assertEquals(200, inFlight.get(5, TimeUnit.SECONDS).statusCode());
+        HttpResponse<String> after = send(client, request(server, "/status").GET());
+        assertTrue(
+            after
+                .body()
+                .contains("\"active\":0,\"started\":2,\"succeeded\":2,\"failed\":0,\"rejected\":1"),
+            after.body());
+        HttpResponse<String> head = send(client, request(server, "/status").HEAD());
+        assertEquals(200, head.statusCode());
+        assertEquals("", head.body());
+        HttpResponse<String> wrongMethod = send(client, post(server, "/status"));
+        assertEquals(405, wrongMethod.statusCode());
+        assertEquals(Optional.of("GET, HEAD"), wrongMethod.headers().firstValue("Allow"));
+        assertEquals(404, send(client, request(server, "/status/extra").GET()).statusCode());
+      } finally {
+        release.countDown();
+      }
+    }
+  }
+
+  @Test
+  void statusRequiresTheTokenBeforeAnythingElse() throws Exception {
+    JobRegistry registry = new JobRegistry();
+    registry.register(new EchoJob());
+    try (HttpClient client = HttpClient.newHttpClient();
+        EngineHttpServer server =
+            EngineHttpServer.start(
+                EngineHttpServerConfig.localEphemeral().withApiToken(TOKEN), registry)) {
+      for (HttpRequest.Builder anonymous :
+          List.of(
+              request(server, "/status").GET(),
+              post(server, "/status"),
+              request(server, "/status/extra").GET())) {
+        HttpResponse<String> refused = send(client, anonymous);
+        assertEquals(401, refused.statusCode());
+        assertEquals("{\"error\":\"unauthorized\"}", refused.body());
+        assertEquals(
+            Optional.of("Bearer realm=\"datacraft-api\""),
+            refused.headers().firstValue("WWW-Authenticate"));
+      }
+      HttpResponse<String> granted =
+          send(client, request(server, "/status").header("Authorization", "Bearer " + TOKEN));
+      assertEquals(200, granted.statusCode());
+      assertTrue(granted.body().contains("\"status\":\"UP\""), granted.body());
+      // The open health check stays open.
+      assertEquals(200, send(client, request(server, "/health").GET()).statusCode());
     }
   }
 

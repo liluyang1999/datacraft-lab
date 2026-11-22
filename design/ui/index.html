@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>数艺工坊 界面原型</title>
+<link rel="stylesheet" href="tokens.css">
+<link rel="stylesheet" href="prototype.css">
+</head>
+<body>
+<header class="stage-bar">
+    <h1>数艺工坊 · 界面原型</h1>
+    <div class="group"><span>视图</span>
+        <button data-key="view" data-value="overview">总览</button>
+        <button data-key="view" data-value="jobs">作业</button>
+        <button data-key="view" data-value="pipelines">流水线</button>
+        <button data-key="view" data-value="monitor">监控</button>
+        <button data-key="view" data-value="activity">活动</button>
+        <button data-key="view" data-value="settings">设置</button>
+    </div>
+    <div class="group"><span>状态</span>
+        <button data-key="sample" data-value="normal">正常</button>
+        <button data-key="sample" data-value="attention">需要关注</button>
+        <button data-key="sample" data-value="offline">未连接</button>
+    </div>
+    <div class="group"><span>主题</span>
+        <button data-key="theme" data-value="light">浅色</button>
+        <button data-key="theme" data-value="dark">深色</button>
+    </div>
+    <div class="group"><span>窗口</span>
+        <button data-key="compact" data-value="false">1280 × 800</button>
+        <button data-key="compact" data-value="true">窄窗（侧栏收起）</button>
+    </div>
+</header>
+<div class="stage"><div id="app" aria-live="polite"></div></div>
+<script src="prototype.js"></script>
+</body>
+</html>

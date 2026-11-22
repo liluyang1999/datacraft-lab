@@ -18,6 +18,7 @@ import java.nio.charset.CodingErrorAction;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
+import java.time.Clock;
 import java.util.List;
 import java.util.Map;
 import java.util.TreeMap;
@@ -28,8 +29,8 @@ import java.util.concurrent.TimeUnit;
 import java.util.function.Predicate;
 
 /**
- * JSON HTTP API over a {@link JobCatalog}: {@code GET|HEAD /health}, {@code GET|HEAD /jobs} and
- * {@code POST /jobs/{name}/runs?lifecycle=dev&key=value}.
+ * JSON HTTP API over a {@link JobCatalog}: {@code GET|HEAD /health}, {@code GET|HEAD /status},
+ * {@code GET|HEAD /jobs} and {@code POST /jobs/{name}/runs?lifecycle=dev&key=value}.
  *
  * <p>A run answers with the result JSON: 200 when it SUCCEEDED, 500 when it FAILED (including job
  * parameter rejections). Malformed requests (job path, lifecycle, percent-escapes that are not
@@ -40,11 +41,13 @@ import java.util.function.Predicate;
  * and jobs get 404; other methods get 405 with {@code Allow}; an unexpected handler failure gets
  * 500 {@code internal_error}.
  *
- * <p>When the configuration carries a token, every request under {@code /jobs} must present it as
- * {@code Authorization: Bearer <token>} and gets 401 {@code unauthorized} otherwise, before
- * anything else about the request is checked; {@code /health} stays open for health checks. At most
- * {@link EngineHttpServerConfig#maxConcurrentRuns()} runs are in progress at one time: a further
- * run request gets 503 {@code busy} with {@code Retry-After} and runs nothing.
+ * <p>When the configuration carries a token, every request under {@code /jobs} and {@code /status}
+ * must present it as {@code Authorization: Bearer <token>} and gets 401 {@code unauthorized}
+ * otherwise, before anything else about the request is checked; {@code /health} stays open for
+ * health checks. {@code /status} reports the version, the uptime, the runs in progress (job names
+ * and start times only) and the run counters since the server started. At most {@link
+ * EngineHttpServerConfig#maxConcurrentRuns()} runs are in progress at one time: a further run
+ * request gets 503 {@code busy} with {@code Retry-After} and runs nothing.
  */
 public final class EngineHttpServer implements AutoCloseable {
 
@@ -62,6 +65,8 @@ public final class EngineHttpServer implements AutoCloseable {
   private final ExecutorService executorService;
   private final Predicate<HttpExchange> authorized;
   private final Semaphore runPermits;
+  private final int maxConcurrentRuns;
+  private final RunActivity activity = new RunActivity(Clock.systemUTC());
 
   /** Set when {@link #close()} begins; from then on no run is started. */
   private volatile boolean closing;
@@ -70,11 +75,12 @@ public final class EngineHttpServer implements AutoCloseable {
       HttpServer server,
       ExecutorService executorService,
       Predicate<HttpExchange> authorized,
-      Semaphore runPermits) {
+      int maxConcurrentRuns) {
     this.server = server;
     this.executorService = executorService;
     this.authorized = authorized;
-    this.runPermits = runPermits;
+    this.runPermits = new Semaphore(maxConcurrentRuns);
+    this.maxConcurrentRuns = maxConcurrentRuns;
   }
 
   public static EngineHttpServer start(EngineHttpServerConfig config, JobCatalog catalog)
@@ -94,13 +100,15 @@ public final class EngineHttpServer implements AutoCloseable {
             server,
             executorService,
             config.apiToken().map(EngineHttpServer::bearer).orElse(exchange -> true),
-            new Semaphore(config.maxConcurrentRuns()));
+            config.maxConcurrentRuns());
 
     server.createContext("/health", guarded(exchange -> engineHttpServer.handleHealth(exchange)));
     server.createContext(
+        "/status", guarded(exchange -> engineHttpServer.handleStatus(exchange, catalog)));
+    server.createContext(
         "/jobs", guarded(exchange -> engineHttpServer.handleJobs(exchange, catalog, engine)));
-    // Longest-prefix matching keeps /health and /jobs on their handlers; any other path gets the
-    // JSON error contract instead of the JDK's HTML 404.
+    // Longest-prefix matching keeps /health, /status and /jobs on their handlers; any other path
+    // gets the JSON error contract instead of the JDK's HTML 404.
     server.createContext(
         "/",
         guarded(exchange -> HttpJsonResponse.write(exchange, 404, EngineJson.error("not_found"))));
@@ -193,6 +201,28 @@ public final class EngineHttpServer implements AutoCloseable {
     HttpJsonResponse.write(exchange, 200, EngineJson.health());
   }
 
+  private void handleStatus(HttpExchange exchange, JobCatalog catalog) throws IOException {
+    // The token first, as for /jobs: the status names jobs and says how busy the server is.
+    if (!authorized.test(exchange)) {
+      exchange.getResponseHeaders().set("WWW-Authenticate", CHALLENGE);
+      HttpJsonResponse.write(exchange, 401, EngineJson.error("unauthorized"));
+      return;
+    }
+    if (!"/status".equals(exchange.getRequestURI().getPath())) {
+      HttpJsonResponse.write(exchange, 404, EngineJson.error("not_found"));
+      return;
+    }
+    if (!isGetOrHead(exchange.getRequestMethod())) {
+      exchange.getResponseHeaders().set("Allow", "GET, HEAD");
+      HttpJsonResponse.write(exchange, 405, EngineJson.error("method_not_allowed"));
+      return;
+    }
+    HttpJsonResponse.write(
+        exchange,
+        200,
+        EngineJson.status(activity.snapshot(), catalog.jobs().size(), maxConcurrentRuns));
+  }
+
   private void handleJobs(HttpExchange exchange, JobCatalog catalog, JobExecutionEngine engine)
       throws IOException {
     // First, so a caller without the token learns nothing about jobs, methods or parameters.
@@ -273,15 +303,18 @@ public final class EngineHttpServer implements AutoCloseable {
     // a connection for as long as the runs ahead of it take. So is one that arrives while the
     // server closes, on a connection it accepted earlier.
     if (closing || !runPermits.tryAcquire()) {
+      activity.rejected();
       exchange.getResponseHeaders().set("Retry-After", "1");
       HttpJsonResponse.write(exchange, 503, EngineJson.error("busy"));
       return;
     }
-    JobExecutionResult result;
+    JobExecutionResult result = null;
+    long run = activity.begin(request.jobName());
     try {
       result = engine.execute(request);
     } finally {
       runPermits.release();
+      activity.end(run, result != null && result.status().name().equals("SUCCEEDED"));
     }
     HttpJsonResponse.write(
         exchange,

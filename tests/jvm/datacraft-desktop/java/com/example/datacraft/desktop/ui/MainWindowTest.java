@@ -357,6 +357,7 @@ class MainWindowTest {
             Destination.OVERVIEW,
             Destination.JOBS,
             Destination.PIPELINES,
+            Destination.MONITOR,
             Destination.ACTIVITY,
             Destination.SETTINGS)) {
       go(destination);

@@ -1,0 +1,109 @@
+# The only CI/CD entry (docs/guides/development.md, "CI/CD"). The stage files are reusable
+# workflows (on: workflow_call) with no trigger of their own; this file calls them in order, and
+# `needs` stops the pipeline at the first stage that fails:
+#   check   check.yml   pinned actions, known advisories, the Temurin pin, shell scripts, Python
+#                       types, the design tokens and themes, the versions, the stack files
+#   test    test.yml    the backend gate with its jar checks, Airflow contracts and real pipelines,
+#                       the script, deployment and documentation suites, the desktop on Linux and
+#                       Windows
+#   build   build.yml   runtime images through Compose and Swarm rehearsals, the Linux app image,
+#                       the Windows installer from build.bat through its install lifecycle
+#   deploy  deploy.yml  publication (target not decided yet: a placeholder), only when an operator
+#                       runs this workflow on main and enters the product version
+# Triggers:
+#   push or pull request to main or develop     -> check -> test -> build
+#   Monday schedule                             -> check (new advisories for the pinned versions)
+#   manual run, deploy-version left empty       -> check -> test -> build
+#   manual run on main with deploy-version      -> deploy-request -> check -> test -> build -> deploy
+# No workflow_run chains: they run the default branch's workflow file on its latest commit, report
+# nowhere near the commit under test and can obtain write permissions. The product version is read
+# from the root pom.xml revision (docs/versioning.md); no workflow writes it.
+name: CI/CD
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+  schedule:
+    # Mondays, off the hour: scheduled runs queue longest at the top of an hour.
+    - cron: "17 3 * * 1"
+  workflow_dispatch:
+    inputs:
+      deploy-version:
+        description: "Leave empty to run check, test and build. To deploy from main, enter the product version (the root pom.xml revision)."
+        type: string
+        required: false
+        default: ""
+
+# A new push or pull request update cancels the older run of its branch; manual and scheduled
+# runs queue instead of cancelling one in progress.
+concurrency:
+  group: cicd-${{ github.ref }}-${{ github.event_name }}
+  cancel-in-progress: ${{ github.event_name == 'push' || github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
+# As in every stage: cicd/step.py runs each step with bash -e and turns a failure's decisive lines
+# into an annotation, which the public API shows without access to the job logs.
+defaults:
+  run:
+    shell: python3 -B cicd/step.py bash -e {0}
+
+jobs:
+  # Before anything else is spent: only main, the version source's version, and a tag that names
+  # no other commit.
+  deploy-request:
+    name: Deploy request (branch, version, tag)
+    if: github.event_name == 'workflow_dispatch' && inputs.deploy-version != ''
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    outputs:
+      version: ${{ steps.request.outputs.version }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Confirm the branch, the version and its tag
+        id: request
+        env:
+          REF: ${{ github.ref }}
+          SHA: ${{ github.sha }}
+          REQUESTED: ${{ inputs.deploy-version }}
+        run: python3 -B cicd/release/deploy.py request
+
+  check:
+    name: check
+    needs: deploy-request
+    # Runs when the deploy request was skipped (pushes, pull requests, schedules) or accepted.
+    if: ${{ !failure() && !cancelled() }}
+    uses: ./.github/workflows/check.yml
+
+  test:
+    name: test
+    needs: check
+    if: ${{ success() && github.event_name != 'schedule' }}
+    uses: ./.github/workflows/test.yml
+
+  build:
+    name: build
+    needs: [deploy-request, test]
+    if: ${{ !failure() && !cancelled() && github.event_name != 'schedule' }}
+    uses: ./.github/workflows/build.yml
+    with:
+      artifact-prefix: ${{ needs.deploy-request.result == 'success' && 'release' || 'build' }}
+      retention-days: ${{ needs.deploy-request.result == 'success' && 30 || 7 }}
+
+  deploy:
+    name: deploy
+    needs: [deploy-request, build]
+    if: needs.deploy-request.result == 'success' && needs.build.result == 'success'
+    uses: ./.github/workflows/deploy.yml
+    with:
+      version: ${{ needs.deploy-request.outputs.version }}
+      packaged-version: ${{ needs.build.outputs.version }}
+      artifact: ${{ needs.build.outputs.artifact }}
+      sha256: ${{ needs.build.outputs.sha256 }}

@@ -201,16 +201,19 @@ class PinnedVersionsTests(unittest.TestCase):
         self.assertIn(("PyPI", "urllib3", "2.8.0", "orchestration/airflow/security-overrides.txt"),
                       advisories.pinned(root))
 
-    def test_a_change_to_any_file_that_pins_runs_the_check(self):
-        # A pin changed in a file outside the push filter would wait for the weekly run.
-        workflow = (REPOSITORY / ".github" / "workflows" / "advisories.yml").read_text(encoding="utf-8")
-        push = workflow[workflow.index("\n  push:\n"):workflow.index("\n  workflow_dispatch:")]
-        patterns = re.findall(r"(?m)^      - (\S+)$", push)
-        self.assertTrue(patterns)
-        for source in sorted({source for *_, source in advisories.pinned(REPOSITORY)}):
-            with self.subTest(source=source):
-                self.assertTrue(any(fnmatch.fnmatchcase(source, pattern.replace("**", "*"))
-                                    for pattern in patterns), f"{source} is not in the push paths")
+    def test_every_push_and_the_weekly_schedule_ask_about_every_pin(self):
+        # The check stage runs on every push and pull request without a path filter, so a pin
+        # changed in any file is checked at once; the Monday schedule catches new advisories for
+        # pins nobody touched. Only the check stage runs on the schedule.
+        entry = (REPOSITORY / ".github" / "workflows" / "cicd.yml").read_text(encoding="utf-8")
+        triggers = entry[entry.index("\non:\n"):entry.index("\nconcurrency:")]
+        self.assertNotIn("paths", triggers)
+        self.assertRegex(triggers, r'(?m)^    - cron: "[^"]+"$')
+        self.assertRegex(entry, r"github\.event_name != 'schedule'")
+        check = (REPOSITORY / ".github" / "workflows" / "check.yml").read_text(encoding="utf-8")
+        self.assertIn("run: python3 -B cicd/security/check_advisories.py", check)
+        self.assertIn("run: python3 -B cicd/security/check_temurin.py", check)
+        self.assertTrue(advisories.pinned(REPOSITORY))
 
     def test_an_action_is_asked_about_by_its_repository_in_lower_case(self):
         # OSV files advisories under owner/repo in lower case and matches the name exactly, so an
@@ -251,7 +254,7 @@ class AdvisoryMatchingTests(unittest.TestCase):
         fixed = [{"type": "ECOSYSTEM", "events": [{"introduced": "0"}, {"fixed": "46.0.1"}]}]
         window = [{"type": "ECOSYSTEM", "events": [{"introduced": "4.0.0"}, {"fixed": "4.1.3"}]}]
         last = [{"type": "ECOSYSTEM", "events": [{"introduced": "2"}, {"last_affected": "2.5.0"}]}]
-        twice = [{"type": "ECOSYSTEM", "events": [{"introduced": "1.0.0"}, {"fixed": "1.2.0"},
+        twice = [{"type": "ECOSYSTEM", "events": [{"introduced": "1.0.1"}, {"fixed": "1.2.0"},
                                                     {"introduced": "2.0.0"}, {"fixed": "2.0.3"}]}]
         cases = [
             (fixed, {"45.0.7": True, "v45": True, "46.0.1": False, "46.1": False, "41": True}),
@@ -259,7 +262,7 @@ class AdvisoryMatchingTests(unittest.TestCase):
             (last, {"1.9": False, "2.5.0": True, "2.5.1": False}),
             (twice, {"1.1.0": True, "1.2.0": False, "1.9.0": False, "2.0.2": True, "2.0.3": False}),
             (window + fixed, {"45.0.7": True, "46.0.1": False}),
-            ([], {"1.0.0": False}),
+            ([], {"1.0.1": False}),
         ]
         for ranges, expectations in cases:
             for version, expected in expectations.items():

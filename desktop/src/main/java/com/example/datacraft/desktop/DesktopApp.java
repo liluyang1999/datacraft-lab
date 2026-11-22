@@ -4,6 +4,7 @@ import com.example.datacraft.desktop.app.AppContext;
 import com.example.datacraft.desktop.app.AppPaths;
 import com.example.datacraft.desktop.app.Logging;
 import com.example.datacraft.desktop.app.Preferences;
+import com.example.datacraft.desktop.app.SingleInstance;
 import com.example.datacraft.desktop.ui.FxWatchdog;
 import com.example.datacraft.desktop.ui.shell.MainWindow;
 import com.example.datacraft.desktop.ui.shell.Navigator.Destination;
@@ -40,11 +41,17 @@ public final class DesktopApp extends Application {
   static final String SMOKE_PROPERTY = "datacraft.desktop.smoke";
 
   private static volatile CompletableFuture<AppContext> preparing;
+  private static volatile SingleInstance instance;
 
   private AppContext context;
   private Throwable openFailure;
   private MainWindow window;
   private FxWatchdog watchdog;
+
+  /** The data folder's lock this process holds; the launcher takes it before JavaFX starts. */
+  static void instance(SingleInstance held) {
+    instance = held;
+  }
 
   /** Starts opening ~/.datacraft and the services; called by the launcher before JavaFX starts. */
   static void prepare(AppPaths paths) {
@@ -136,6 +143,10 @@ public final class DesktopApp extends Application {
             () -> {
               window.loadIcons();
               restoreConnection();
+              window.startBackground();
+              if (instance != null) {
+                instance.onActivate(() -> Platform.runLater(window::activate));
+              }
             });
         PauseTransition warmUp = new PauseTransition(WARM_UP);
         warmUp.setOnFinished(
@@ -171,8 +182,7 @@ public final class DesktopApp extends Application {
         Destination[] views = Destination.values();
         if (next == views.length * 2) {
           stop();
-          LOG.log(
-              System.Logger.Level.INFO, "AOT training completed: all five views in both themes");
+          LOG.log(System.Logger.Level.INFO, "AOT training completed: all six views in both themes");
           Platform.exit();
           return;
         }
@@ -224,6 +234,9 @@ public final class DesktopApp extends Application {
     }
     if (context != null) {
       context.close();
+    }
+    if (instance != null) {
+      instance.close();
     }
   }
 }

@@ -10,7 +10,7 @@
     <parent>
         <groupId>com.example.datacraft</groupId>
         <artifactId>datacraft-lab</artifactId>
-        <version>0.1.0-SNAPSHOT</version>
+        <version>${revision}</version>
         <relativePath>../pom.xml</relativePath>
     </parent>
     <artifactId>datacraft-desktop</artifactId>
@@ -63,6 +63,24 @@
         <!-- The repository's layout applies: the app is under desktop/, its tests under
              tests/jvm/datacraft-desktop/ (the parent's testSourceDirectory) and its documents
              under docs/desktop/. -->
+        <resources>
+            <!-- Only version.properties is filtered (it receives the root POM's revision); fonts
+                 and stylesheets are copied byte for byte. -->
+            <resource>
+                <directory>src/main/resources</directory>
+                <filtering>true</filtering>
+                <includes>
+                    <include>**/version.properties</include>
+                </includes>
+            </resource>
+            <resource>
+                <directory>src/main/resources</directory>
+                <filtering>false</filtering>
+                <excludes>
+                    <exclude>**/version.properties</exclude>
+                </excludes>
+            </resource>
+        </resources>
         <plugins>
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>

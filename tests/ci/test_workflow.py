@@ -116,20 +116,25 @@ class WorkflowTests(unittest.TestCase):
                     if "run" in order:
                         self.assertEqual("checkout", order[0])
 
-    def test_desktop_sets_up_python_before_any_wrapped_command_on_both_platforms(self):
+    def test_windows_jobs_set_up_python_before_any_wrapped_command(self):
         # Windows nonblocking pipe descriptors require Python 3.12+. Use the same explicit
         # Python 3.13 line as the other CI jobs, rather than the hosted runner's default PATH.
-        workflow = without_comments((WORKFLOWS / "ci.yml").read_text(encoding="utf-8"))
-        desktop = re.search(r"(?ms)^  desktop:\n(.*?)(?=^  [\w-]+:\n|\Z)", workflow)
-        self.assertIsNotNone(desktop, "the desktop matrix must exist")
-        assert desktop is not None
-        steps = re.split(r"(?m)^      - ", desktop.group(1))[1:]
+        for name, job in (("test.yml", "desktop"), ("build.yml", "installer")):
+            with self.subTest(workflow=name, job=job):
+                self.python_comes_first(name, job)
+
+    def python_comes_first(self, name, job):
+        workflow = without_comments((WORKFLOWS / name).read_text(encoding="utf-8"))
+        found = re.search(rf"(?ms)^  {job}:\n(.*?)(?=^  [\w-]+:\n|\Z)", workflow)
+        self.assertIsNotNone(found, f"{name} must have the {job} job")
+        assert found is not None
+        steps = re.split(r"(?m)^      - ", found.group(1))[1:]
         setup = [index for index, step in enumerate(steps)
                  if re.search(r"(?m)^\s*uses:\s*actions/setup-python@", step)]
-        self.assertEqual(1, len(setup), "desktop must select its Python runtime explicitly")
+        self.assertEqual(1, len(setup), f"{job} must select its Python runtime explicitly")
         index = setup[0]
         self.assertRegex(steps[index], r'''(?m)^\s+python-version:\s*["']3\.13["']\s*$''')
-        self.assertNotRegex(steps[index], r"(?m)^\s*if:", "both desktop platforms need Python")
+        self.assertNotRegex(steps[index], r"(?m)^\s*if:", f"every {job} platform needs Python")
         checkout = next(i for i, step in enumerate(steps)
                         if re.search(r"(?m)^\s*uses:\s*actions/checkout@", step))
         first_run = next(i for i, step in enumerate(steps)

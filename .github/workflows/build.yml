@@ -1,0 +1,172 @@
+# Stage 3, build: the deliverables, each built the way it ships and then exercised. Called only by
+# cicd.yml after check and test passed.
+#   images     the runtime images, their packaged API and Airflow pipelines, the complete Compose
+#              stack with a metadata backup recovery, and a Swarm deployment and upgrade on one node
+#   app-image  数艺工坊's Linux app image (jlink, jpackage, AOT cache) and twenty timed starts
+#   installer  build.bat on Windows: the app image with its AOT cache and twenty timed starts, then
+#              dist/Setup.exe; its whole lifecycle (install, refuse while running, repair, refuse a
+#              downgrade, uninstall keeping the data folder, install to a chosen folder, uninstall);
+#              its checksum; the uploaded installer
+# The outputs (version, artifact, sha256) are what deploy.yml checks and summarises. The version
+# is read from the root pom.xml revision (docs/versioning.md); nothing here writes it.
+name: Build
+
+on:
+  workflow_call:
+    inputs:
+      artifact-prefix:
+        description: Prefix of the uploaded installer artifact's name (build or release).
+        type: string
+        required: true
+      retention-days:
+        description: Days GitHub keeps the uploaded installer.
+        type: number
+        required: true
+    outputs:
+      version:
+        description: The product version the installer carries.
+        value: ${{ jobs.installer.outputs.version }}
+      artifact:
+        description: The name of the uploaded installer artifact.
+        value: ${{ jobs.installer.outputs.artifact }}
+      sha256:
+        description: The SHA-256 of the verified dist/Setup.exe.
+        value: ${{ jobs.installer.outputs.sha256 }}
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    shell: python3 -B cicd/step.py bash -e {0}
+
+jobs:
+  images:
+    name: images (runtime images, Compose, Swarm)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Build images and run packaged API and Airflow pipelines
+        run: bash cicd/images/smoke-images.sh
+
+      - name: Verify the complete Compose stack and metadata backup recovery
+        run: bash cicd/images/smoke-compose.sh
+
+      # One node shows that the stack file, swarm-deploy.sh, airflow-init.sh and the images work
+      # together, through a deployment and an upgrade; it shows nothing about placement or failover.
+      - name: Rehearse the Swarm deployment and an upgrade on one node
+        run: bash cicd/images/smoke-swarm.sh
+
+  app-image:
+    name: app-image (Linux, AOT, start-up budget)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: "3.13"
+
+      - name: Set up JDK 25
+        uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0
+        with:
+          distribution: temurin
+          java-version: "25"
+          check-latest: true
+          cache: maven
+
+      - name: Prepare fonts and the accessibility bus
+        run: bash cicd/desktop/prepare-linux.sh
+
+      - name: Package the desktop console without its tests (the test stage ran them)
+        run: ./mvnw -B -ntp -Pdesktop -pl :datacraft-desktop -am clean package -DskipTests
+
+      # jlink/jpackage, train every view/theme, then verify AOT and the budget on all 20 starts.
+      - name: Package the app image and check that it starts
+        run: dbus-run-session -- xvfb-run --auto-servernum python3 -B cicd/desktop/package_desktop.py
+
+      - name: Upload startup samples and native library provenance
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: desktop-startup-linux
+          path: |
+            desktop/target/package/startup.json
+            desktop/target/package/javafx-natives.json
+          if-no-files-found: ignore
+
+  installer:
+    name: installer (Windows Setup.exe lifecycle)
+    runs-on: windows-2025
+    timeout-minutes: 45
+    outputs:
+      version: ${{ steps.release.outputs.version }}
+      artifact: ${{ steps.release.outputs.artifact }}
+      sha256: ${{ steps.release.outputs.sha256 }}
+    defaults:
+      run:
+        shell: python -B cicd/step.py bash -e {0}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # The step wrapper uses nonblocking Windows pipes, supported since Python 3.12.
+      - name: Set up Python for the step wrapper
+        uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: "3.13"
+
+      - name: Set up JDK 25
+        uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0
+        with:
+          distribution: temurin
+          java-version: "25"
+          check-latest: true
+          cache: maven
+
+      # The reviewed Inno Setup release by SHA-256, not whichever one the runner image carries.
+      - name: Unpack the pinned Inno Setup compiler
+        run: python -B cicd/desktop/prepare_inno.py "$RUNNER_TEMP/inno-setup"
+
+      # The developer's double-click entry point, unchanged: clean package, app image, Setup.exe.
+      - name: Build the Windows installer from build.bat
+        run: ./build.bat
+
+      - name: Install, refuse, repair, uninstall and reinstall to a chosen folder
+        run: python -B cicd/desktop/verify_install.py --installer dist/Setup.exe
+
+      - name: Name the verified installer and its checksum
+        id: release
+        env:
+          ARTIFACT_PREFIX: ${{ inputs.artifact-prefix }}
+        run: python -B cicd/desktop/release.py outputs
+
+      - name: Upload the verified installer and its checksum
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: ${{ steps.release.outputs.artifact }}
+          path: |
+            dist/Setup.exe
+            dist/Setup.exe.sha256
+          if-no-files-found: error
+          retention-days: ${{ inputs.retention-days }}
+
+      - name: Upload the lifecycle report and the startup samples
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: desktop-installer-evidence
+          path: |
+            desktop/target/installer/lifecycle.json
+            desktop/target/package/startup.json
+            desktop/target/package/javafx-natives.json
+          if-no-files-found: ignore

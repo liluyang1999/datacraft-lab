@@ -13,10 +13,11 @@
 | 方法 | 请求 | 成功 | 映射 |
 | --- | --- | --- | --- |
 | `health()` | `GET /health`（不带令牌） | 200 `{"status":"UP","service":"datacraft-api"}` | `EngineHealth(up, latency)` |
+| `status()` | `GET /status` | 200 版本、启动时刻、已运行时长、作业数、并发上限、运行计数与正在运行的作业 | `Status(version, startedAt, uptime, jobs, maxConcurrentRuns, started, succeeded, failed, rejected, active)`；没有该路由的旧引擎得到 404 → `NOT_FOUND`，监控视图只说明“不提供运行状态”，不算故障 |
 | `jobs()` | `GET /jobs` | 200 `{"jobs":[{"name","description"}]}` | `List<JobInfo>` |
 | `run(name, params, timeout)` | `POST /jobs/{name}/runs?k=v…` | 200 结果体；500 同样的结果体 | `JobResult(jobName, status, message, metrics)` |
 
-- 令牌：`Authorization: Bearer <token>`，只用于 `/jobs` 下的请求。
+- 令牌：`Authorization: Bearer <token>`，用于 `/status` 与 `/jobs` 下的请求。
 - 作业名逐段按 UTF-8 百分号编码。服务端从原始路径严格解码一次：非法 UTF-8 返回 400 `invalid_request`，
   不替换成 U+FFFD 后查找作业；合法中文与 U+FFFD 可正常匹配，路径中的 `+` 保持字面值，`%2520` 只解为 `%20`。
 - 参数：作为查询串发送，键与值都按 UTF-8 百分号编码（空格编码为 `%20`，不用 `+`）；`lifecycle`
@@ -47,6 +48,9 @@
 | `tasks(dag)` | `GET /api/v2/dags/{dag_id}/tasks` → `{"tasks":[{"task_id","task_display_name","downstream_task_ids","operator_name"…}]}` | DAG 的形状：任务与下游任务，画成流水线视图的图；每个 DAG 每个连接只读一次 |
 | `trigger(dag, conf, note)` | `POST /api/v2/dags/{dag_id}/dagRuns` `{"logical_date":null,"conf":{…},"note":…}` | 触发一次运行 |
 | `taskInstances(dag, run)` | `GET /api/v2/dags/{dag_id}/dagRuns/{run_id}/taskInstances` | 任务状态 |
+| `importErrors()` | `GET /api/v2/importErrors?limit=50&order_by=-timestamp` | 无法解析的 DAG 文件：文件名、时间与堆栈（监控视图） |
+| `pools()` | `GET /api/v2/pools?limit=50&order_by=name` | 资源池的槽位：总数、运行、排队、已调度、延后、空闲；`slots` 为 -1 表示不限 |
+| `activeTasks()` | `GET /api/v2/dags/~/dagRuns/~/taskInstances?limit=50&order_by=-start_date&state=running&state=queued&state=scheduled&state=deferred&state=up_for_retry&state=up_for_reschedule&state=restarting` | 所有 DAG 中正在运行或等待的任务实例（`~` 表示任意 DAG 与运行） |
 | `log(dag, run, task, map_index, try, token)` | `GET …/taskInstances/{task_id}/logs/{try_number}?full_content=false[&map_index=…][&token=…]`，`Accept: application/json` | 分段读取日志，`continuation_token` 取下一段；映射任务带上 `map_index` |
 
 - 认证：先用配置中的用户名与口令换取 JWT，放在内存里，按令牌里的 `exp` 提前 60 s 续期；

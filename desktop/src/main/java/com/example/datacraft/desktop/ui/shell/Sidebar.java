@@ -1,5 +1,6 @@
 package com.example.datacraft.desktop.ui.shell;
 
+import com.example.datacraft.desktop.app.BuildInfo;
 import com.example.datacraft.desktop.service.ProfileService;
 import com.example.datacraft.desktop.service.Session;
 import com.example.datacraft.desktop.store.Profile;
@@ -21,21 +22,27 @@ import javafx.scene.control.SeparatorMenuItem;
 import javafx.scene.control.ToggleButton;
 import javafx.scene.control.ToggleGroup;
 import javafx.scene.control.Tooltip;
+import javafx.scene.layout.HBox;
 import javafx.scene.layout.VBox;
 
 /**
- * The cyanotype plate on the left: the wordmark, the four main views, then settings and the active
- * connection. It can fold to 64 px, keeping only the icons.
+ * The cyanotype plate on the left: the logomark with the name and version, the five main views,
+ * then settings and the active connection. It can fold to 64 px, keeping only the icons.
  */
 public final class Sidebar extends VBox {
 
   static final double WIDTH = 208;
   static final double COLLAPSED = 64;
 
+  private static final javafx.css.PseudoClass ALERTED =
+      javafx.css.PseudoClass.getPseudoClass("alerted");
+
   private final Map<Destination, ToggleButton> items = new EnumMap<>(Destination.class);
+  private final Map<Destination, Label> badges = new EnumMap<>(Destination.class);
   private final ToggleGroup group = new ToggleGroup();
-  private final Label name = Controls.label("数艺工坊", "wordmark-name");
-  private final Label latin = Controls.label("DataCraft", "wordmark-latin");
+  private final Label name = Controls.label(BuildInfo.PRODUCT, "wordmark-name");
+  private final Label latin = Controls.label("v" + BuildInfo.version(), "wordmark-latin");
+  private final VBox wordmarkText = new VBox(name, latin);
   private final MenuButton profile = new MenuButton("未连接");
   private boolean collapsed;
 
@@ -46,8 +53,10 @@ public final class Sidebar extends VBox {
       Executor ui,
       Consumer<String> failure) {
     getStyleClass().add("sidebar");
-    VBox wordmark = new VBox(name, latin);
+    wordmarkText.getStyleClass().add("wordmark-text");
+    HBox wordmark = new HBox(new BrandMark(), wordmarkText);
     wordmark.getStyleClass().add("wordmark");
+    wordmark.setAccessibleText(BuildInfo.PRODUCT + " " + BuildInfo.version());
     getChildren().add(wordmark);
     for (Destination destination : Destination.values()) {
       if (destination == Destination.SETTINGS) {
@@ -97,6 +106,8 @@ public final class Sidebar extends VBox {
     item.setMaxWidth(Double.MAX_VALUE);
     item.setAccessibleText(destination.title());
     item.setOnAction(event -> navigate.accept(destination));
+    // The pill is flush with the plate's left edge and stops short of its right one.
+    VBox.setMargin(item, new Insets(0, 12, 0, 0));
     items.put(destination, item);
     return item;
   }
@@ -106,6 +117,7 @@ public final class Sidebar extends VBox {
       case OVERVIEW -> Icons.overview();
       case JOBS -> Icons.jobs();
       case PIPELINES -> Icons.pipelines();
+      case MONITOR -> Icons.of(Icons.Glyph.GAUGE);
       case ACTIVITY -> Icons.activity();
       case SETTINGS -> Icons.settings();
     };
@@ -151,6 +163,41 @@ public final class Sidebar extends VBox {
                     }));
   }
 
+  /**
+   * Shows {@code count} as a small pill on the item, hidden while it is zero: how many alerts the
+   * monitor has. The count is also part of the item's accessible text.
+   */
+  public void badge(Destination destination, javafx.beans.value.ObservableIntegerValue count) {
+    ToggleButton item = items.get(destination);
+    Label pill = Controls.label("", "nav-badge", "latin");
+    pill.setMouseTransparent(true);
+    Runnable show =
+        () -> {
+          int value = count.get();
+          pill.setText(value > 99 ? "99+" : Integer.toString(value));
+          pill.setVisible(value > 0);
+          item.setAccessibleText(destination.title() + (value > 0 ? "，" + value + " 项需要关注" : ""));
+          item.pseudoClassStateChanged(ALERTED, value > 0);
+        };
+    count.addListener((property, before, now) -> show.run());
+    badges.put(destination, pill);
+    // The pill floats at the item's right edge, over the label's free space.
+    javafx.scene.layout.StackPane.setAlignment(pill, javafx.geometry.Pos.CENTER_RIGHT);
+    show.run();
+    if (item.getParent() == this) {
+      // Put the holder in the item's place first: adding the item to it takes it out of this
+      // box, which would shift every later item by one.
+      int index = getChildren().indexOf(item);
+      javafx.scene.layout.StackPane holder = new javafx.scene.layout.StackPane();
+      holder.getStyleClass().add("nav-holder");
+      holder.setMaxWidth(Double.MAX_VALUE);
+      VBox.setMargin(holder, VBox.getMargin(item));
+      VBox.setMargin(item, null);
+      getChildren().set(index, holder);
+      holder.getChildren().addAll(item, pill);
+    }
+  }
+
   /** Marks the current view. */
   public void select(Destination destination) {
     ToggleButton item = items.get(destination);
@@ -170,9 +217,12 @@ public final class Sidebar extends VBox {
     } else {
       getStyleClass().remove("collapsed");
     }
-    latin.setVisible(!fold);
-    latin.setManaged(!fold);
-    name.setText(fold ? "数" : "数艺工坊");
+    wordmarkText.setVisible(!fold);
+    wordmarkText.setManaged(!fold);
+    badges.values().forEach(pill -> pill.getStyleClass().removeAll("folded"));
+    if (fold) {
+      badges.values().forEach(pill -> pill.getStyleClass().add("folded"));
+    }
     profile.setVisible(!fold);
     profile.setManaged(!fold);
     items

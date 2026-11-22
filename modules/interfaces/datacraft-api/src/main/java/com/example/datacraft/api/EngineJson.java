@@ -1,10 +1,12 @@
 package com.example.datacraft.api;
 
+import com.example.datacraft.common.AppInfo;
 import com.example.datacraft.common.DataCraftException;
 import com.example.datacraft.engine.JobCatalog;
 import com.example.datacraft.engine.JobExecutionResult;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import java.time.Duration;
 import java.util.List;
 import java.util.Map;
 
@@ -26,6 +28,21 @@ public final class EngineJson {
 
   record HealthView(String status, String service) {}
 
+  record RunCountsView(long active, long started, long succeeded, long failed, long rejected) {}
+
+  record ActiveRunView(String job, String startedAt, long elapsedMillis) {}
+
+  record StatusView(
+      String status,
+      String service,
+      String version,
+      String startedAt,
+      long uptimeMillis,
+      int jobs,
+      int maxConcurrentRuns,
+      RunCountsView runs,
+      List<ActiveRunView> activeRuns) {}
+
   record ErrorView(String error) {}
 
   static String jobs(JobCatalog catalog) {
@@ -44,6 +61,35 @@ public final class EngineJson {
 
   static String health() {
     return write(new HealthView("UP", "datacraft-api"));
+  }
+
+  /** {@code GET /status}: the version, the uptime and the runs since the server started. */
+  static String status(RunActivity.Snapshot snapshot, int jobs, int maxConcurrentRuns) {
+    List<ActiveRunView> active =
+        snapshot.active().stream()
+            .map(
+                run ->
+                    new ActiveRunView(
+                        run.job(),
+                        run.startedAt().toString(),
+                        Math.max(0, Duration.between(run.startedAt(), snapshot.now()).toMillis())))
+            .toList();
+    return write(
+        new StatusView(
+            "UP",
+            "datacraft-api",
+            AppInfo.version(),
+            snapshot.startedAt().toString(),
+            Math.max(0, snapshot.uptime().toMillis()),
+            jobs,
+            maxConcurrentRuns,
+            new RunCountsView(
+                active.size(),
+                snapshot.started(),
+                snapshot.succeeded(),
+                snapshot.failed(),
+                snapshot.rejected()),
+            active));
   }
 
   static String error(String code) {

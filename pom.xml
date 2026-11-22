@@ -6,7 +6,9 @@
 
     <groupId>com.example.datacraft</groupId>
     <artifactId>datacraft-lab</artifactId>
-    <version>0.1.0-SNAPSHOT</version>
+    <!-- The product version is the revision property below, the only version literal of the
+         repository (docs/versioning.md); every module and the desktop inherit it. -->
+    <version>${revision}</version>
     <packaging>pom</packaging>
 
     <name>datacraft-lab</name>
@@ -35,6 +37,9 @@
     </modules>
 
     <properties>
+        <!-- The single product version: MAJOR.MINOR.PATCH, three numbers without a suffix. Change
+             only this line, then move the [Unreleased] entries of docs/CHANGELOG.md under it. -->
+        <revision>1.0.0</revision>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
         <project.build.outputTimestamp>2026-01-01T00:00:00Z</project.build.outputTimestamp>

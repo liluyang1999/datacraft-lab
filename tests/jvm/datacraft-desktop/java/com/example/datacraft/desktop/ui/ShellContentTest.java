@@ -8,12 +8,17 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.example.datacraft.desktop.app.AppContext;
 import com.example.datacraft.desktop.app.AppPaths;
+import com.example.datacraft.desktop.ui.shell.Navigator.Destination;
+import com.example.datacraft.desktop.ui.shell.Sidebar;
 import com.example.datacraft.desktop.ui.shell.Toasts;
 import com.example.datacraft.desktop.ui.theme.ThemeManager;
 import java.nio.file.Path;
+import java.util.List;
 import java.util.concurrent.atomic.AtomicReference;
 import javafx.scene.Scene;
 import javafx.scene.control.Button;
+import javafx.scene.control.Label;
+import javafx.scene.control.ToggleButton;
 import javafx.scene.layout.Region;
 import javafx.scene.layout.StackPane;
 import org.junit.jupiter.api.BeforeAll;
@@ -26,6 +31,47 @@ class ShellContentTest {
   @BeforeAll
   static void toolkit() {
     FxTesting.start();
+  }
+
+  @Test
+  void theSidebarListsEveryViewInOrderAndBadgesTheMonitorWithoutLosingAnItem() {
+    try (AppContext context = AppContext.open(new AppPaths(home))) {
+      onFx(
+          () -> {
+            Sidebar sidebar =
+                new Sidebar(
+                    ignored -> {},
+                    context.profiles(),
+                    context.session(),
+                    Runnable::run,
+                    ignored -> {});
+            javafx.beans.property.SimpleIntegerProperty alerts =
+                new javafx.beans.property.SimpleIntegerProperty(0);
+            sidebar.badge(Destination.MONITOR, alerts);
+            List<String> titles =
+                find(sidebar, ToggleButton.class).stream().map(ToggleButton::getText).toList();
+            assertEquals(
+                java.util.Arrays.stream(Destination.values()).map(Destination::title).toList(),
+                titles);
+            Label pill =
+                find(sidebar, Label.class).stream()
+                    .filter(label -> label.getStyleClass().contains("nav-badge"))
+                    .findFirst()
+                    .orElseThrow();
+            assertFalse(pill.isVisible());
+            alerts.set(3);
+            assertTrue(pill.isVisible());
+            assertEquals("3", pill.getText());
+            ToggleButton monitor =
+                find(sidebar, ToggleButton.class).stream()
+                    .filter(item -> "监控".equals(item.getText()))
+                    .findFirst()
+                    .orElseThrow();
+            assertEquals("监控，3 项需要关注", monitor.getAccessibleText());
+            alerts.set(120);
+            assertEquals("99+", pill.getText());
+          });
+    }
   }
 
   @Test

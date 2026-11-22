@@ -1,13 +1,16 @@
 package com.example.datacraft.desktop.api;
 
+import com.example.datacraft.desktop.api.EngineModels.ActiveRun;
 import com.example.datacraft.desktop.api.EngineModels.Health;
 import com.example.datacraft.desktop.api.EngineModels.JobInfo;
 import com.example.datacraft.desktop.api.EngineModels.JobResult;
 import com.example.datacraft.desktop.api.EngineModels.JobStatus;
+import com.example.datacraft.desktop.api.EngineModels.Status;
 import com.fasterxml.jackson.databind.JsonNode;
 import java.net.URI;
 import java.net.http.HttpRequest;
 import java.time.Duration;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -16,9 +19,9 @@ import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 
 /**
- * The engine API ({@code datacraft-api}): health, the job catalogue and synchronous runs, with the
- * status contract of {@code design/data-contracts.md}. The token is sent on {@code /jobs} requests
- * only; {@code /health} needs none.
+ * The engine API ({@code datacraft-api}): health, status, the job catalogue and synchronous runs,
+ * with the status contract of {@code design/data-contracts.md}. The token is sent on {@code
+ * /status} and {@code /jobs} requests; {@code /health} needs none.
  */
 public final class EngineClient {
 
@@ -51,6 +54,53 @@ public final class EngineClient {
                   "UP".equals(body.path("status").asText()),
                   body.path("service").asText(""),
                   response.latency());
+            });
+  }
+
+  /**
+   * The engine's version, uptime, load and run counters ({@code GET /status}, which needs the
+   * token). An engine that predates this route answers 404 ({@link ApiError#NOT_FOUND}).
+   */
+  public CompletableFuture<Status> status() {
+    HttpRequest request =
+        authorized(transport.request(base, "/status", HttpTransport.READ_TIMEOUT)).GET().build();
+    return transport
+        .send(request)
+        .thenApply(
+            response -> {
+              if (response.status() != 200) {
+                throw failure(response);
+              }
+              JsonNode body = transport.parse(response);
+              JsonNode runs = body.path("runs");
+              Instant started =
+                  AirflowClient.instant(body, "startedAt")
+                      .orElseThrow(
+                          () ->
+                              new ApiException(
+                                  ApiError.PROTOCOL, 200, "the status has no \"startedAt\""));
+              List<ActiveRun> active = new ArrayList<>();
+              for (JsonNode run : body.path("activeRuns")) {
+                String job = run.path("job").asText("");
+                if (!job.isEmpty()) {
+                  active.add(
+                      new ActiveRun(
+                          job,
+                          AirflowClient.instant(run, "startedAt").orElse(started),
+                          Duration.ofMillis(Math.max(0, run.path("elapsedMillis").asLong(0)))));
+                }
+              }
+              return new Status(
+                  body.path("version").asText(""),
+                  started,
+                  Duration.ofMillis(Math.max(0, body.path("uptimeMillis").asLong(0))),
+                  body.path("jobs").asInt(0),
+                  body.path("maxConcurrentRuns").asInt(0),
+                  runs.path("started").asLong(0),
+                  runs.path("succeeded").asLong(0),
+                  runs.path("failed").asLong(0),
+                  runs.path("rejected").asLong(0),
+                  active);
             });
   }
 

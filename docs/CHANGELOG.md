@@ -1,10 +1,48 @@
 # Changelog
 
-All notable changes to this project are documented here. The format follows
-[Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses
-[Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+The changes to datacraft-lab and its desktop console 数艺工坊 that matter to the people who use
+them, per product version. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
+versions are the three numbers MAJOR.MINOR.PATCH of [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
+without a pre-release suffix. The version has one source, the `revision` of the root `pom.xml`; how
+it changes and who reads it is in [Versioning](versioning.md). Round-by-round engineering evidence
+stays in the [desktop loop log](desktop/loop/log.md) and the dated review reports.
 
 ## [Unreleased]
+
+## [1.0.0] - Unreleased
+
+The first release.
+
+### Added
+
+- One job contract for the CLI, the HTTP API and Airflow: Spark jobs (`spark-version`,
+  `csv-to-parquet`, `row-count`), plain-JVM jobs for small files (`csv-profile`, `csv-quality`,
+  `file-checksum`) and the built-in `echo` and `noop`, all in the shaded `datacraft-cli.jar`, whose
+  usage header names this version.
+- The engine API (`serve-api`): `GET /health`, the job catalogue and synchronous runs behind a bearer
+  token, and `GET /status` with the engine's version, uptime, runs in progress and run counters.
+- Three Airflow 3.3.2 DAGs that run the same jar; Docker Compose for one host and a Docker Swarm stack
+  for two or more hosts, with backups and upgrades.
+- 数艺工坊, the desktop console: overview, jobs, pipelines, the new 监控 view (alerts, the engine's
+  load and counters, Airflow's components, latency and availability of both backends, running tasks,
+  pools, DAG import errors) with an alert count in the sidebar, activity, and settings with an About
+  section. One running copy per data folder: a second start brings the window forward. Settings and
+  caches stay in `~/.datacraft`.
+- A Windows installer, `Setup.exe` from `build.bat`: a machine-wide install with a Chinese wizard into
+  `C:\Program Files\DatacraftLab` or a chosen folder, the name 数艺工坊 in the Start menu and in
+  Installed apps, repair by running it again, refusal to downgrade and to run while 数艺工坊 is open,
+  and an uninstall that keeps `~/.datacraft`. `run.bat` starts the console from the sources.
+- The UI design baseline in `design/ui`: one token file from which the desktop themes are generated,
+  a browsable prototype of every view, and the screen and component specifications.
+- One CI/CD entry, `cicd.yml`, running check, test and build on every push and pull request, and a
+  deploy stage only when an operator runs it on `main` with this version (publication not configured
+  yet).
+
+## Development history before 1.0.0
+
+The entries below were recorded while the project carried the placeholder version 0.1.0-SNAPSHOT,
+before its first release. They are kept unchanged as the engineering history; names and paths in them
+are those of their time.
 
 ### Compact interactions and reliable boundaries (2026-11-09)
 

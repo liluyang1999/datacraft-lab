@@ -1,5 +1,6 @@
 package com.example.datacraft.desktop.ui.view;
 
+import com.example.datacraft.desktop.app.BuildInfo;
 import com.example.datacraft.desktop.app.Preferences;
 import com.example.datacraft.desktop.service.BackendStatus;
 import com.example.datacraft.desktop.service.ProfileService.TestResult;
@@ -39,8 +40,24 @@ import javafx.scene.layout.Priority;
 import javafx.scene.layout.Region;
 import javafx.scene.layout.VBox;
 
-/** 设置: connections, appearance, refresh, and the local data in ~/.datacraft. */
+/** 设置: connections, appearance, refresh, the local data in ~/.datacraft, and about. */
 public final class SettingsView implements View {
+
+  /**
+   * What the about section shows of the connected backends: their versions as they report them,
+   * empty while unknown.
+   */
+  public record About(
+      javafx.beans.value.ObservableStringValue engineVersion,
+      javafx.beans.value.ObservableStringValue airflowVersion) {
+
+    /** No backend versions: the section shows this build only. */
+    public static About none() {
+      return new About(
+          new javafx.beans.property.SimpleStringProperty(""),
+          new javafx.beans.property.SimpleStringProperty(""));
+    }
+  }
 
   private final SettingsModel model;
   private final ScrollPane root;
@@ -49,7 +66,8 @@ public final class SettingsView implements View {
       SettingsModel model,
       Dialogs dialogs,
       Toasts toasts,
-      Consumer<java.nio.file.Path> openFolder) {
+      Consumer<java.nio.file.Path> openFolder,
+      About about) {
     this.model = model;
     VBox page =
         new VBox(
@@ -60,7 +78,9 @@ public final class SettingsView implements View {
             Controls.rule(),
             refreshSection(),
             Controls.rule(),
-            localData(dialogs, toasts, openFolder));
+            localData(dialogs, toasts, openFolder),
+            Controls.rule(),
+            about(about));
     page.getStyleClass().add("view-content");
     page.setMaxWidth(980);
     root = new ScrollPane(page);
@@ -378,6 +398,35 @@ public final class SettingsView implements View {
     grid.addRow(0, Controls.labelFor("位置", location, "field-label"), locationRow);
     grid.addRow(1, fieldLabel("占用"), Controls.row(12, size, clear));
     return new VBox(16, OverviewView.heading(Glyph.DATABASE, "本机数据"), grid);
+  }
+
+  // ---------- about ----------
+
+  private Node about(About about) {
+    javafx.scene.image.ImageView icon =
+        new javafx.scene.image.ImageView(com.example.datacraft.desktop.ui.shell.AppIcon.draw(96));
+    icon.setFitWidth(48);
+    icon.setFitHeight(48);
+    icon.setSmooth(true);
+    Label name = Controls.label(BuildInfo.PRODUCT, "about-name");
+    Label version = Controls.label("版本 " + BuildInfo.version(), "secondary", "latin");
+    HBox identity = Controls.row(16, icon, new VBox(2, name, version));
+    identity.setAccessibleText(BuildInfo.PRODUCT + " 版本 " + BuildInfo.version());
+    GridPane grid = settingsGrid();
+    grid.addRow(0, fieldLabel("引擎 API"), backendVersion(about.engineVersion()));
+    grid.addRow(1, fieldLabel("Airflow"), backendVersion(about.airflowVersion()));
+    return new VBox(16, OverviewView.heading(Glyph.INFO, "关于"), identity, grid);
+  }
+
+  private static Label backendVersion(javafx.beans.value.ObservableStringValue version) {
+    Label label = Controls.label("", "latin");
+    label
+        .textProperty()
+        .bind(
+            javafx.beans.binding.Bindings.createStringBinding(
+                () -> version.get() == null || version.get().isBlank() ? "—" : version.get(),
+                version));
+    return label;
   }
 
   private static GridPane settingsGrid() {

@@ -5,6 +5,7 @@ import com.example.datacraft.desktop.service.ActivityLog;
 import com.example.datacraft.desktop.service.ConnectionMonitor;
 import com.example.datacraft.desktop.service.JobCatalog;
 import com.example.datacraft.desktop.service.JobService;
+import com.example.datacraft.desktop.service.MonitorService;
 import com.example.datacraft.desktop.service.PipelineService;
 import com.example.datacraft.desktop.service.ProfileService;
 import com.example.datacraft.desktop.service.Session;
@@ -40,6 +41,7 @@ public final class AppContext implements AutoCloseable {
   private final RecentRunRepository recentRuns;
   private final JobService jobs;
   private final PipelineService pipelines;
+  private final MonitorService live;
   private final JobCatalog catalog;
 
   private AppContext(AppPaths paths, LocalStore store) {
@@ -68,6 +70,7 @@ public final class AppContext implements AutoCloseable {
             clock,
             () -> Duration.ofMinutes(preferences.runTimeoutMinutes()));
     this.pipelines = new PipelineService(session, activity);
+    this.live = new MonitorService(session);
     this.catalog = JobCatalog.bundled(transport.json());
   }
 
@@ -137,6 +140,11 @@ public final class AppContext implements AutoCloseable {
 
   public PipelineService pipelines() {
     return pipelines;
+  }
+
+  /** The live data of the monitor and the backends' versions. */
+  public MonitorService live() {
+    return live;
   }
 
   public JobCatalog catalog() {

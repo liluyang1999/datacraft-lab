@@ -2,6 +2,8 @@ package com.example.datacraft.desktop.api;
 
 import com.example.datacraft.desktop.util.Maps;
 import java.time.Duration;
+import java.time.Instant;
+import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 
@@ -12,6 +14,35 @@ public final class EngineModels {
 
   /** {@code GET /health}. */
   public record Health(boolean up, String service, Duration latency) {}
+
+  /** One run in progress on the engine: its job and how long it has been running. */
+  public record ActiveRun(String job, Instant startedAt, Duration elapsed) {
+    public ActiveRun {
+      Objects.requireNonNull(job, "job");
+      elapsed = elapsed.isNegative() ? Duration.ZERO : elapsed;
+    }
+  }
+
+  /**
+   * {@code GET /status}: the engine's version, how long it has been up, how many runs it holds at
+   * once, the runs in progress and the run counters since it started.
+   */
+  public record Status(
+      String version,
+      Instant startedAt,
+      Duration uptime,
+      int jobs,
+      int maxConcurrentRuns,
+      long started,
+      long succeeded,
+      long failed,
+      long rejected,
+      List<ActiveRun> active) {
+    public Status {
+      version = version == null ? "" : version;
+      active = List.copyOf(active);
+    }
+  }
 
   /** One entry of {@code GET /jobs}. */
   public record JobInfo(String name, String description) {

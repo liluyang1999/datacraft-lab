@@ -1,39 +1,34 @@
-name: CI
+# Stage 2, test: every test suite of the repository. Called only by cicd.yml after check passed.
+#   backend   the Maven gate (format, Checkstyle, Enforcer, tests, shaded jar) and the jar's checks;
+#             it shares the verified CLI jar with the airflow job
+#   airflow   DAG contracts on Airflow 3.3.2 and the real engine, ETL retry and SFTP pipelines
+#   scripts   the deployment, CI tooling, design, documentation and cost calculator suites
+#   desktop   数艺工坊 on Linux (virtual display) and Windows (native UI Automation): its whole gate
+#             and its test floor
+# Packaging and the installer are build-stage work (build.yml).
+name: Test
 
 on:
-  push:
-    branches: [main]
-  pull_request:
-    branches: [main]
-  workflow_dispatch:
-
-concurrency:
-  group: ci-${{ github.ref }}
-  cancel-in-progress: true
+  workflow_call:
 
 permissions:
   contents: read
 
-# Every run step goes through cicd/step.py. It runs the step with bash -e, which is what the runner
-# would use anyway, and when the step fails it repeats the decisive lines of the output as an error
-# annotation. Annotations can be read through the public API and job logs cannot, so the cause of a
-# failure is visible without access to the repository. The script comes from the checkout, which
-# is therefore the first step of every job.
 defaults:
   run:
     shell: python3 -B cicd/step.py bash -e {0}
 
-# Actions are pinned to full commit SHAs (the comment names the release) and runners to an explicit
-# image, so neither a moved tag nor an ubuntu-latest migration changes CI without a commit here.
 jobs:
-  build:
-    name: Build & verify (JDK 25)
+  backend:
+    name: backend (JDK 25 verify and jar checks)
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     env:
       CLI_JAR: modules/interfaces/datacraft-cli/target/datacraft-cli.jar
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
       # check-latest: the build enforces a JDK patch floor (pom.xml requireJavaVersion), and the
       # runner's preinstalled Temurin 25 may be older than the newest release.
@@ -45,8 +40,6 @@ jobs:
           check-latest: true
           cache: maven
 
-      # Each step runs one command: a script in cicd/, a test entry point in tests/, or a single
-      # tool, so the pipeline logic can run and be reviewed outside GitHub Actions.
       - name: Maven Wrapper verifies the Maven distribution
         run: bash cicd/build/check-maven-wrapper.sh
 
@@ -71,7 +64,7 @@ jobs:
 
       # The builder image compiles from the Docker build context, which has no tests/ or cicd/. This
       # runs its Maven command in a copy of that context, so such a build cannot break only later,
-      # in the containers job, where Docker hides the cause in the image build log.
+      # in the images job, where Docker hides the cause in the image build log.
       - name: Builder image's Maven command works in the Docker build context
         run: bash cicd/build/check-image-build.sh
 
@@ -90,9 +83,9 @@ jobs:
           path: ${{ env.CLI_JAR }}
           retention-days: 1
 
-  dags:
-    name: Airflow contracts and real pipelines (3.3.2)
-    needs: build
+  airflow:
+    name: airflow (contracts and real pipelines, 3.3.2)
+    needs: backend
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     env:
@@ -101,6 +94,8 @@ jobs:
       PYTHONDONTWRITEBYTECODE: "1"
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
       # apache/airflow:3.3.2 runs Python 3.13, so the DAGs are tested on the same version;
       # cicd/airflow/install-airflow.sh picks the official constraints file for it.
@@ -139,14 +134,13 @@ jobs:
         run: rm -rf -- "$AIRFLOW_HOME"
 
   scripts:
-    name: Script, documentation and type checks
+    name: scripts (deployment, CI, design, documentation)
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-
-      - name: Actions are pinned to full commit SHAs
-        run: bash cicd/lint/check-actions-pinned.sh
+        with:
+          persist-credentials: false
 
       - name: Set up Python
         uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
@@ -158,18 +152,14 @@ jobs:
         with:
           node-version: "24"
 
-      # A fixed ShellCheck release, not the one the runner image happens to ship.
-      - name: Install the pinned ShellCheck
-        run: bash cicd/lint/install-shellcheck.sh
-
-      - name: Shell syntax and ShellCheck
-        run: bash cicd/lint/check-shell-scripts.sh
-
       - name: Deployment script and template tests
         run: python3 -B -m unittest discover -s tests/deploy -v
 
       - name: CI tooling tests
         run: python3 -B -m unittest discover -s tests/ci -v
+
+      - name: Design token and generator tests
+        run: python3 -B -m unittest discover -s tests/design -v
 
       - name: Documentation consistency tests
         run: python3 -B -m unittest discover -s tests/docs -v
@@ -177,15 +167,10 @@ jobs:
       - name: Cloud cost calculator tests
         run: node --test tests/docs/cloud-costs.test.cjs
 
-      # pyrightconfig.json analyses everything as Linux / Python 3.12; the Airflow-only imports are
-      # not reported here and are covered by the dags job, which installs Airflow.
-      - name: Python type check (pyright, zero diagnostics)
-        run: npx --yes pyright@1.1.414 --warnings
-
   desktop:
     # 数艺工坊, the JavaFX desktop console: a Maven project of its own (desktop/pom.xml) that no
     # other job builds. JavaFX needs a display, which xvfb-run provides on the runner.
-    name: Desktop console (JavaFX 25, ${{ matrix.os }})
+    name: desktop (JavaFX 25, ${{ matrix.os }})
     strategy:
       fail-fast: false
       matrix:
@@ -197,6 +182,8 @@ jobs:
         shell: python -B cicd/step.py bash -e {0}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
       # The step wrapper uses nonblocking Windows pipes, supported since Python 3.12.
       # Select the same runtime line as the Python jobs before any wrapped command runs.
@@ -213,12 +200,12 @@ jobs:
           check-latest: true
           cache: maven
 
-      # Format, Checkstyle, Enforcer, unit, client, store and UI tests (every view in both themes,
-      # no JavaFX warning, no stalled FX thread once warm), then the jar.
       - name: Prepare fonts and the accessibility bus
         if: runner.os == 'Linux'
         run: bash cicd/desktop/prepare-linux.sh
 
+      # Format, Checkstyle, Enforcer, unit, client, store and UI tests (every view in both themes,
+      # no JavaFX warning, no stalled FX thread once warm), then the jar.
       - name: Verify the desktop console on a virtual display
         if: runner.os == 'Linux'
         run: dbus-run-session -- xvfb-run --auto-servernum ./mvnw -B -ntp -Pdesktop -pl :datacraft-desktop -am verify
@@ -230,25 +217,6 @@ jobs:
       # The desktop suite against its own floor; the passing count becomes a notice.
       - name: Assert the desktop suite executed its tests
         run: python -B cicd/build/check_test_counts.py --project desktop
-
-      # jlink/jpackage, train every view/theme, then verify AOT and the budget on all 20 starts.
-      - name: Package the app image and check that it starts
-        if: runner.os == 'Linux'
-        run: dbus-run-session -- xvfb-run --auto-servernum python -B cicd/desktop/package_desktop.py
-
-      - name: Package the Windows app image and check repeated starts
-        if: runner.os == 'Windows'
-        run: python -B cicd/desktop/package_desktop.py
-
-      - name: Upload startup samples and native library provenance
-        if: always()
-        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
-        with:
-          name: desktop-startup-${{ matrix.os }}
-          path: |
-            desktop/target/package/startup.json
-            desktop/target/package/javafx-natives.json
-          if-no-files-found: ignore
 
       - name: Upload the UI snapshots
         if: always()
@@ -265,37 +233,3 @@ jobs:
           name: surefire-reports-desktop-${{ matrix.os }}
           path: desktop/target/surefire-reports/**
           if-no-files-found: ignore
-
-  compose:
-    # Validates the deployment topology definitions only. Nothing is built or deployed.
-    name: Compose / Swarm file validation
-    runs-on: ubuntu-24.04
-    timeout-minutes: 10
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-
-      # Interpolates both stack files with test-only secrets and checks that each fails closed when
-      # a required secret is missing.
-      - name: Validate the Compose file and the Swarm stack
-        run: bash cicd/stacks/check-stack-files.sh
-
-  containers:
-    # The longest job: it starts only when the cheaper gates have passed, which include the
-    # builder image's Maven command (build) and the stack files it deploys (compose).
-    name: Build and smoke-test runtime images
-    needs: [build, scripts, compose]
-    runs-on: ubuntu-24.04
-    timeout-minutes: 60
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-
-      - name: Build images and run packaged API and Airflow pipelines
-        run: bash cicd/images/smoke-images.sh
-
-      - name: Verify the complete Compose stack and metadata backup recovery
-        run: bash cicd/images/smoke-compose.sh
-
-      # One node shows that the stack file, swarm-deploy.sh, airflow-init.sh and the images work
-      # together, through a deployment and an upgrade; it shows nothing about placement or failover.
-      - name: Rehearse the Swarm deployment and an upgrade on one node
-        run: bash cicd/images/smoke-swarm.sh

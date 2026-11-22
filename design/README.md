@@ -1,8 +1,9 @@
 # Design documentation
 
-This directory explains how datacraft-lab is built and why. The documents describe the code in
-this repository; when a document and the code disagree, the code is right and the document needs
-fixing. How to install, run and operate the project is in [`docs/`](../docs/README.md).
+This directory explains how datacraft-lab is built and why. The engineering documents describe
+the code in this repository; when one of them and the code disagree, the code is right and the
+document needs fixing. The user-interface baseline in [ui/](ui/README.md) works the other way round:
+it is the target, and the desktop's code follows it. How to install, run and operate the project is in [`docs/`](../docs/README.md).
 
 | Document | Contents |
 | --- | --- |
@@ -10,6 +11,7 @@ fixing. How to install, run and operate the project is in [`docs/`](../docs/READ
 | [data-contracts.md](data-contracts.md) | What callers can rely on: failure results, Spark and plain-JVM job parameters and messages, CSV rules, write modes, data-root confinement, IO boundaries, the HTTP status contract and the tests that pin them. |
 | [build-and-quality.md](build-and-quality.md) | The Maven reactor, source and test layout, version management, compiler, formatting, Checkstyle and Enforcer settings, testing, packaging, the Maven Wrapper, Python type checking, CI gates and the zero-warning policy. |
 | [decisions.md](decisions.md) | The architecture decision log: context, decision and consequences of the choices behind the current design, including the cloud platform. |
+| [ui/](ui/README.md) | 数艺工坊's user-interface baseline (Chinese): the design tokens and the themes generated from them, the interface specification and a browsable prototype of every view. The desktop's interface follows it. |
 
 ## Design principles
 

@@ -1,6 +1,6 @@
 # datacraft-lab
 
-[![CI](https://github.com/liluyang1999/datacraft-lab/actions/workflows/ci.yml/badge.svg)](https://github.com/liluyang1999/datacraft-lab/actions/workflows/ci.yml)
+[![CI/CD](https://github.com/liluyang1999/datacraft-lab/actions/workflows/cicd.yml/badge.svg)](https://github.com/liluyang1999/datacraft-lab/actions/workflows/cicd.yml)
 
 `datacraft-lab` is a personal data-processing factory: a Maven multi-module JVM project written in
 Java and Scala. Every job implements one `DataJob` contract and runs through one execution engine,
@@ -18,27 +18,38 @@ whether it is started from the command line, through the JSON HTTP API, or by an
   `DATACRAFT_DATA_NODE`, because its volumes are node-local.
 - **Build**: Java 25 bytecode, a pinned Maven Wrapper, and one `verify` gate covering formatting,
   Checkstyle, dependency rules, tests and packaging; any javac or scalac warning fails the build.
-- **Desktop**: 数艺工坊, a JavaFX 25 control panel and monitor for the engine API and Airflow. It
-  keeps only its settings and caches, in SQLite under `~/.datacraft`; see
-  [the desktop documents](desktop/README.md).
+- **Desktop**: 数艺工坊, a JavaFX 25 control panel and live monitor for the engine API and
+  Airflow: overview, jobs, pipelines, a 监控 view of alerts, load, latency, running tasks, pools and
+  DAG import errors, activity and settings. It keeps only its settings and caches, in SQLite under
+  `~/.datacraft`. `build.bat` builds its Windows installer `dist/Setup.exe`; see
+  [the desktop documents](desktop/README.md). Its interface follows the
+  [UI design baseline](../design/ui/README.md).
+- **One version**: 1.0.0, written once as the root `pom.xml` `revision` and read by every module,
+  the CLI, the engine API, the desktop, its installer and CI ([versioning](versioning.md),
+  [changelog](CHANGELOG.md)). One CI/CD entry runs check, test and build on every push, and a
+  deploy stage only by hand on `main`.
 
 GitHub shows this file as the repository page because the repository root has no README. Links
 below are relative to `docs/`.
 
 ## Repository layout
 
-最新工程复核：[2026-11-09 紧凑交互、状态一致性与交付](reports/review-2026-11-09.md)。
+最新工程复核：[2026-11-20 1.0.0：版本、安装包、CI/CD、设计基线与实时监控](reports/review-2026-11-20.md)。
 
 ```text
 datacraft-lab/
 ├── pom.xml, mvnw, mvnw.cmd, .mvn/   Maven build, pinned wrapper, Maven JVM options
 ├── Makefile                         shortcuts for the wrapper, test suites and deploy scripts
+├── build.bat, run.bat               Windows: build the desktop installer dist\Setup.exe; start the
+│                                    desktop from the sources
 ├── .editorconfig, .gitattributes, .gitignore, .dockerignore, .scalafmt.conf   tool settings
 ├── pyrightconfig.json               Python type checking
 ├── config/checkstyle/checkstyle.xml Checkstyle rules
-├── .github/workflows/               ci.yml (triggers, runners and job order only), advisories.yml
-├── cicd/                            the scripts the CI jobs run: build, airflow, lint, stacks, images,
-│                                    security, and step.py, the shell of every step
+├── .github/workflows/               cicd.yml, the only entry, and its stages check.yml, test.yml,
+│                                    build.yml, deploy.yml (triggers, runners and job order only)
+├── cicd/                            the scripts the CI jobs run: release (the version source and the
+│                                    deploy gate), build, airflow, lint, stacks, security, images,
+│                                    desktop (app image, installer), and step.py, the shell of every step
 ├── modules/                         JVM source modules, grouped by responsibility
 │   ├── core/          datacraft-common, datacraft-config, datacraft-engine
 │   ├── io/            datacraft-io
@@ -46,10 +57,12 @@ datacraft-lab/
 │   └── interfaces/    datacraft-api (HTTP), datacraft-cli (process entry point)
 ├── orchestration/airflow/           dags/ (with .airflowignore), requirements.txt,
 │                                    security-overrides.txt
-├── deploy/                          docker/, compose/, swarm/, scripts/
+├── deploy/                          docker/, compose/, swarm/, scripts/, windows/ (the installer)
 ├── desktop/                         数艺工坊, the JavaFX desktop console (opt-in Maven desktop profile)
-├── design/                          architecture and design documents (English)
-├── docs/                            this page, guides/, reports/, desktop/, CHANGELOG.md
+├── design/                          architecture and design documents (English); ui/, the UI
+│                                    design baseline: tokens, generated themes, spec, prototype
+├── docs/                            this page, guides/, reports/, desktop/, CHANGELOG.md,
+│                                    versioning.md
 └── tests/                           all tests, kept outside the modules
     ├── jvm/<artifactId>/{java,scala}   JVM tests, compiled and run by that module's build
     │                                   (jvm/datacraft-desktop/ by the desktop project's)
@@ -57,7 +70,9 @@ datacraft-lab/
     ├── orchestration/                  Airflow DAG contract tests (need Airflow)
     ├── smoke/                          the Airflow runtime smoke test
     ├── deploy/                         deployment script and template tests
-    ├── ci/                             tests of the cicd/ scripts and the workflow structure
+    ├── ci/                             tests of the cicd/ scripts, the workflow structure, the
+    │                                   version source and the installer sources
+    ├── design/                         tests of the design tokens and the theme generator
     └── docs/                           documentation consistency and cost calculator tests
 ```
 
@@ -124,6 +139,8 @@ Swarm, is in Chinese: [guides/deployment.md](guides/deployment.md).
 | [design/data-contracts.md](../design/data-contracts.md) | English | Results and failures, job parameters, write modes, data root, IO boundaries, HTTP status contract |
 | [design/build-and-quality.md](../design/build-and-quality.md) | English | Reactor, versions, compiler and formatting settings, Enforcer rules, tests, packaging, CI gates, zero-warning policy |
 | [design/decisions.md](../design/decisions.md) | English | Architecture decision log, including the cloud platform choice |
+| [design/ui/README.md](../design/ui/README.md) | Chinese | 数艺工坊's UI design baseline: tokens, generated themes, the interface [spec](../design/ui/SPEC.md) and the browsable [prototype](../design/ui/index.html) |
+| [versioning.md](versioning.md) | Chinese | The single product version: its source, its consumers, the format and the change and release procedure |
 | [guides/usage.md](guides/usage.md) | English | Running jobs: CLI options, exit codes, `spark-submit`, `serve-api`, HTTP API |
 | [guides/csv-quality.md](guides/csv-quality.md) | Chinese | Checking small CSV files before conversion: blank values, duplicate rows, thresholds, results and desktop workflow |
 | [guides/development.md](guides/development.md) | English | Prerequisites, build and test commands, test layout, CI and the `cicd/` scripts |
@@ -133,5 +150,6 @@ Swarm, is in Chinese: [guides/deployment.md](guides/deployment.md).
 | [reports/evaluation-report.html](reports/evaluation-report.html) | Chinese | Consolidated evaluation report: architecture, quality evidence, security, the cloud platform decision with its cost model and calculator, scores and risks |
 | [reports/review-2026-10-29.md](reports/review-2026-10-29.md) | Chinese | Cross-module review: API authentication boundary, transaction atomicity, asynchronous UI ownership, current validation and cleanup evidence |
 | [reports/review-2026-11-06.md](reports/review-2026-11-06.md) | Chinese | Naming gates, shared parameter editing, cache synchronization, resource cancellation, SFTP and redirect boundaries, current validation and delivery evidence |
+| [reports/review-2026-11-20.md](reports/review-2026-11-20.md) | Chinese | 1.0.0: the single version, the Windows installer and its lifecycle, the staged CI/CD, the UI design baseline, the live monitor and `GET /status`, with the verification evidence |
 | [reports/pricing-evidence.md](reports/pricing-evidence.md) | Chinese | Sources and calculations behind the cloud prices |
-| [CHANGELOG.md](CHANGELOG.md) | English | Change history |
+| [CHANGELOG.md](CHANGELOG.md) | English | Changes per product version, from 1.0.0, then the development history before it |

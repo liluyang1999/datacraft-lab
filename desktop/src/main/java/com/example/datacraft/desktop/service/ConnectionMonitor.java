@@ -7,6 +7,7 @@ import com.example.datacraft.desktop.store.ActivityRepository.Source;
 import com.example.datacraft.desktop.util.Formats;
 import java.time.Clock;
 import java.time.Duration;
+import java.time.Instant;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Deque;
@@ -26,14 +27,49 @@ public final class ConnectionMonitor {
 
   public static final String ENGINE = "引擎 API";
   public static final String AIRFLOW = "Airflow";
-  static final int HISTORY = 60;
 
-  /** Both statuses and the latency history, newest last. */
+  /** Checks kept per backend: at the standard 5 s interval, the last ten minutes. */
+  public static final int HISTORY = 120;
+
+  /** One check of a backend: when, what it found, and the latency when it answered. */
+  public record Sample(Instant at, State state, Optional<Duration> latency) {
+
+    /** It answered (healthy or not), so the latency is real. */
+    public boolean reachable() {
+      return state == State.UP || state == State.DEGRADED;
+    }
+  }
+
+  /**
+   * Both statuses, the history of checks (newest last) and Airflow's components as its last answer
+   * gave them (empty before the first answer and after a failed check).
+   */
   public record Snapshot(
       BackendStatus engine,
       BackendStatus airflow,
-      List<Duration> engineLatency,
-      List<Duration> airflowLatency) {}
+      List<Sample> engineSamples,
+      List<Sample> airflowSamples,
+      Optional<AirflowModels.Health> airflowHealth) {
+
+    public Snapshot {
+      engineSamples = List.copyOf(engineSamples);
+      airflowSamples = List.copyOf(airflowSamples);
+    }
+
+    /** The engine's latencies of the checks it answered, newest last. */
+    public List<Duration> engineLatency() {
+      return latencies(engineSamples);
+    }
+
+    /** Airflow's latencies of the checks it answered, newest last. */
+    public List<Duration> airflowLatency() {
+      return latencies(airflowSamples);
+    }
+
+    private static List<Duration> latencies(List<Sample> samples) {
+      return samples.stream().flatMap(sample -> sample.latency().stream()).toList();
+    }
+  }
 
   private final Session session;
   private final Clock clock;
@@ -41,11 +77,12 @@ public final class ConnectionMonitor {
   private final List<Consumer<Snapshot>> listeners = new CopyOnWriteArrayList<>();
   private final Poller<Checked> enginePoller;
   private final Poller<Checked> airflowPoller;
-  private final Deque<Duration> engineHistory = new ArrayDeque<>();
-  private final Deque<Duration> airflowHistory = new ArrayDeque<>();
+  private final Deque<Sample> engineHistory = new ArrayDeque<>();
+  private final Deque<Sample> airflowHistory = new ArrayDeque<>();
 
   private volatile BackendStatus engine;
   private volatile BackendStatus airflow;
+  private volatile Optional<AirflowModels.Health> airflowHealth = Optional.empty();
   // The connection whose credentials were last confirmed; a switch of profile clears them, and a
   // check made for an earlier connection can never confirm the current one.
   private volatile Session.Connection tokenVerifiedFor;
@@ -54,7 +91,16 @@ public final class ConnectionMonitor {
 
   /** What one check found, and the connection it was made with. */
   private record Checked(
-      Session.Connection connection, BackendStatus status, boolean verified, int jobCount) {}
+      Session.Connection connection,
+      BackendStatus status,
+      boolean verified,
+      int jobCount,
+      Optional<AirflowModels.Health> health) {
+
+    Checked(Session.Connection connection, BackendStatus status, boolean verified, int jobCount) {
+      this(connection, status, verified, jobCount, Optional.empty());
+    }
+  }
 
   /** A check that failed, with the connection it was made with. */
   private static final class CheckFailed extends RuntimeException {
@@ -114,7 +160,8 @@ public final class ConnectionMonitor {
 
   public Snapshot snapshot() {
     synchronized (engineHistory) {
-      return new Snapshot(engine, airflow, List.copyOf(engineHistory), List.copyOf(airflowHistory));
+      return new Snapshot(
+          engine, airflow, List.copyOf(engineHistory), List.copyOf(airflowHistory), airflowHealth);
     }
   }
 
@@ -129,6 +176,7 @@ public final class ConnectionMonitor {
       engineHistory.clear();
       airflowHistory.clear();
     }
+    airflowHealth = Optional.empty();
     engine = BackendStatus.connecting(clock.instant());
     airflow = BackendStatus.connecting(clock.instant());
     publish();
@@ -201,7 +249,8 @@ public final class ConnectionMonitor {
               CompletableFuture<Void> signIn =
                   verified ? CompletableFuture.completedFuture(null) : client.login();
               return signIn.thenApply(
-                  ignored -> new Checked(connection, airflowStatus(health), true, 0));
+                  ignored ->
+                      new Checked(connection, airflowStatus(health), true, 0, Optional.of(health)));
             })
         .exceptionally(
             failure -> {
@@ -274,16 +323,21 @@ public final class ConnectionMonitor {
       } else if (status.state() == State.UNAUTHORIZED) {
         tokenVerifiedFor = null; // a later success must check the token again
       }
-    } else if (checked.verified()) {
-      signInVerifiedFor = checked.connection();
-    } else if (status.state() == State.UNAUTHORIZED) {
-      signInVerifiedFor = null;
+    } else {
+      airflowHealth = checked.health();
+      if (checked.verified()) {
+        signInVerifiedFor = checked.connection();
+      } else if (status.state() == State.UNAUTHORIZED) {
+        signInVerifiedFor = null;
+      }
     }
-    synchronized (engineHistory) {
-      Deque<Duration> history = isEngine ? engineHistory : airflowHistory;
-      status.latency().ifPresent(history::addLast);
-      while (history.size() > HISTORY) {
-        history.removeFirst();
+    if (status.state() != State.NOT_CONFIGURED) {
+      synchronized (engineHistory) {
+        Deque<Sample> history = isEngine ? engineHistory : airflowHistory;
+        history.addLast(new Sample(status.checkedAt(), status.state(), status.latency()));
+        while (history.size() > HISTORY) {
+          history.removeFirst();
+        }
       }
     }
     if (isEngine) {

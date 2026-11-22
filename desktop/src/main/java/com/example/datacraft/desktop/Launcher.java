@@ -2,6 +2,7 @@ package com.example.datacraft.desktop;
 
 import com.example.datacraft.desktop.app.AppPaths;
 import com.example.datacraft.desktop.app.Logging;
+import com.example.datacraft.desktop.app.SingleInstance;
 import javafx.application.Application;
 
 /**
@@ -28,6 +29,13 @@ public final class Launcher {
       System.setProperty(DesktopApp.SMOKE_PROPERTY, "true");
     }
     AppPaths paths = AppPaths.resolve().ensureCreated();
+    // A second start with the same data folder brings the running window forward and leaves.
+    var instance = SingleInstance.acquire(paths);
+    if (instance.isEmpty()) {
+      System.out.println("数艺工坊已在运行：已切换到它的窗口。");
+      System.exit(0);
+    }
+    DesktopApp.instance(instance.get());
     usePipeFolder(paths);
     Logging.configure(paths);
     DesktopApp.mark("launcher entered", enteredAt, enteredProcess);

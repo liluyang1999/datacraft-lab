@@ -1,6 +1,6 @@
 package com.example.datacraft.cli
 
-import com.example.datacraft.common.Lifecycle
+import com.example.datacraft.common.{AppInfo, Lifecycle}
 import scopt.{DefaultOEffectSetup, OParser}
 
 import java.nio.file.Path
@@ -15,7 +15,7 @@ object CliParser {
 
     OParser.sequence(
       programName("datacraft-lab"),
-      head("datacraft-lab", "0.1.0-SNAPSHOT"),
+      head(AppInfo.DEFAULT_APP_NAME, AppInfo.version()),
       opt[String]("command")
         .required()
         .validate(value =>

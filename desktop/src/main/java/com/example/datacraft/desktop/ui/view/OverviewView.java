@@ -31,7 +31,9 @@ import javafx.scene.control.Label;
 import javafx.scene.control.ScrollPane;
 import javafx.scene.control.Tooltip;
 import javafx.scene.input.MouseEvent;
+import javafx.scene.layout.ColumnConstraints;
 import javafx.scene.layout.FlowPane;
+import javafx.scene.layout.GridPane;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.Priority;
 import javafx.scene.layout.StackPane;
@@ -65,13 +67,20 @@ public final class OverviewView implements View {
     this.clock = clock;
     this.dialogs = dialogs;
 
-    FlowPane tiles =
-        new FlowPane(
-            16,
-            16,
-            backendTile("引擎 API", Glyph.ENGINE, status.engine()),
-            backendTile("Airflow", Glyph.AIRFLOW, status.airflow()),
-            mixTile());
+    // Three equal columns that share the width, so the facts line up with the lanes below.
+    GridPane tiles = new GridPane();
+    tiles.getStyleClass().add("tile-grid");
+    for (int column = 0; column < 3; column++) {
+      ColumnConstraints share = new ColumnConstraints();
+      share.setPercentWidth(100.0 / 3);
+      share.setHgrow(Priority.ALWAYS);
+      tiles.getColumnConstraints().add(share);
+    }
+    tiles.addRow(
+        0,
+        backendTile("引擎 API", Glyph.ENGINE, status.engine()),
+        backendTile("Airflow", Glyph.AIRFLOW, status.airflow()),
+        mixTile());
 
     var problemText =
         Bindings.createStringBinding(
@@ -174,16 +183,18 @@ public final class OverviewView implements View {
     Label latency = Controls.label("", "figure");
     Label state = Controls.compactLabel("", "caption");
     var detail = Bindings.createStringBinding(() -> value.getValue().summary(), value);
-    Button details = Controls.details("连接详情", name, detail, dialogs::details);
-    VBox text = new VBox(2, title, latency, state, details);
+    // A quiet glyph in the corner: the tile stays a figure, the words are one click away.
+    Button details = Controls.details("连接详情", name, detail, dialogs::details, "tile-details");
+    details.setContentDisplay(javafx.scene.control.ContentDisplay.GRAPHIC_ONLY);
+    details.setAccessibleText("连接详情");
+    VBox text = new VBox(2, title, latency, state);
     text.setMinWidth(0);
     HBox.setHgrow(text, Priority.ALWAYS);
-    HBox tile = Controls.row(16, ring, text);
-    tile.setPrefWidth(260);
-    tile.setMaxWidth(260);
-    tile.setPrefHeight(140);
+    VBox corner = new VBox(details);
+    HBox tile = Controls.row(16, ring, text, corner);
+    tile.setPrefHeight(112);
+    tile.setMaxWidth(Double.MAX_VALUE);
     tile.getStyleClass().add("tile");
-    HBox.setHgrow(tile, Priority.ALWAYS);
     Runnable show =
         () -> {
           BackendStatus status = value.getValue();
@@ -218,11 +229,9 @@ public final class OverviewView implements View {
     text.setMinWidth(0);
     HBox.setHgrow(text, Priority.ALWAYS);
     HBox tile = Controls.row(16, donut, text);
-    tile.setPrefWidth(260);
-    tile.setMaxWidth(260);
-    tile.setPrefHeight(140);
+    tile.setPrefHeight(112);
+    tile.setMaxWidth(Double.MAX_VALUE);
     tile.getStyleClass().add("tile");
-    HBox.setHgrow(tile, Priority.ALWAYS);
     Runnable show =
         () -> {
           Mix mix = model.mix().get();

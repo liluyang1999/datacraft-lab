@@ -48,16 +48,19 @@
 | 服务 | 连接监测（正常、令牌错误、调度器异常、不可达后退避与恢复、未配置、切换连接时旧的检查不算数）；作业服务（成功、失败结果、运行数已满、等待超时、停止等待会中断请求） | `ConnectionMonitorTest`、`JobServiceTest` | 只需 JDK |
 | 视图模型 | 视图模型对脚本化的后台，界面线程由测试控制的队列代替：切换连接后不留旧数据、预设列表与失败提示、“使用此连接”采用未保存的修改、测试结果不错配、新建中的连接不被清空、日志加载被新的请求取代、先前所选运行的任务不显示、暂停前的轮询不拨回开关、DAG 形状每个只读一次且不显示到别的 DAG 下、总览的结果构成与成功率 | `JobsModelTest`、`SettingsModelTest`、`PipelinesModelTest`、`OverviewModelTest` | 只需 JDK |
 | 存储 | `LocalStore` 在临时目录：首次建库、迁移、拒绝更新的结构、设置往返、预设、缓存保留上限、清除；`SecretVault` 加解密往返与密钥文件权限 | `LocalStoreTest`、`VaultPlatformTest` | SQLite（`sqlite-jdbc` 自带本机库） |
-| 界面 | 整个窗口对脚本化的后台：五个视图都显示数据（两个后台的环为正常，甜甜圈的成功率，每条泳道的运行柱，时间线上的 8 个点与按名字列出的 4 次，作业结果的勾与指标数字，流水线的运行柱与 DAG 图）；总览的 ▷ 打开那条流水线的触发面板，点一根运行柱换成那次运行的图；运行中的作业按钮是转动的圆，视图隐藏时停转、回来再转，结果到达后换成叉；点任务卡打开日志，Esc 关闭；浅色与深色都无 JavaFX 警告；重启后窗口位置、大小、主题与上次的视图恢复；预热后、动效打开时切换视图（50 ms）与主题（100 ms）、滚动 1500 行日志都没有超时的停顿。每个视图存为 `desktop/target/ui-snapshots/*.png` | `MainWindowTest` | JavaFX：Windows 直接运行，Linux CI 用 Xvfb |
+| 界面 | 整个窗口对脚本化的后台：六个视图都显示数据（监控视图含引擎负载、组件心跳、延迟折线、运行中的任务与资源池）（两个后台的环为正常，甜甜圈的成功率，每条泳道的运行柱，时间线上的 8 个点与按名字列出的 4 次，作业结果的勾与指标数字，流水线的运行柱与 DAG 图）；总览的 ▷ 打开那条流水线的触发面板，点一根运行柱换成那次运行的图；运行中的作业按钮是转动的圆，视图隐藏时停转、回来再转，结果到达后换成叉；点任务卡打开日志，Esc 关闭；浅色与深色都无 JavaFX 警告；重启后窗口位置、大小、主题与上次的视图恢复；预热后、动效打开时切换视图（50 ms）与主题（100 ms）、滚动 1500 行日志都没有超时的停顿。每个视图存为 `desktop/target/ui-snapshots/*.png` | `MainWindowTest` | JavaFX：Windows 直接运行，Linux CI 用 Xvfb |
 | 端到端 | 对真实的 `serve-api` 与 Airflow：作业目录、`echo` 中文往返、`csv-profile` 指标、缺参数的失败结果、未知作业、错误令牌；Airflow 登录、健康、版本、三个 DAG 及其形状（与 DAG 文件里的 `chain` 一致）、暂停与恢复、触发 `datacraft_engine_jobs` 并跟踪到成功、任务与日志；整个窗口对真实后台运行作业，流水线视图把最新的运行画成 noop → echo | `EndToEndTest`、`EndToEndWindowTest`（标签 `e2e`） | 运行中的后台，见下文 |
 | 无障碍生命周期 | 两平台检查释放后的查询和操作、活动处理器的异常仍传播；Windows 另测真实控件移除、重新挂载和保留的原生文本范围 | `AccessibilityLifecycleTest` | JavaFX；原生 UIA 三项仅 Windows |
-| 打包 | 按源 jar 校验原生库，拒绝 JavaFX 用户缓存回退；五视图两主题训练 AOT，随后 20 次新建/复用配置启动；父进程单调时钟从调用启动器计到首帧日志被观察，包含观察延迟；确认 AOT 使用、无异常且每次 ≤ 1500 ms | `cicd/desktop/package_desktop.py`；脚本逻辑由 `tests/ci/test_package_desktop.py` 覆盖 | JDK 25 的 jlink 与 jpackage，显示器 |
+| 打包 | 按源 jar 校验原生库，拒绝 JavaFX 用户缓存回退；六视图两主题训练 AOT，随后 20 次新建/复用配置启动；父进程单调时钟从调用启动器计到首帧日志被观察，包含观察延迟；确认 AOT 使用、无异常且每次 ≤ 1500 ms | `cicd/desktop/package_desktop.py`；脚本逻辑由 `tests/ci/test_package_desktop.py` 覆盖 | JDK 25 的 jlink 与 jpackage，显示器 |
+| 安装包 | 默认目录静默安装与卸载登记、启动已安装的应用、运行中拒绝安装、修复、拒绝降级、卸载保留数据目录、自选目录安装与卸载 | `cicd/desktop/verify_install.py`（CI 用机器级安装包，本机用 `--fixture` 每用户变体）；源码契约由 `tests/ci/test_installer.py` 覆盖 | Windows x64、Inno Setup 6 |
+| 实时监控 | 引擎状态与 Airflow 导入错误、资源池、全局任务实例的解析与请求参数；提醒规则（失败先于警告、拒绝数只在同一引擎进程内累计）；延迟统计；可见与最小化时的轮询间隔；切换连接清空 | `LiveClientsTest`、`AlertsTest`、`LatencyStatsTest`、`MonitorModelTest`、`MeterAndSparklineTest` | 无需显示器（`MeterAndSparklineTest` 只做布局） |
+| 单实例 | 同一数据目录的第二次启动唤回第一个，另一个目录互不影响，关闭后释放 | `SingleInstanceTest` | 本机文件系统 |
 
 测试代码在 `tests/jvm/datacraft-desktop/java/`（仓库的测试都在 `tests/` 下）。单元到界面测试由
 `./mvnw -Pdesktop -pl :datacraft-desktop -am verify` 运行；这个可选反应堆同时运行父工程，
 因此包含位于 `tests/jvm/` 下的测试源码格式检查，默认后端反应堆仍不构建桌面。CI 的 `desktop` 矩阵在
 Windows 与 Linux/Xvfb 下运行它，用 `cicd/build/check_test_counts.py --project desktop` 核对实际执行数：
-Linux 至少 180 项，Windows 至少 183 项；后者另测真实控件、本机文本范围与 UIA 属性契约。各自只运行本平台保险库测试，
+Linux 至少 203 项，Windows 至少 206 项；后者另测真实控件、本机文本范围与 UIA 属性契约。各自只运行本平台保险库测试，
 `verify` 不运行 `e2e` 测试。通过时把数目写成公开注解；再运行打包脚本，
 把界面截图、全部启动样本和原生库来源清单保存为带平台名称的构件。
 

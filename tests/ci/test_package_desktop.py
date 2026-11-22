@@ -51,11 +51,15 @@ class InputTests(unittest.TestCase):
             # The argument-file grammar consumes quoted whitespace and escaped slash/quote pairs.
             self.assertEqual(arguments, shlex.split((work / "jpackage.args").read_text(encoding="utf-8")))
 
-    def test_the_version_comes_from_the_jar_name_without_snapshot(self):
-        self.assertEqual("0.1.0", packaging.app_version(Path("datacraft-desktop-0.1.0-SNAPSHOT.jar")))
-        self.assertEqual("1.2", packaging.app_version(Path("datacraft-desktop-1.2.jar")))
-        with self.assertRaises(packaging.Missing):
-            packaging.app_version(Path("datacraft-desktop-${project.version}.jar"))
+    def test_the_version_is_the_jar_names_release_version_and_must_match_the_source(self):
+        self.assertEqual("2.3.4", packaging.app_version(Path("datacraft-desktop-2.3.4.jar")))
+        self.assertEqual("2.3.4", packaging.app_version(Path("datacraft-desktop-2.3.4.jar"), "2.3.4"))
+        with self.assertRaisesRegex(packaging.Failed, "not version 2.3.5"):
+            packaging.app_version(Path("datacraft-desktop-2.3.4.jar"), "2.3.5")
+        for name in ("datacraft-desktop-0.1.0-SNAPSHOT.jar", "datacraft-desktop-1.2.jar",
+                     "datacraft-desktop-${project.version}.jar"):
+            with self.assertRaises(packaging.Missing, msg=name):
+                packaging.app_version(Path(name))
 
     def test_the_build_outputs_are_found_and_the_empty_javafx_placeholders_left_out(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -225,7 +229,7 @@ class CacheTests(unittest.TestCase):
 
     def test_the_launcher_is_told_to_use_the_cache(self):
         with tempfile.TemporaryDirectory() as directory:
-            cfg = Path(directory) / "DataCraft.cfg"
+            cfg = Path(directory) / "DatacraftLab.cfg"
             cfg.write_text(self.CFG, encoding="utf-8")
             packaging.use_cache(cfg)
             text = cfg.read_text(encoding="utf-8")
@@ -234,7 +238,7 @@ class CacheTests(unittest.TestCase):
 
     def test_a_cfg_without_java_options_fails(self):
         with tempfile.TemporaryDirectory() as directory:
-            cfg = Path(directory) / "DataCraft.cfg"
+            cfg = Path(directory) / "DatacraftLab.cfg"
             cfg.write_text("[Application]\n", encoding="utf-8")
             with self.assertRaises(packaging.Failed):
                 packaging.use_cache(cfg)
@@ -242,8 +246,8 @@ class CacheTests(unittest.TestCase):
     def test_the_finished_image_can_be_deleted_by_a_clean_build(self):
         # jpackage copies the launcher read-only; on Windows that stops `mvn clean` from deleting it.
         with tempfile.TemporaryDirectory() as directory:
-            image = Path(directory) / "DataCraft"
-            launcher = touch(image / "DataCraft.exe")
+            image = Path(directory) / "DatacraftLab"
+            launcher = touch(image / "DatacraftLab.exe")
             nested = touch(image / "runtime" / "lib" / "modules")
             for path in (launcher, nested):
                 os.chmod(path, 0o444)

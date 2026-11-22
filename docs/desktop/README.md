@@ -7,15 +7,20 @@
 ## 界面一览
 
 界面以图形与紧凑摘要为主，短说明在悬停提示里；诊断、运行结果和活动全文通过可用键盘打开的详情查看，
-支持滚动、选取和“复制全文”，省略显示不改变原始内容（设计见[界面设计](ui-design.md)）：
+支持滚动、选取和“复制全文”，省略显示不改变原始内容。界面以[界面设计基线](../../design/ui/README.md)为准：
+颜色与刻度来自一份设计令牌，[原型](../../design/ui/index.html)可在浏览器里直接打开，[规格](../../design/ui/SPEC.md)
+说明每个视图与组件。
 
 | 视图 | 看到什么、点什么 |
 | --- | --- |
 | 总览 | 两个后台各一个状态环，最近运行的成功率甜甜圈；每条流水线一条泳道（运行柱，▷ 直接触发）；最近运行的时间线 |
 | 作业 | 按名称或中文说明搜索，按 JVM / Spark / 内置 / 其他筛选；参数表单、运行按钮（等待时转圈）、结果与指标、最近运行的柱 |
 | 流水线 | 泳道与调度开关；点一根运行柱选中那次运行，它的任务画成 DAG 图，点任务卡看日志 |
+| 监控 | 需要关注的提醒（侧栏同时显示数量）；引擎的同时运行数、运行计数与版本，Airflow 各组件的心跳；两个后台的延迟折线与可用率；所有 DAG 正在运行或等待的任务、资源池槽位、DAG 导入错误 |
 | 活动 | 按来源配图标的事件流，可筛选 |
-| 设置 | 连接、主题预览、减少动效、刷新频率与本机数据 |
+| 设置 | 连接、主题预览、减少动效、刷新频率、本机数据，以及“关于”（版本与两个后台的版本） |
+
+同一数据目录只运行一个数艺工坊：再次启动会把已打开的窗口还原并提到最前。
 
 ## 运行
 
@@ -54,10 +59,26 @@
 Airflow `http://127.0.0.1:8080`；引擎令牌是 `deploy/compose/.env` 里的 `DATACRAFT_API_TOKEN`，
 Airflow 用户名与口令是其中的 `AIRFLOW_ADMIN_USERNAME` 与 `AIRFLOW_ADMIN_PASSWORD`。
 
+## 安装包
+
+在 Windows x64 上双击仓库根目录的 `build.bat`（或在控制台运行），得到 `dist/Setup.exe` 与它的 SHA-256；
+需要 JDK 25.0.5 或更新、Python 3.12 或更新与 Inno Setup 6（或用 `DATACRAFT_ISCC` 指向 `ISCC.exe`）。
+`run.bat` 从源码启动开发中的数艺工坊。产品版本只取自根 `pom.xml` 的 `revision`（[版本管理](../versioning.md)）。
+
+安装需要管理员授权，向导为中文。默认位置 `C:\Program Files\DatacraftLab\DatacraftLab.exe`，可以选择其他空文件夹；
+开始菜单、可选的桌面快捷方式与“已安装的应用”中的名称都是“数艺工坊”。再次运行同一版本的安装包是修复；
+较低版本不会覆盖较高版本；数艺工坊运行时安装与卸载都会先请你关闭它。卸载只删除安装目录、快捷方式与登记，
+`~/.datacraft` 中的设置、连接与缓存保留。自动部署可用 `Setup.exe /VERYSILENT /SUPPRESSMSGBOXES /NORESTART /SP-`，
+`/DIR="路径"` 指定位置，`/LOG="路径"` 写安装日志。公开分发所需的代码签名证书尚未配置。
+
+CI 的 build 阶段从 `build.bat` 构建安装包，再完整验证一遍：默认目录安装、启动、运行中拒绝安装、修复、
+拒绝降级、卸载并保留数据目录、自选目录安装与卸载（`cicd/desktop/verify_install.py`）。没有管理员权限时，
+可用每用户的测试变体在本机走同样的流程，见[开发指南](../guides/development.md#desktop-release-buildbat-runbat-and-the-installer-lifecycle)。
+
 ## 打包
 
-`cicd/desktop/package_desktop.py` 把应用做成自带 Java 运行时的应用目录 `desktop/target/dist/DataCraft`
-（Windows 上双击 `DataCraft.exe`），运行时与 AOT 缓存大小随平台及 JDK 改变：
+`cicd/desktop/package_desktop.py` 把应用做成自带 Java 运行时的应用目录 `desktop/target/dist/DatacraftLab`
+（Windows 上双击 `DatacraftLab.exe`），运行时与 AOT 缓存大小随平台及 JDK 改变：`build.bat` 已包含这一步。
 
 ```bash
 ./mvnw -f desktop/pom.xml -B -ntp package
@@ -68,7 +89,7 @@ python3 -B cicd/desktop/package_desktop.py
 ```
 
 脚本用 jdeps 与 jlink 生成精简运行时，用 jpackage 生成应用目录，然后以专用 `--smoke` 训练模式
-生成 JDK 25 的 AOT 缓存（JEP 483/514）；训练过程遍历五视图的浅深主题，再执行 20 次普通缓存启动检查，
+生成 JDK 25 的 AOT 缓存（JEP 483/514）；训练过程遍历六个视图的浅深主题，再执行 20 次普通缓存启动检查，
 包含新建配置及恢复已保存页面。每次均确认 AOT 实际生效，标准错误中的未捕获异常也会让检查失败。
 默认以每次 ≤ 1500 ms 验收，完整样本写到 `desktop/target/package/startup.json`，不丢弃首次启动或慢样本。
 父进程用单调时钟从调用启动器计到观察到首帧日志，包含启动器、JVM 与观察延迟；
@@ -108,7 +129,7 @@ JavaFX 构建含 [版本锁定的无障碍修补](javafx-patch.md)。
 | --- | --- |
 | [章程](charter.md) | 目标、对接的后台、约束、非目标与成功标准 |
 | [架构](architecture.md) | 分层、包结构、线程模型、数据流、本机数据、错误模型、启动顺序、打包 |
-| [界面设计](ui-design.md) | 视觉概念、色彩、字体、布局、组件、动效与文案 |
+| [界面设计基线](../../design/ui/README.md) | 设计令牌、生成的主题、[界面规格](../../design/ui/SPEC.md)与可浏览的[原型](../../design/ui/index.html) |
 | [接口对接](api-integration.md) | 引擎 API 与 Airflow REST API 的请求、认证、错误与轮询 |
 | [流畅度](performance.md) | 预算、实测、手段与回归 |
 | [JavaFX 修补](javafx-patch.md) | 原生无障碍生命周期与属性契约、来源、构建校验与移除条件 |

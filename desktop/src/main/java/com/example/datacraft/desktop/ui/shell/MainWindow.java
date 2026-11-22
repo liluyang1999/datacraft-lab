@@ -7,6 +7,7 @@ import com.example.datacraft.desktop.ui.shell.Navigator.Destination;
 import com.example.datacraft.desktop.ui.theme.ThemeManager;
 import com.example.datacraft.desktop.ui.view.ActivityView;
 import com.example.datacraft.desktop.ui.view.JobsView;
+import com.example.datacraft.desktop.ui.view.MonitorView;
 import com.example.datacraft.desktop.ui.view.OverviewView;
 import com.example.datacraft.desktop.ui.view.PipelinesView;
 import com.example.datacraft.desktop.ui.view.SettingsView;
@@ -14,6 +15,7 @@ import com.example.datacraft.desktop.ui.view.View;
 import com.example.datacraft.desktop.util.Fx;
 import com.example.datacraft.desktop.viewmodel.ActivityModel;
 import com.example.datacraft.desktop.viewmodel.JobsModel;
+import com.example.datacraft.desktop.viewmodel.MonitorModel;
 import com.example.datacraft.desktop.viewmodel.OverviewModel;
 import com.example.datacraft.desktop.viewmodel.PipelinesModel;
 import com.example.datacraft.desktop.viewmodel.SettingsModel;
@@ -47,6 +49,7 @@ public final class MainWindow {
   private final Drawer drawer = new Drawer();
   private final StackPane viewHost = new StackPane();
   private final StatusModel status;
+  private final MonitorModel monitor;
   private final Sidebar sidebar;
   private final TopBar topBar;
   private final Navigator navigator;
@@ -67,6 +70,16 @@ public final class MainWindow {
     this.dialogs = new Dialogs(theme);
     this.toasts = new Toasts(dialogs::details);
     this.status = new StatusModel(context.monitor(), Fx.UI);
+    // Created with the window, not with its view: the sidebar's alert count needs it.
+    this.monitor =
+        new MonitorModel(
+            context.live(),
+            status,
+            context.session(),
+            preferences,
+            context.ticker(),
+            context.clock(),
+            Fx.UI);
     this.navigator = new Navigator(viewHost, this::create);
     this.sidebar =
         new Sidebar(this::go, context.profiles(), context.session(), Fx.UI, toasts::failure);
@@ -78,6 +91,7 @@ public final class MainWindow {
               sidebar.collapsed(!sidebar.collapsed());
               preferences.sidebarCollapsed(sidebar.collapsed());
             });
+    sidebar.badge(Destination.MONITOR, monitor.alertCount());
     sidebar.collapsed(preferences.sidebarCollapsed());
     theme.beforeSwitch(navigator::detachHidden);
 
@@ -117,6 +131,7 @@ public final class MainWindow {
         .addListener(
             (property, before, minimised) -> {
               navigator.windowShown(!minimised);
+              monitor.windowShown(!minimised);
               if (minimised) {
                 context.monitor().pause();
               } else {
@@ -125,6 +140,11 @@ public final class MainWindow {
               }
             });
     go(Destination.of(preferences.lastView()));
+  }
+
+  /** Starts what runs in the background once the first frame is shown: the alert count. */
+  public void startBackground() {
+    monitor.start();
   }
 
   private View create(Destination destination) {
@@ -181,6 +201,14 @@ public final class MainWindow {
                 dialogs);
         yield pipelinesView;
       }
+      case MONITOR ->
+          new MonitorView(
+              monitor,
+              status,
+              context.clock(),
+              this::openPipeline,
+              () -> go(Destination.SETTINGS),
+              dialogs);
       case ACTIVITY ->
           new ActivityView(new ActivityModel(context.activity(), Fx.UI), context.clock(), dialogs);
       case SETTINGS ->
@@ -196,7 +224,8 @@ public final class MainWindow {
                   Fx.UI),
               dialogs,
               toasts,
-              openFolder);
+              openFolder,
+              new SettingsView.About(monitor.engineVersion(), monitor.airflowVersion()));
     };
   }
 
@@ -242,7 +271,7 @@ public final class MainWindow {
   private void keys(Scene scene) {
     Destination[] order = Destination.values();
     KeyCode[] digits = {
-      KeyCode.DIGIT1, KeyCode.DIGIT2, KeyCode.DIGIT3, KeyCode.DIGIT4, KeyCode.DIGIT5
+      KeyCode.DIGIT1, KeyCode.DIGIT2, KeyCode.DIGIT3, KeyCode.DIGIT4, KeyCode.DIGIT5, KeyCode.DIGIT6
     };
     for (int index = 0; index < order.length; index++) {
       Destination destination = order[index];
@@ -341,6 +370,18 @@ public final class MainWindow {
 
   public void show() {
     stage.show();
+  }
+
+  /** A later start asked for this window: restore it if minimised and bring it to the front. */
+  public void activate() {
+    if (stage.isIconified()) {
+      stage.setIconified(false);
+    }
+    if (!stage.isShowing()) {
+      stage.show();
+    }
+    stage.toFront();
+    stage.requestFocus();
   }
 
   public Navigator navigator() {

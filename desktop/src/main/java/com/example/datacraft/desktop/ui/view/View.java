@@ -2,7 +2,7 @@ package com.example.datacraft.desktop.ui.view;
 
 import javafx.scene.Node;
 
-/** One of the five views: created the first time it is opened, then kept. */
+/** One of the six views: created the first time it is opened, then kept. */
 public interface View {
 
   /** The node shown in the content area. */

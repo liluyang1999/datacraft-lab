@@ -33,15 +33,15 @@
 | 包 | 职责 |
 | --- | --- |
 | `desktop` | `Launcher`（`main`：检查运行环境，`--smoke`，开始并行打开本机数据，再启动 JavaFX）与 `DesktopApp`（`Application`：窗口、启动计时、首帧后的工作） |
-| `desktop.app` | `AppContext` 组合根、`AppPaths`（`~/.datacraft` 的位置）、`Preferences`（启动时读入内存的设置，后台写回）、`Logging`（日志文件与格式） |
+| `desktop.app` | `AppContext` 组合根、`AppPaths`（`~/.datacraft` 的位置）、`Preferences`（启动时读入内存的设置，后台写回）、`Logging`（日志文件与格式）、`BuildInfo`（产品名与构建写入的版本）、`SingleInstance`（每个数据目录一个进程：锁、唤回窗口与安装程序检测的互斥体） |
 | `desktop.api` | `HttpTransport`、`EngineClient`、`AirflowClient`、模型记录（`EngineModels`、`AirflowModels`）、`RunTone`（五类状态）、`ApiError` 与 `ApiException` |
 | `desktop.store` | `LocalStore`（连接、迁移、写入串行化）、`SettingsRepository`、`ProfileRepository` 与 `Profile`、`PresetRepository`、`RecentRunRepository`、`ActivityRepository`、`SecretVault`（`DpapiVault`、`FileKeyVault`） |
-| `desktop.service` | `Session`（当前连接与两个客户端）、`ProfileService`（连接配置、测试连接、内存中的秘密）、`ConnectionMonitor` 与 `BackendStatus`、`Poller` 与 `Ticker`（含失败退避）、`JobService`、`PipelineService`、`JobCatalog`（已知参数）、`ActivityLog`、`Messages`（出错时的说明） |
-| `desktop.viewmodel` | `StatusModel`、`OverviewModel`、`JobsModel`、`PipelinesModel`、`ActivityModel`、`SettingsModel`；`ParamRow`（可观察参数行）、`ParamForm`（共享参数构造与收集规则）、`DagRow`、`Labels`（状态与类型的中文名）、`Visibility` |
-| `desktop.ui.shell` | `MainWindow`、`Navigator`（视图切换与懒加载）、`Sidebar`、`TopBar`、`Toasts`、`Drawer`（侧滑面板）、`Dialogs`、`AppIcon` |
-| `desktop.ui.view` | 五个视图，各自只做布局与绑定；`Segments`（运行柱的高度、提示与选择键） |
-| `desktop.ui.component` | 图形：`StatusRing`（状态环）、`Donut`（结果构成）、`RunBars`（运行柱）、`TimeStrip`（最近运行的时间线）、`TaskGraph` 与 `GraphLayout`（DAG 图及其纯函数布局）、`RunMark`（勾与叉）、`BusyRing`（等待中的转圈）；日志：`LogPager`（每页 100 行、末页跟随、关闭释放监听）；表单与布局：`ParamEditor`、`EmptyState`、`Rows`（短列表的就地更新）、`Controls`（含提示用的 ⓘ 与标签片）、`Icons`（`Glyph` 枚举的线条图标）、`Tones` |
-| `desktop.ui.theme` | `ThemeManager`（浅色、深色、跟随系统）、`Fonts`（中文用系统字体，数字用内置 Barlow）；样式表 `base.css`、`light.css`、`dark.css` |
+| `desktop.service` | `Session`（当前连接与两个客户端）、`ProfileService`（连接配置、测试连接、内存中的秘密）、`ConnectionMonitor` 与 `BackendStatus`、`Poller` 与 `Ticker`（含失败退避）、`JobService`、`PipelineService`、`MonitorService`（监控的实时数据：引擎状态、运行中的任务、资源池、导入错误，各部分独立成败）、`JobCatalog`（已知参数）、`ActivityLog`、`Messages`（出错时的说明） |
+| `desktop.viewmodel` | `StatusModel`、`OverviewModel`、`JobsModel`、`PipelinesModel`、`MonitorModel`、`ActivityModel`、`SettingsModel`；`Alerts`（由后台状态与实时数据推出的提醒，纯函数）、`LatencyStats`（延迟与可用性）；`ParamRow`（可观察参数行）、`ParamForm`（共享参数构造与收集规则）、`DagRow`、`Labels`（状态与类型的中文名）、`Visibility` |
+| `desktop.ui.shell` | `MainWindow`、`Navigator`（视图切换与懒加载）、`Sidebar`（含提醒计数）、`BrandMark`（侧栏标志）、`TopBar`、`Toasts`、`Drawer`（侧滑面板）、`Dialogs`、`AppIcon` |
+| `desktop.ui.view` | 六个视图（含 `MonitorView`），各自只做布局与绑定；`Segments`（运行柱的高度、提示与选择键） |
+| `desktop.ui.component` | 图形：`StatusRing`（状态环）、`Donut`（结果构成）、`RunBars`（运行柱）、`TimeStrip`（最近运行的时间线）、`TaskGraph` 与 `GraphLayout`（DAG 图及其纯函数布局）、`RunMark`（勾与叉）、`BusyRing`（等待中的转圈）、`Sparkline`（延迟折线）、`Meter`（容量格与容量条）；日志：`LogPager`（每页 100 行、末页跟随、关闭释放监听）；表单与布局：`ParamEditor`、`EmptyState`、`Rows`（短列表的就地更新）、`Controls`（含提示用的 ⓘ 与标签片）、`Icons`（`Glyph` 枚举的线条图标）、`Tones` |
+| `desktop.ui.theme` | `ThemeManager`（浅色、深色、跟随系统）、`Fonts`（中文用系统字体，数字用内置 Barlow）；样式表 `base.css`，以及由 `design/ui/build.py` 从设计令牌生成的 `light.css`、`dark.css` |
 | `desktop.ui` | `Motion`（全部动效与“减少动效”）、`FxWatchdog`（FX 线程停顿监测） |
 | `desktop.util` | `Fx`（FX 线程的执行器）、`Latest`（只移交最新值）、`Lists`（按主键就地更新）、`Maps`（保序、可含 null 的不可变副本）、`Formats` |
 
@@ -126,6 +126,7 @@ Rows 只更新变化的流水线泳道
 | `datacraft.db` | SQLite：设置、连接配置、参数预设、最近运行（缓存）、活动记录（缓存） |
 | `vault.key` | 非 Windows 系统上加密秘密用的密钥，权限只对当前用户开放（Windows 使用 DPAPI，没有这个文件） |
 | `logs/desktop-0.log` | 应用日志（`-0` 最新，单个 1 MB、保留 3 个），含启动各阶段的时间，不含秘密 |
+| `instance.lock`、`activate` | 单实例：运行中的应用锁住前者；再次启动时写后者请它把窗口提到最前，然后退出 |
 | `tmp/` | JDK 的 NIO 管道在 Windows 上创建的 AF_UNIX 套接字（随建随删）。有的机器上系统 TEMP 目录放不下这类文件，HTTP 客户端会因此无法创建，所以应用把 `jdk.net.unixdomain.tmpdir` 指到这里 |
 
 可用环境变量 `DATACRAFT_DESKTOP_HOME` 改到其他目录（测试与便携使用）。表结构由 `PRAGMA user_version`
@@ -171,13 +172,31 @@ HTTP 客户端及 TLS 仅在首次请求时由后台虚拟线程创建，多个�
 
 `cicd/desktop/package_desktop.py` 在 `package` 之后生成应用目录：jdeps 找出应用与依赖用到的 JDK 模块，
 jlink 生成只含这些模块与本平台 JavaFX 模块的运行时，jpackage 把应用 jar、依赖与运行时做成
-`DataCraft`（Windows 上是 `DataCraft.exe`）。JavaFX 模块先经过版本与校验和锁定的
+`DatacraftLab`（Windows 上是 `DatacraftLab.exe`），版本取自唯一版本来源（[版本管理](../versioning.md)）。JavaFX 模块先经过版本与校验和锁定的
 [无障碍生命周期与 Windows 属性契约修补](javafx-patch.md)，不修改依赖缓存。
 平台 jar 内的原生库还需独立安装到 JavaFX 的 JRT 加载位置：Windows `runtime/bin/javafx`，
 Linux `lib/runtime/lib`。jlink 只保留 jar 资源，不会完成这一步；缺失时 JavaFX 会解压和校验
 用户缓存。脚本拒绝越界条目、重复库和运行时文件覆盖，jpackage 复制后按源 jar 的 SHA-256
 再次验证；启动门禁拒绝缓存回退，确保交付物自身完整。
-随后以隔离的 `--smoke` 训练模式遍历五视图及两种主题，生成 AOT 缓存
+随后以隔离的 `--smoke` 训练模式遍历六视图及两种主题，生成 AOT 缓存
 （`-XX:AOTCacheOutput`），把 `-XX:AOTCache=$APPDIR/datacraft.aot` 写进启动器的配置。
 最后执行 10 次新配置和 10 次复用配置启动，后者覆盖不同已保存页面和主题；每次都确认 AOT 类实际生效，
-任一次超过 1500 ms 即失败。CI 的 `desktop` 矩阵在 Windows 与 Linux（Xvfb）执行同样的步骤。
+任一次超过 1500 ms 即失败。CI 的 build 阶段在 Linux（Xvfb，`app-image`）与 Windows（`build.bat` 内）执行同样的步骤。
+
+Windows 安装包由 `build.bat` 生成：`cicd/desktop/build_installer.py` 用 Inno Setup 把应用目录编译为
+`dist/Setup.exe`（[deploy/windows/installer.iss](../../deploy/windows/installer.iss)）。机器级安装，默认位置
+`C:\Program Files\DatacraftLab`，开始菜单与“已安装的应用”中的名称是“数艺工坊”；再次运行同一版本是修复，
+较低版本拒绝覆盖较高版本，应用运行时（它持有 `SingleInstance.MUTEX`）安装与卸载都会提示先关闭。
+安装与卸载只写安装目录、快捷方式与卸载登记，`~/.datacraft` 保留。生命周期检查见
+[开发指南](../guides/development.md#desktop-release-buildbat-runbat-and-the-installer-lifecycle)。
+
+## 监控与提醒
+
+`MonitorModel` 随窗口创建，而不是随视图：侧栏的提醒计数需要它。视图在屏幕上时每 5 s 读取一次（节能 15 s），
+离开时每 60 s，窗口最小化时停止；一次读取由 `MonitorService.live()` 并行发出四个请求（引擎 `/status`、
+Airflow 的任务实例、资源池、导入错误），各部分独立成功或失败，失败只在该部分标注原因并保留上次的值。
+`ConnectionMonitor` 另外记录每个后台最近 120 次检查（时间、状态、延迟），供延迟折线与可用性；
+Airflow 最近一次健康检查的组件心跳也随快照交付。`Alerts.of` 是纯函数：输入两个后台状态、最近一次实时数据
+与最近 10 分钟内被拒绝的运行数，输出按失败、警告排序的提醒；拒绝数只在同一个引擎进程内（`startedAt` 相同）
+按计数器的增量累计，引擎重启后从零开始。Airflow 版本每个连接读取一次，失败时下次读取重试；
+切换连接会清除全部实时数据、提醒与版本，旧连接的迟到结果按代次丢弃。

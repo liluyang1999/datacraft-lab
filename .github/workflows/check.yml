@@ -1,0 +1,85 @@
+# Stage 1, check: the fastest and cheapest gates, so a failure here spends nothing on the tests or
+# the builds. Called only by cicd.yml; it has no trigger of its own.
+#   security  every action pinned to a commit, OSV advisories for every pinned version, the
+#             Temurin pin against Adoptium's newest release
+#   lint      ShellCheck, Python types, the design tokens and the themes generated from them, the
+#             single product version, and the Compose and Swarm files
+# Actions are pinned to full commit SHAs (the comment names the release) and runners to an explicit
+# image, so neither a moved tag nor an ubuntu-latest migration changes CI without a commit here.
+name: Check
+
+on:
+  workflow_call:
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    shell: python3 -B cicd/step.py bash -e {0}
+
+jobs:
+  security:
+    name: security (pins, advisories, Temurin)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Actions are pinned to full commit SHAs
+        run: bash cicd/lint/check-actions-pinned.sh
+
+      - name: Ask OSV about every pinned dependency and action
+        run: python3 -B cicd/security/check_advisories.py
+
+      # The Java of every image: a newer Temurin release or a wrong checksum fails the run. It runs
+      # whatever the OSV step found, so one stale pin does not hide the other.
+      - name: Ask Adoptium whether the pinned Temurin release is the newest
+        if: success() || failure()
+        run: python3 -B cicd/security/check_temurin.py
+
+  lint:
+    name: lint (shell, types, design, version, stacks)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: "3.13"
+
+      - name: Set up Node.js
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: "24"
+
+      - name: The product version has one valid source
+        run: python3 -B cicd/release/version.py
+
+      # The desktop themes and the prototype's tokens are generated from design/ui/tokens.json;
+      # base.css stays on its type, radius and spacing scales.
+      - name: Design tokens, generated themes and their scales agree
+        run: python3 -B design/ui/build.py --check
+
+      # A fixed ShellCheck release, not the one the runner image happens to ship.
+      - name: Install the pinned ShellCheck
+        run: bash cicd/lint/install-shellcheck.sh
+
+      - name: Shell syntax and ShellCheck
+        run: bash cicd/lint/check-shell-scripts.sh
+
+      # pyrightconfig.json analyses everything as Linux / Python 3.12; the Airflow-only imports are
+      # not reported here and are covered by the airflow test job, which installs Airflow.
+      - name: Python type check (pyright, zero diagnostics)
+        run: npx --yes pyright@1.1.414 --warnings
+
+      # Interpolates both stack files with test-only secrets and checks that each fails closed when
+      # a required secret is missing. Nothing is built or deployed.
+      - name: Validate the Compose file and the Swarm stack
+        run: bash cicd/stacks/check-stack-files.sh

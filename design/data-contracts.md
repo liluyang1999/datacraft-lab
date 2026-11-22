@@ -459,16 +459,17 @@ SFTP:
 | Request | Response |
 | --- | --- |
 | `GET` or `HEAD /health` | 200 `{"status":"UP","service":"datacraft-api"}` |
+| `GET` or `HEAD /status` | 200 `{"status":"UP","service":"datacraft-api","version":...,"startedAt":...,"uptimeMillis":...,"jobs":...,"maxConcurrentRuns":...,"runs":{"active","started","succeeded","failed","rejected"},"activeRuns":[{"job","startedAt","elapsedMillis"}]}`; the version is the product version, `startedAt` an ISO-8601 instant, the counters count since the server started |
 | `GET` or `HEAD /jobs` | 200 `{"jobs":[{"name":...,"description":...}]}` |
 | `POST /jobs/{name}/runs`, job succeeded | 200 with the result `{"jobName","status","message","metrics"}` |
 | `POST /jobs/{name}/runs`, job failed | 500 with the same result body, including parameter rejections such as "Missing required parameter: input" and a missing Spark runtime |
-| Any request under `/jobs` without the configured token | 401 `{"error":"unauthorized"}` with `WWW-Authenticate: Bearer realm="datacraft-api"` |
+| Any request under `/jobs` or `/status` without the configured token | 401 `{"error":"unauthorized"}` with `WWW-Authenticate: Bearer realm="datacraft-api"` |
 | Run request while `--max-concurrent-runs` runs are in progress, or while the server is closing | 503 `{"error":"busy"}` with `Retry-After: 1`; nothing runs |
 | Malformed run request | 400 `{"error":"invalid_request"}`: a missing, blank or nested job path, an unknown `lifecycle`, percent-encoded bytes that are not valid UTF-8, or raw non-ASCII bytes in the run path or query |
 | Run request with an `Origin` header | 403 `{"error":"cross_origin_forbidden"}`, whatever the value (`null` included) |
 | Unknown job | 404 `{"error":"unknown_job"}` |
 | Unknown route, e.g. `/`, `/healthz`, `/api/...` | 404 `{"error":"not_found"}` |
-| Other method | 405 `{"error":"method_not_allowed"}` with `Allow: GET, HEAD` (`/health`, `/jobs`) or `Allow: POST` (runs) |
+| Other method | 405 `{"error":"method_not_allowed"}` with `Allow: GET, HEAD` (`/health`, `/status`, `/jobs`) or `Allow: POST` (runs) |
 | Unexpected handler failure | 500 `{"error":"internal_error"}`; a `RuntimeException` is logged at `ERROR` as "Request <METHOD> <raw path> failed" |
 
 A run request is checked in this order: token (401), method (405), `Origin` (403), job path, query
@@ -490,7 +491,13 @@ with "Invalid DATACRAFT_API_TOKEN: API token must be 32 to 512 characters from A
   the token learns nothing about jobs, methods or parameters. The server routes by string prefix,
   so a path that merely begins with `/jobs`, such as `/jobsx`, is treated the same way: 401
   without the token, 404 `not_found` with it.
-- `/health` and unknown routes outside `/jobs` need no token: health checks carry none.
+- `/status` needs the token too, before its path and method are checked: it names how many jobs
+  the catalogue has and how busy the server is. Its `activeRuns` list job names and start times
+  only, never parameters, which may hold paths. A run is counted as started when it takes its place,
+  as succeeded or failed when its job returns (a thrown `Error` counts as failed), and as rejected
+  when it gets the 503.
+- `/health` and unknown routes outside `/jobs` and `/status` need no token: health checks carry
+  none.
 - The server compares SHA-256 digests of the presented and the configured token, so the comparison
   takes the same time whatever was presented, and it keeps the digest rather than the token.
   Neither is logged; `EngineHttpServerConfig.toString()` prints `<redacted>`.
@@ -504,8 +511,8 @@ the connections it already has during its 8 s grace period, and a run started th
 off. A run occupies
 its place from the capacity check until its job returns, whether it succeeds, fails or throws, so
 runs that wait inside a job (a Spark job for the session, `csv-profile` for its turn) count too
-and the number of waiting requests stays bounded. `GET /jobs`, `/health` and requests rejected
-before the capacity check take no place.
+and the number of waiting requests stays bounded. `GET /jobs`, `/status`, `/health` and requests
+rejected before the capacity check take no place.
 
 Query keys and values must be percent-encoded UTF-8; `+` in the query decodes to a space. For
 example, against the port that Compose publishes on loopback:
@@ -564,4 +571,4 @@ in CI's `dags` job (see [CI gates](build-and-quality.md#ci-gates)).
 | HTTP status contract, token and run limit | [`EngineHttpServerTest`](../tests/jvm/datacraft-api/java/com/example/datacraft/api/EngineHttpServerTest.java), [`EngineHttpServerConfigTest`](../tests/jvm/datacraft-api/java/com/example/datacraft/api/EngineHttpServerConfigTest.java) |
 | Airflow data paths, host-key guard and task wiring | [`tests/orchestration/test_dags.py`](../tests/orchestration/test_dags.py), [`tests/smoke/airflow_runtime_smoke.py`](../tests/smoke/airflow_runtime_smoke.py) |
 | API token, port and mount checks of `deployment_env.py` | [`tests/deploy/test_deployment_env.py`](../tests/deploy/test_deployment_env.py) |
-| Exit codes and results of the shaded jar | [`cicd/build/smoke-cli-jar.sh`](../cicd/build/smoke-cli-jar.sh) and [`cicd/build/check-cli-exit-codes.sh`](../cicd/build/check-cli-exit-codes.sh), run by the `build` job of [`ci.yml`](../.github/workflows/ci.yml) |
+| Exit codes and results of the shaded jar | [`cicd/build/smoke-cli-jar.sh`](../cicd/build/smoke-cli-jar.sh) and [`cicd/build/check-cli-exit-codes.sh`](../cicd/build/check-cli-exit-codes.sh), run by the `backend` job of [`test.yml`](../.github/workflows/test.yml) |

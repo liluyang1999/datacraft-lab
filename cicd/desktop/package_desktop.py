@@ -5,7 +5,7 @@ newer) on PATH or in JAVA_HOME:
 
 1. jdeps lists the JDK modules the app and its libraries use; jlink builds a trimmed runtime
    from them plus the JavaFX modules of this platform (desktop/target/javafx).
-2. jpackage builds the app image `desktop/target/dist/DataCraft` around that runtime, with the
+2. jpackage builds the app image `desktop/target/dist/DatacraftLab` around that runtime, with the
    app jar and its libraries on the class path and the icon drawn here (no image file is kept).
    JavaFX native libraries are installed at its JRT loader location and verified after copying;
    packaged starts must never fall back to extracting them into a user cache.
@@ -43,7 +43,12 @@ import statistics
 import zipfile
 import zlib
 
-NAME = "DataCraft"
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "release"))
+import version as version_source  # noqa: E402  (the single version source, cicd/release)
+
+NAME = "DatacraftLab"
+# What a person sees: the launcher's file description and company in its version resource.
+PRODUCT = "数艺工坊"
 MAIN_CLASS = "com.example.datacraft.desktop.Launcher"
 # The console holds bounded lists and logs, not datasets. Do not size its initial heap from the
 # host's RAM: on a developer workstation that can commit hundreds of unused megabytes at startup.
@@ -190,11 +195,18 @@ def run(command, env=None, timeout=600, diagnostics=False, aot_training=False, c
     return output if diagnostics else completed.stdout
 
 
-def app_version(app_jar):
-    """The version in the app jar's name, without -SNAPSHOT: jpackage wants numbers only."""
-    match = re.fullmatch(r"datacraft-desktop-(\d+(?:\.\d+){0,2})(?:-SNAPSHOT)?\.jar", app_jar.name)
+def app_version(app_jar, expected=None):
+    """The release version in the app jar's name, MAJOR.MINOR.PATCH as jpackage and Windows want.
+
+    With `expected` (the single version source, cicd/release/version.py) a jar of another version
+    is refused: it is a stale build output, not what the repository describes.
+    """
+    match = re.fullmatch(r"datacraft-desktop-(\d+\.\d+\.\d+)\.jar", app_jar.name)
     if match is None:
-        raise Missing(f"{app_jar.name} does not carry a numeric version")
+        raise Missing(f"{app_jar.name} does not carry a MAJOR.MINOR.PATCH release version")
+    if expected is not None and match.group(1) != expected:
+        raise Failed(f"{app_jar.name} is not version {expected} of the version source: "
+                     "run ./mvnw -f desktop/pom.xml package again")
     return match.group(1)
 
 
@@ -449,8 +461,8 @@ def smoke(launcher, work, extra_options=None, *, home=None, require_aot=False):
     text = log.read_text(encoding="utf-8") if log.is_file() else ""
     if BAD_DIAGNOSTIC.search(text):
         raise Failed(f"the app logged a start-up error or warning:\n{text}")
-    if training and "AOT training completed: all five views in both themes" not in text:
-        raise Failed("the AOT training did not visit all five views in both themes")
+    if training and "AOT training completed: all six views in both themes" not in text:
+        raise Failed("the AOT training did not visit all six views in both themes")
     match = STARTUP_LINE.search(text)
     if match is None:
         raise Failed(f"the app ran but logged no first frame:\n{text}")
@@ -561,7 +573,7 @@ def package(root, skip_aot, startup_samples=10, startup_budget_ms=1500):
     app_jar, libraries, javafx = build_inputs(target)
     verify_javafx_patch(javafx)
     jdeps, jlink, jpackage = tool("jdeps"), tool("jlink"), tool("jpackage")
-    version = app_version(app_jar)
+    version = app_version(app_jar, version_source.product_version(root))
     work = target / "package"
     dist = target / "dist"
     remove(work)
@@ -580,7 +592,7 @@ def package(root, skip_aot, startup_samples=10, startup_budget_ms=1500):
 
     icon = write_icon(work)
     command = [jpackage, "--type", "app-image", "--name", NAME, "--app-version", version,
-               "--vendor", "datacraft-lab", "--description", "数艺工坊",
+               "--vendor", PRODUCT, "--description", PRODUCT, "--copyright", "datacraft-lab",
                "--input", str(work / "input"), "--main-jar", app_jar.name, "--main-class", MAIN_CLASS,
                "--runtime-image", str(work / "runtime"), "--icon", str(icon), "--dest", str(dist)]
     for option in jvm_options():

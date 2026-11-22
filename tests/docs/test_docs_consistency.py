@@ -32,7 +32,7 @@ DOC_DIRECTORIES = ("docs/", "design/")
 INDEX = "docs/README.md"
 # History: it may name moved paths and renamed properties.
 CHANGELOG = "docs/CHANGELOG.md"
-CI_WORKFLOW = ".github/workflows/ci.yml"
+CI_WORKFLOW = ".github/workflows/test.yml"
 # The dags job installs Airflow through this script, which pins it the way the Airflow image does.
 CI_AIRFLOW_INSTALL = "cicd/airflow/install-airflow.sh"
 
@@ -537,13 +537,12 @@ class DocsConsistencyTests(unittest.TestCase):
         self.assertEqual([], offenders, f"pom.xml java.version is {java_version}")
 
     def test_cli_usage_header_names_the_project_version(self):
-        # The header is a literal in the parser; nothing else ties it to the POM at a version bump.
+        # The header reads the version the build filtered into datacraft-common, so a version
+        # change needs no edit here (tests/ci/test_versioning.py covers the other consumers).
         parser = read("modules/interfaces/datacraft-cli/src/main/scala/com/example/datacraft/cli/"
                       "CliParser.scala")
-        header = re.search(r'\bhead\("datacraft-lab",\s*"([^"]+)"\)', parser)
-        if header is None:
-            self.fail('CliParser.scala must declare head("datacraft-lab", "<version>")')
-        self.assertEqual(pom().findtext("{*}version"), header.group(1))
+        self.assertIn("head(AppInfo.DEFAULT_APP_NAME, AppInfo.version())", parser)
+        self.assertEqual("${revision}", pom().findtext("{*}version"))
 
     def test_no_workstation_jdk_path(self):
         offenders = []
@@ -611,10 +610,10 @@ class DocsConsistencyTests(unittest.TestCase):
                 self.assertEqual(expected, {module: (first, second) for module, first, second in rows})
 
     def test_dags_job_constraints_follow_its_python(self):
-        job = "\n".join(workflow_job(read(CI_WORKFLOW), "dags"))
-        self.assertTrue(job, f"{CI_WORKFLOW} has no dags job")
-        self.assertTrue(SETUP_PYTHON.findall(job), "the dags job sets up no literal python-version")
-        self.assertIn(CI_AIRFLOW_INSTALL, job, "the dags job must install Airflow with the script")
+        job = "\n".join(workflow_job(read(CI_WORKFLOW), "airflow"))
+        self.assertTrue(job, f"{CI_WORKFLOW} has no airflow job")
+        self.assertTrue(SETUP_PYTHON.findall(job), "the airflow job sets up no literal python-version")
+        self.assertIn(CI_AIRFLOW_INSTALL, job, "the airflow job must install Airflow with the script")
         # The constraints file must match the interpreter that installs Airflow. The script derives
         # the Python version, so a fixed constraints-3.NN.txt in the job or the script could
         # disagree with the job's setup-python version.

@@ -1,0 +1,59 @@
+# Stage 4, deploy: called only by cicd.yml, and only when an operator runs CI/CD by hand on main and
+# enters the product version. Pushes, pull requests and schedules never deploy. The entry's
+# deploy-request job checked the branch, the version and the tag before anything else ran; after
+# check, test and build passed on the same commit, this checks the built version again and
+# publishes.
+#   publish  PLACEHOLDER: the publication target is not decided yet. It summarises the installer
+#            and its checksum and writes nothing anywhere, tags nothing. When a target is chosen
+#            (a GitHub Release, object storage, an internal share), replace the step, grant this job
+#            the least permissions it needs, give the `release` environment reviewers in the
+#            repository settings, and create the tag v<version>.
+name: Deploy
+
+on:
+  workflow_call:
+    inputs:
+      version:
+        description: The version the operator confirmed against the single version source.
+        type: string
+        required: true
+      packaged-version:
+        description: The version the verified installer carries.
+        type: string
+        required: true
+      artifact:
+        description: The name of the uploaded installer artifact.
+        type: string
+        required: true
+      sha256:
+        description: The SHA-256 of the verified dist/Setup.exe.
+        type: string
+        required: true
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    shell: python3 -B cicd/step.py bash -e {0}
+
+jobs:
+  publish:
+    name: publish (placeholder)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    environment: release
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Check the branch and the built version, then summarise (nothing is published)
+        env:
+          REF: ${{ github.ref }}
+          SHA: ${{ github.sha }}
+          REQUESTED: ${{ inputs.version }}
+          PACKAGED: ${{ inputs.packaged-version }}
+          ARTIFACT: ${{ inputs.artifact }}
+          SHA256: ${{ inputs.sha256 }}
+        run: python3 -B cicd/release/deploy.py publish

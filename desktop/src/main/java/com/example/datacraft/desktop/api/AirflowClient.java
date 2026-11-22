@@ -1,10 +1,13 @@
 package com.example.datacraft.desktop.api;
 
+import com.example.datacraft.desktop.api.AirflowModels.ActiveTask;
 import com.example.datacraft.desktop.api.AirflowModels.Component;
 import com.example.datacraft.desktop.api.AirflowModels.Dag;
 import com.example.datacraft.desktop.api.AirflowModels.DagRun;
 import com.example.datacraft.desktop.api.AirflowModels.Health;
+import com.example.datacraft.desktop.api.AirflowModels.ImportError;
 import com.example.datacraft.desktop.api.AirflowModels.LogChunk;
+import com.example.datacraft.desktop.api.AirflowModels.Pool;
 import com.example.datacraft.desktop.api.AirflowModels.Task;
 import com.example.datacraft.desktop.api.AirflowModels.TaskInstance;
 import com.fasterxml.jackson.core.JsonProcessingException;
@@ -37,6 +40,21 @@ import java.util.function.Function;
 public final class AirflowClient {
 
   static final Duration RENEW_BEFORE = Duration.ofSeconds(60);
+
+  /** At most this many import errors, pools or live task instances per request. */
+  public static final int LIVE_LIMIT = 50;
+
+  /** The task states that count as running or waiting now. */
+  static final List<String> ACTIVE_STATES =
+      List.of(
+          "running",
+          "queued",
+          "scheduled",
+          "deferred",
+          "up_for_retry",
+          "up_for_reschedule",
+          "restarting");
+
   private static final TypeReference<LinkedHashMap<String, Object>> MAP = new TypeReference<>() {};
   // Thread-safe once configured; building a mapper per run would cost milliseconds each.
   private static final com.fasterxml.jackson.databind.ObjectMapper CONF_READER =
@@ -249,6 +267,89 @@ public final class AirflowClient {
                     text(task, "operator_name").isEmpty()
                         ? text(task, "operator")
                         : text(task, "operator_name")));
+          }
+          return List.copyOf(tasks);
+        });
+  }
+
+  /** The DAG files that fail to parse, newest first. */
+  public CompletableFuture<List<ImportError>> importErrors() {
+    return authorized(
+        "GET",
+        "/api/v2/importErrors?limit=" + LIVE_LIMIT + "&order_by=-timestamp",
+        null,
+        body -> {
+          List<ImportError> errors = new ArrayList<>();
+          for (JsonNode error : array(body, "import_errors")) {
+            errors.add(
+                new ImportError(
+                    error.path("import_error_id").asLong(0),
+                    text(error, "filename"),
+                    instant(error, "timestamp"),
+                    text(error, "stack_trace")));
+          }
+          return List.copyOf(errors);
+        });
+  }
+
+  /** Every pool with its slot counts. */
+  public CompletableFuture<List<Pool>> pools() {
+    return authorized(
+        "GET",
+        "/api/v2/pools?limit=" + LIVE_LIMIT + "&order_by=name",
+        null,
+        body -> {
+          List<Pool> pools = new ArrayList<>();
+          for (JsonNode pool : array(body, "pools")) {
+            pools.add(
+                new Pool(
+                    text(pool, "name"),
+                    pool.path("slots").asInt(0),
+                    pool.path("running_slots").asInt(0),
+                    pool.path("queued_slots").asInt(0),
+                    pool.path("scheduled_slots").asInt(0),
+                    pool.path("deferred_slots").asInt(0),
+                    pool.path("open_slots").asInt(0)));
+          }
+          return List.copyOf(pools);
+        });
+  }
+
+  /**
+   * The task instances of every DAG that run or wait now (running, queued, scheduled, deferred, up
+   * for retry or reschedule), most recently started first, at most {@link #LIVE_LIMIT}.
+   */
+  public CompletableFuture<List<ActiveTask>> activeTasks() {
+    StringBuilder path =
+        new StringBuilder("/api/v2/dags/~/dagRuns/~/taskInstances?limit=")
+            .append(LIVE_LIMIT)
+            .append("&order_by=-start_date");
+    for (String state : ACTIVE_STATES) {
+      path.append("&state=").append(state);
+    }
+    return authorized(
+        "GET",
+        path.toString(),
+        null,
+        body -> {
+          List<ActiveTask> tasks = new ArrayList<>();
+          for (JsonNode task : array(body, "task_instances")) {
+            String taskId = task.path("task_id").asText("");
+            if (taskId.isEmpty()) {
+              continue;
+            }
+            tasks.add(
+                new ActiveTask(
+                    text(task, "dag_id"),
+                    text(task, "dag_run_id"),
+                    taskId,
+                    task.path("task_display_name").asText(taskId),
+                    task.path("map_index").asInt(-1),
+                    text(task, "state"),
+                    task.path("try_number").asInt(0),
+                    task.path("max_tries").asInt(0),
+                    instant(task, "start_date"),
+                    instant(task, "queued_when")));
           }
           return List.copyOf(tasks);
         });

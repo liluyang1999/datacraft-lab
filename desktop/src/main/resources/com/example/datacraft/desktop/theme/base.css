@@ -1,7 +1,9 @@
 /*
- * 数艺工坊 base stylesheet. Colours come from the theme file (light.css or dark.css) as looked-up
- * colours; this file holds shapes, spacing and type. Spacing is in multiples of 4, radii are 10
- * (panels), 6 (inputs and buttons) and round (status pills). Shadows only on floating layers.
+ * 数艺工坊 base stylesheet. Colours come from the theme files (light.css, dark.css) as looked-up
+ * colours, which design/ui/build.py generates from design/ui/tokens.json; this file holds shapes,
+ * spacing and type, on the scales of the same tokens: font sizes 12 / 13 / 15 / 18 / 20 / 24 / 28,
+ * radii 4 (marks), 6 (controls), 8 (rows), 10 (cards), 12 (tiles) and round (pills), spacing on a
+ * 2 px grid with a 4 px rhythm. Shadows only on floating layers. `build.py --check` enforces this.
  */
 
 .root {
@@ -14,7 +16,7 @@
     -fx-text-fill: -dc-text;
 }
 
-/* ---------- type scale: 12 / 13 / 15 / 20 / 28 ---------- */
+/* ---------- type scale: 12 / 13 / 15 / 18 / 20 / 24 / 28 ---------- */
 
 .caption {
     -fx-font-size: 12px;
@@ -65,14 +67,32 @@
 
 .wordmark {
     -fx-padding: 0 20 20 20;
-    -fx-spacing: 2;
+    -fx-spacing: 10;
+    -fx-alignment: center-left;
+}
+
+.wordmark-text {
+    -fx-spacing: 0;
 }
 
 .wordmark-name {
-    -fx-font-size: 17px;
+    -fx-font-size: 18px;
     -fx-font-weight: 600;
     -fx-text-fill: -dc-side-text-active;
 }
+
+.sidebar.collapsed .wordmark {
+    -fx-padding: 0 0 20 16;
+}
+
+.brand-plate {
+    -fx-fill: -dc-side-active;
+    -fx-stroke: -dc-side-line;
+}
+
+.brand-bar.success { -fx-fill: -dc-success; }
+.brand-bar.running { -fx-fill: -dc-side-mark; }
+.brand-bar.light { -fx-fill: -dc-side-text-active; }
 
 .wordmark-latin {
     -fx-font-family: "Barlow";
@@ -81,11 +101,12 @@
     -fx-text-fill: -dc-side-text;
 }
 
+/* A pill flush with the plate's left edge: the selected one carries the cyan mark there. */
 .nav-item {
     -fx-background-color: transparent;
-    -fx-background-radius: 0;
+    -fx-background-radius: 0 8 8 0;
     -fx-text-fill: -dc-side-text;
-    -fx-padding: 0 16 0 17;
+    -fx-padding: 0 16 0 18;
     -fx-pref-height: 40px;
     -fx-min-height: 40px;
     -fx-alignment: center-left;
@@ -101,9 +122,32 @@
 }
 
 .nav-item:selected {
+    -fx-background-color: -dc-side-active;
     -fx-text-fill: -dc-side-text-active;
     -fx-border-color: -dc-side-mark;
     -fx-font-weight: 600;
+}
+
+/* The monitor's alert count: a small pill at the item's right edge. */
+.nav-badge {
+    -fx-background-color: -dc-badge;
+    -fx-background-radius: 999;
+    -fx-text-fill: -dc-on-badge;
+    -fx-font-size: 12px;
+    -fx-font-weight: 600;
+    -fx-padding: 0 6 0 6;
+    -fx-min-width: 20px;
+    -fx-min-height: 18px;
+    -fx-max-height: 18px;
+    -fx-alignment: center;
+    -fx-translate-x: -12;
+}
+
+.nav-badge.folded {
+    -fx-translate-x: -8;
+    -fx-translate-y: -10;
+    -fx-min-width: 18px;
+    -fx-padding: 0 4 0 4;
 }
 
 .nav-item:focused {
@@ -130,7 +174,7 @@
 }
 
 .sidebar .profile-switch {
-    -fx-background-color: rgba(255, 255, 255, 0.07);
+    -fx-background-color: -dc-side-hover;
     -fx-background-radius: 6;
     -fx-text-fill: -dc-side-text-active;
     -fx-padding: 6 10 6 10;
@@ -143,7 +187,7 @@
 }
 
 .sidebar .profile-switch:hover {
-    -fx-background-color: rgba(255, 255, 255, 0.11);
+    -fx-background-color: -dc-side-active;
 }
 
 .sidebar .profile-switch:focused {
@@ -314,7 +358,7 @@
     -fx-background-radius: 0;
     -fx-border-radius: 0;
     -fx-border-width: 1 0 1 1;
-    -fx-padding: 5 14 5 14;
+    -fx-padding: 6 14 6 14;
 }
 
 .segmented > .toggle-button.first {
@@ -751,7 +795,7 @@
 
 .tile-figure {
     -fx-font-family: "Barlow";
-    -fx-font-size: 22px;
+    -fx-font-size: 24px;
     -fx-font-weight: 600;
 }
 
@@ -836,7 +880,7 @@
 .chip {
     -fx-background-color: -dc-chip;
     -fx-background-radius: 999;
-    -fx-padding: 3 10 3 8;
+    -fx-padding: 4 10 4 8;
     -fx-graphic-text-gap: 6;
     -fx-text-fill: -dc-text-secondary;
     -fx-font-size: 12px;
@@ -953,7 +997,7 @@
     -fx-background-radius: 999;
     -fx-border-radius: 999;
     -fx-padding: 8 20 8 16;
-    -fx-font-size: 14px;
+    -fx-font-size: 15px;
     -fx-graphic-text-gap: 10;
 }
 
@@ -1058,7 +1102,7 @@
 .empty-state .label {
     -fx-text-fill: -dc-text-secondary;
     -fx-text-alignment: center;
-    -fx-font-size: 14px;
+    -fx-font-size: 15px;
 }
 
 .empty-art {
@@ -1072,6 +1116,215 @@
 
 .empty-art .icon {
     -fx-stroke: -dc-accent;
+}
+
+/* ---------- monitor: alerts, live tiles, latency lines, meters ---------- */
+
+.tile-grid {
+    -fx-hgap: 16;
+    -fx-vgap: 16;
+}
+
+.button.tile-details {
+    -fx-background-color: transparent;
+    -fx-border-color: transparent;
+    -fx-padding: 4;
+    -fx-background-radius: 999;
+}
+
+.button.tile-details:hover {
+    -fx-background-color: -dc-surface-hover;
+}
+
+.button.tile-details .icon {
+    -fx-stroke: -dc-prompt;
+}
+
+.button.tile-details:hover .icon {
+    -fx-stroke: -dc-accent;
+}
+
+.monitor-tile {
+    -fx-padding: 16 20 16 20;
+    -fx-spacing: 14;
+}
+
+.tile-head .icon {
+    -fx-stroke: -dc-accent;
+}
+
+.metric-figure {
+    -fx-font-family: "Barlow";
+    -fx-font-size: 18px;
+    -fx-font-weight: 600;
+}
+
+.metric-box {
+    -fx-spacing: 0;
+    -fx-min-width: 48px;
+}
+
+.component-row {
+    -fx-min-height: 24px;
+    -fx-spacing: 10;
+    -fx-alignment: center-left;
+}
+
+.latency-row {
+    -fx-padding: 8 12 8 12;
+    -fx-background-color: -dc-surface;
+    -fx-background-radius: 10;
+    -fx-border-color: -dc-line;
+    -fx-border-radius: 10;
+    -fx-alignment: center-left;
+}
+
+.latency-row .icon {
+    -fx-stroke: -dc-accent;
+}
+
+.spark-line {
+    -fx-fill: transparent;
+    -fx-stroke: -dc-accent;
+    -fx-stroke-width: 1.6;
+    -fx-stroke-line-join: round;
+    -fx-stroke-line-cap: round;
+}
+
+.spark-area {
+    -fx-fill: -dc-accent-wash;
+    -fx-stroke: transparent;
+}
+
+.spark-miss {
+    -fx-fill: -dc-failed;
+}
+
+.spark-base {
+    -fx-stroke: -dc-line;
+    -fx-stroke-width: 1;
+}
+
+.spark-dot {
+    -fx-fill: -dc-surface;
+    -fx-stroke: -dc-accent;
+    -fx-stroke-width: 1.6;
+}
+
+.meter-cell.free { -fx-fill: -dc-ring-track; }
+.meter-cell.running { -fx-fill: -dc-running; }
+.meter-cell.waiting { -fx-fill: -dc-waiting; }
+.meter-cell.deferred { -fx-fill: -dc-deferred; }
+
+.monitor-row {
+    -fx-min-height: 40px;
+    -fx-padding: 0 12 0 12;
+    -fx-background-radius: 8;
+    -fx-alignment: center-left;
+}
+
+.monitor-row.clickable {
+    -fx-cursor: hand;
+}
+
+.monitor-row.clickable:hover {
+    -fx-background-color: -dc-surface-hover;
+}
+
+.monitor-row.clickable:focus-visible {
+    -fx-border-color: -dc-focus;
+    -fx-border-width: 2;
+    -fx-border-radius: 8;
+}
+
+.monitor-row.exhausted .label {
+    -fx-text-fill: -dc-warning-text;
+}
+
+.alert-row {
+    -fx-padding: 10 12 10 12;
+    -fx-background-radius: 10;
+    -fx-alignment: center-left;
+    -fx-min-height: 52px;
+}
+
+.alert-row.failed {
+    -fx-background-color: -dc-failed-wash;
+}
+
+.alert-row.warning {
+    -fx-background-color: -dc-warning-wash;
+}
+
+.alert-title {
+    -fx-font-weight: 600;
+}
+
+.alert-row.failed .alert-title { -fx-text-fill: -dc-failed-text; }
+.alert-row.warning .alert-title { -fx-text-fill: -dc-warning-text; }
+.alert-row.failed .icon { -fx-stroke: -dc-failed; }
+.alert-row.warning .icon { -fx-stroke: -dc-warning; }
+
+.alert-mark,
+.status-mark {
+    -fx-background-radius: 999;
+    -fx-min-width: 28px;
+    -fx-min-height: 28px;
+    -fx-max-width: 28px;
+    -fx-max-height: 28px;
+    -fx-background-color: -dc-surface;
+}
+
+.status-mark {
+    -fx-min-width: 24px;
+    -fx-min-height: 24px;
+    -fx-max-width: 24px;
+    -fx-max-height: 24px;
+}
+
+.status-mark.success { -fx-background-color: -dc-success-wash; }
+.status-mark.success .icon { -fx-stroke: -dc-success; }
+.status-mark.failed { -fx-background-color: -dc-failed-wash; }
+.status-mark.failed .icon { -fx-stroke: -dc-failed; }
+
+.all-clear {
+    -fx-padding: 12 16 12 16;
+    -fx-background-color: -dc-success-wash;
+    -fx-background-radius: 10;
+    -fx-alignment: center-left;
+}
+
+.calm-title {
+    -fx-font-weight: 600;
+    -fx-text-fill: -dc-success-text;
+}
+
+.count-badge {
+    -fx-background-color: -dc-badge;
+    -fx-background-radius: 999;
+    -fx-text-fill: -dc-on-badge;
+    -fx-font-size: 12px;
+    -fx-font-weight: 600;
+    -fx-padding: 0 8 0 8;
+    -fx-min-height: 20px;
+    -fx-alignment: center;
+}
+
+.count-badge.quiet-badge {
+    -fx-background-color: -dc-chip;
+    -fx-text-fill: -dc-text-secondary;
+}
+
+/* ---------- about ---------- */
+
+.about-mark {
+    -fx-min-width: 48px;
+    -fx-min-height: 48px;
+}
+
+.about-name {
+    -fx-font-size: 18px;
+    -fx-font-weight: 600;
 }
 
 /* ---------- overlays: toasts and the drawer, the only places with shadows ---------- */

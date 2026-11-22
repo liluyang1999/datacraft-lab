@@ -324,7 +324,8 @@ Layout and rules: [Repository layout](architecture.md#repository-layout) and
 
 ## 10. CI/CD logic lives in cicd/; the workflow only orchestrates
 
-**Status:** Accepted (2026-09-26 restructure); amended 2026-10-07, when the image and Compose smoke
+**Status:** Accepted (2026-09-26 restructure); the workflow files changed with decision 16 (one entry
+and four stages), the rule did not. Amended 2026-10-07, when the image and Compose smoke
 scripts moved from `tests/smoke` to `cicd/images` and the ShellCheck install left the workflow.
 
 **Context.** The workflow carried most of the pipeline as inline shell: the Maven Wrapper checksum
@@ -452,7 +453,8 @@ Details: [CI gates](build-and-quality.md#ci-gates).
 
 ## 13. Pinned versions are checked for advisories on a schedule, without a bot
 
-**Status:** Accepted (2026-10-09).
+**Status:** Accepted (2026-10-09). Amended by decision 16: the check runs in the check stage on
+every push and on the Monday schedule, not in a workflow of its own.
 
 **Context.** Every dependency, plugin, action and tool is pinned, which makes builds reproducible
 and means that nothing changes, or warns, when a pinned version becomes vulnerable. The usual
@@ -527,3 +529,90 @@ nodes is out of reach. A GitHub runner, however, can be a swarm of one node.
   that demands its password, but only trusted nodes may join the swarm.
 
 Steps: [deployment guide](../docs/guides/deployment.md) (Chinese).
+
+## 15. One product version, written once as the root POM's revision
+
+**Status:** Accepted (2026-11-20, version 1.0.0).
+
+**Context.** The version `0.1.0-SNAPSHOT` was written in the root POM, again in each of the eight
+module POMs and the desktop POM, and once more in the CLI's usage header, which a documentation test
+compared with the POM. The packaging dropped `-SNAPSHOT` from the jar name to get a number Windows
+accepts. Nothing tied an installer, a CI artifact or a release to the source of the number.
+
+**Decision.** The root POM's `revision` property is the only version literal, `MAJOR.MINOR.PATCH`
+with every part at most 65535 and no suffix. The root's `<version>` and every `<parent><version>` are
+`${revision}`; `datacraft-common` and the desktop filter it into `version.properties` for the CLI
+header, the engine's `GET /status` and the desktop; `cicd/release/version.py` prints and checks it
+for packaging, the installer and CI. `tests/ci/test_versioning.py` fails on a second literal in a
+build manifest, source, script, workflow, installer or test, and on a changelog without the version.
+The changelog records changes per version from 1.0.0; the pre-1.0 log stays below it as history.
+
+**Consequences.** A release changes one line and moves the changelog's entries. Because nothing is
+installed into or deployed to a Maven repository, the unresolved `${revision}` in installed POMs does
+not matter and no flatten plugin is needed; publishing artifacts would need one. Like datachain-ark,
+the version is the product's; schemas and pinned dependencies keep their own identities.
+
+## 16. One CI/CD entry calling check, test, build and deploy stages
+
+**Status:** Accepted (2026-11-20). Replaces `ci.yml` and `advisories.yml`; keeps decisions 10 and 12.
+
+**Context.** `ci.yml` ran seven jobs side by side with a few `needs`, and `advisories.yml` ran the
+advisory check weekly and on pushes that touched a pin. The desktop package and the jar checks were
+tests and builds at once, nothing built an installer, and there was no release path.
+
+**Decision.** `cicd.yml` is the only workflow with triggers. It calls the reusable workflows
+`check.yml` (pins, advisories, the Temurin pin, ShellCheck, pyright, the design tokens, the version
+source, the stack files), `test.yml` (backend, airflow, scripts, desktop) and `build.yml` (images with
+Compose and Swarm, the Linux app image, the Windows installer through `build.bat` and its lifecycle),
+each only after the previous one passed, on every push and pull request to `main` and `develop`. The
+Monday schedule runs the check stage alone. A manual run on `main` with `deploy-version` first checks
+branch, version and tag (`cicd/release/deploy.py request`), runs the three stages on that commit and
+then `deploy.yml`, which checks the built version again and, until a publication target is chosen,
+publishes nothing. Checkouts drop the token; every workflow reads only.
+
+**Consequences.** A failure stops the run where it is cheapest, at the cost of a longer wall-clock
+time for a full pass than parallel jobs. `workflow_run` chains were not used: they run the default
+branch's file on its latest commit and report away from the commit under test. A new advisory now
+fails every push until the pin is raised, which is the intent. The structure matches datachain-ark's
+pipeline; the steps keep this repository's step wrapper and single-command rule.
+
+## 17. A machine-wide Inno Setup installer built by build.bat and verified through its lifecycle
+
+**Status:** Accepted (2026-11-20).
+
+**Context.** The desktop was delivered as a jpackage app image to copy by hand: no Start menu entry,
+no uninstall, no protection against replacing a newer version or a running app.
+
+**Decision.** `build.bat` (through `cicd/desktop/release.py`) runs a clean desktop package,
+`package_desktop.py` and `build_installer.py`, which compiles `deploy/windows/installer.iss` with Inno
+Setup 6 into `dist/Setup.exe` and prints its SHA-256. The installer installs for the machine under
+one identity (`com.datacraft.lab`), into `C:\Program Files\DatacraftLab` or a chosen empty folder,
+with a Chinese wizard and the name 数艺工坊; running the same version repairs, a lower version refuses,
+a folder holding other files is refused, and setup and uninstall refuse while the app holds its mutex.
+Uninstalling removes only the folder, the shortcuts and the key; `~/.datacraft` stays. CI builds it
+from `build.bat` with a SHA-256-pinned Inno Setup and walks it through install, start, refusal while
+running, repair, refused downgrade, uninstall, install to a chosen folder and uninstall
+(`verify_install.py`); a per-user fixture variant lets a workstation run the same journey.
+
+**Consequences.** jpackage's own installers (WiX or MSI) were not used, to keep the behaviour and the
+checks of datachain-ark's installer. The installer is not code-signed yet; SmartScreen warns until a
+certificate is provided. The app holds a session mutex (`SingleInstance`), its second native call.
+
+## 18. The UI is designed in one token file and a prototype; the themes are generated
+
+**Status:** Accepted (2026-11-20).
+
+**Context.** The colours lived in two JavaFX theme files and again, as tables, in the UI design
+document; font sizes, radii and spacing were literals in `base.css` that had drifted off the
+documented scale (14, 17 and 22 px, odd paddings).
+
+**Decision.** `design/ui/tokens.json` is the only place a colour, type size, radius, spacing or
+duration is decided. `design/ui/build.py` writes the desktop's `light.css` and `dark.css` and the
+prototype's `tokens.css` from it; with `--check` (CI's check stage) it fails when a generated file is
+stale, a used `-dc-*` colour is undefined, a token is unused, or `base.css` leaves the type, radius or
+2 px spacing grid. `design/ui/index.html` shows every view, state and theme; `design/ui/SPEC.md`
+describes them. The desktop follows the baseline, not the other way round.
+
+**Consequences.** A colour change is one edit and one generator run; the specification names tokens
+instead of copying values. The prototype is static HTML drawn from sample data: it shows the target,
+and the desktop's UI tests and snapshots show what the code does.

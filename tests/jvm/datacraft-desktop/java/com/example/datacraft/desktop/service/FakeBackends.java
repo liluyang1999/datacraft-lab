@@ -74,6 +74,36 @@ public final class FakeBackends implements AutoCloseable {
         "{\"jobName\":\"csv-profile\",\"status\":\"SUCCEEDED\",\"message\":\"Profiled 12,480 rows in 6 columns\","
             + "\"metrics\":{\"rows\":\"12480\",\"columns\":\"6\",\"bytes\":\"1843200\","
             + "\"sha256\":\"9f2c4e1a7b3d5c6e8f0a1b2c3d4e5f60718293a4b5c6d7e8f90a1b2c3d4e5f6a\",\"durationMillis\":\"1240\"}}");
+    Instant started = Instant.now().truncatedTo(ChronoUnit.SECONDS);
+    engine.on(
+        "GET /status",
+        200,
+        "{\"status\":\"UP\",\"service\":\"datacraft-api\",\"version\":\"1.4.2\","
+            + "\"startedAt\":\""
+            + started.minus(Duration.ofHours(3))
+            + "\",\"uptimeMillis\":10800000,\"jobs\":7,\"maxConcurrentRuns\":4,"
+            + "\"runs\":{\"active\":1,\"started\":42,\"succeeded\":38,\"failed\":3,"
+            + "\"rejected\":0},\"activeRuns\":[{\"job\":\"csv-profile\",\"startedAt\":\""
+            + started.minusSeconds(12)
+            + "\",\"elapsedMillis\":12000}]}");
+    airflow.on("GET /api/v2/importErrors", 200, "{\"import_errors\":[],\"total_entries\":0}");
+    airflow.on("GET /api/v2/version", 200, "{\"version\":\"3.3.2\",\"git_version\":null}");
+    airflow.on(
+        "GET /api/v2/pools",
+        200,
+        "{\"pools\":[{\"name\":\"default_pool\",\"slots\":16,\"occupied_slots\":3,"
+            + "\"running_slots\":2,\"queued_slots\":1,\"scheduled_slots\":0,"
+            + "\"open_slots\":13,\"deferred_slots\":0,\"description\":\"Default pool\","
+            + "\"include_deferred\":false}],\"total_entries\":1}");
+    airflow.on(
+        "GET /api/v2/dags/~/dagRuns/~/taskInstances",
+        200,
+        "{\"task_instances\":[{\"dag_id\":\"datacraft_spark_etl\",\"dag_run_id\":\"manual__1\","
+            + "\"task_id\":\"csv_to_parquet\",\"task_display_name\":\"csv_to_parquet\","
+            + "\"map_index\":-1,\"state\":\"running\",\"try_number\":1,\"max_tries\":2,"
+            + "\"start_date\":\""
+            + started.minusSeconds(95)
+            + "\",\"queued_when\":null}],\"total_entries\":1}");
     airflow.on(
         "GET /api/v2/dags",
         200,

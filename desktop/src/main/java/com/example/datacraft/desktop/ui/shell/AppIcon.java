@@ -15,7 +15,7 @@ import javafx.scene.paint.Stop;
  * The window icon, drawn at start instead of shipped as images: a Prussian-blue plate with a run
  * ribbon of five segments, the app's one bold element.
  */
-final class AppIcon {
+public final class AppIcon {
 
   private static final int[] SIZES = {16, 24, 32, 48, 64, 128, 256};
   private static final Color[] SEGMENTS = {
@@ -36,7 +36,10 @@ final class AppIcon {
     return images;
   }
 
-  static Image draw(int size) {
+  /**
+   * The icon at {@code size} pixels, as the window, the About section and the installer show it.
+   */
+  public static Image draw(int size) {
     Canvas canvas = new Canvas(size, size);
     GraphicsContext g = canvas.getGraphicsContext2D();
     double radius = size * 0.22;

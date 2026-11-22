@@ -21,7 +21,9 @@ datacraft-lab/
 ├── .editorconfig  .gitattributes  .gitignore  .dockerignore  .scalafmt.conf
 ├── pyrightconfig.json                 Python type checking
 ├── config/checkstyle/checkstyle.xml   Checkstyle rules
-├── .github/workflows/                 ci.yml and advisories.yml: triggers, runners and job order only
+├── build.bat, run.bat                 Windows entry points: the desktop installer; the desktop from source
+├── .github/workflows/                 cicd.yml (the only entry) and its stages check.yml, test.yml,
+│                                      build.yml, deploy.yml: triggers, runners and job order only
 ├── cicd/                              the scripts the CI jobs run
 │   ├── step.py       the shell of every workflow step: failure and group annotations
 │   ├── lib.sh        helpers shared by the scripts
@@ -31,7 +33,9 @@ datacraft-lab/
 │   ├── lint/         pinned ShellCheck, shell syntax and ShellCheck, pinned actions
 │   ├── stacks/       Compose and Swarm definitions
 │   ├── security/     advisory checks of the pinned versions and the Temurin pin
-│   └── images/       image build and smoke test, Compose stack smoke test, Swarm rehearsal
+│   ├── release/      the single version source and the deploy gate
+│   ├── images/       image build and smoke test, Compose stack smoke test, Swarm rehearsal
+│   └── desktop/      the desktop app image, build.bat's chain, the installer and its lifecycle
 ├── modules/                           JVM source modules, grouped by responsibility
 │   ├── core/         datacraft-common, datacraft-config, datacraft-engine
 │   ├── io/           datacraft-io
@@ -39,10 +43,11 @@ datacraft-lab/
 │   └── interfaces/   datacraft-api (HTTP), datacraft-cli (process entry point)
 ├── orchestration/airflow/             dags/ (with .airflowignore), requirements.txt,
 │                                      security-overrides.txt
-├── deploy/                            docker/, compose/, swarm/, scripts/
+├── deploy/                            docker/, compose/, swarm/, scripts/, windows/ (installer)
 ├── desktop/                           数艺工坊, the JavaFX desktop console: a Maven project of its own
 │                                      built with the parent through the opt-in desktop profile
-├── design/                            architecture and design documents (English)
+├── design/                            architecture and design documents (English); ui/, the
+│                                      desktop's UI baseline (tokens, generated themes, spec, prototype)
 ├── docs/                              README, CHANGELOG, guides/, reports/, desktop/
 └── tests/                             every test
     ├── jvm/<artifactId>/{java,scala}  JVM tests of each module, run by that module's build
@@ -54,8 +59,8 @@ datacraft-lab/
     └── docs/                          documentation consistency and cost calculator tests
 ```
 
-- GitHub reads workflows only from `.github/workflows`, so `ci.yml` stays there, but it only
-  orchestrates; every step runs one command, a script in `cicd/`, a test entry point in `tests/`
+- GitHub reads workflows only from `.github/workflows`, so `cicd.yml` and its four stage files
+  stay there (decision 16), but they only orchestrate; every step runs one command, a script in `cicd/`, a test entry point in `tests/`
   or a single tool, and `tests/ci/test_workflow.py` keeps it that way.
 - `cicd/` holds what a pipeline job runs, `tests/` the suites a test runner or a developer runs,
   and `deploy/scripts` what an operator runs on the host.
@@ -215,6 +220,7 @@ runtime images. Every image runs the Temurin release pinned in `deploy/docker/Do
 The API is intentionally thin (JDK HTTP server, virtual-thread executor, Jackson):
 
 - `GET|HEAD /health`
+- `GET|HEAD /status`: version, uptime, the runs in progress and the run counters since start
 - `GET|HEAD /jobs`
 - `POST /jobs/{jobName}/runs?lifecycle=dev&key=value`
 
@@ -225,8 +231,8 @@ and other methods a JSON 405 with `Allow`; the full status contract, including t
 HTML 400 for request targets it cannot parse, is in
 [data-contracts.md](data-contracts.md#http-status-contract).
 
-When `DATACRAFT_API_TOKEN` is set, every request under `/jobs` must present it as a bearer token
-and gets 401 otherwise; `/health` stays open. At most `--max-concurrent-runs` runs (default 4) are
+When `DATACRAFT_API_TOKEN` is set, every request under `/jobs` and `/status` must present it as a
+bearer token and gets 401 otherwise; `/health` stays open. At most `--max-concurrent-runs` runs (default 4) are
 in progress at one time, and a further run request gets 503 at once (decision 11 in
 [decisions.md](decisions.md)).
 

@@ -15,11 +15,12 @@ import javafx.scene.layout.StackPane;
  */
 public final class Navigator {
 
-  /** The five views, in sidebar order; Ctrl+1 to Ctrl+5 follow it. */
+  /** The six views, in sidebar order; Ctrl+1 to Ctrl+6 follow it. */
   public enum Destination {
     OVERVIEW("overview", "总览"),
     JOBS("jobs", "作业"),
     PIPELINES("pipelines", "流水线"),
+    MONITOR("monitor", "监控"),
     ACTIVITY("activity", "活动"),
     SETTINGS("settings", "设置");
 

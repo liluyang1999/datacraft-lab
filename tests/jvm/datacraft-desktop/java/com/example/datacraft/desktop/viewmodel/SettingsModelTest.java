@@ -163,11 +163,16 @@ class SettingsModelTest {
 
   @Test
   void anEarlierTestCannotReplaceTheResultOfALaterTestForTheSameInputs() throws Exception {
+    // A stub of its own: the connection monitor's health checks of the active profile would share
+    // the fake engine's request count, and the request held below could be one of them.
+    StubServer engine = new StubServer();
+    engine.on("GET /jobs", 200, "{\"jobs\":[{\"name\":\"echo\",\"description\":\"\"}]}");
+    model.engineUrl().set(engine.uri().toString());
     model.engineToken().set(FakeBackends.TOKEN);
     AtomicInteger requests = new AtomicInteger();
     CompletableFuture<Void> entered = new CompletableFuture<>();
     CompletableFuture<Void> release = new CompletableFuture<>();
-    backends.engine.on(
+    engine.on(
         "GET /health",
         request -> {
           if (requests.getAndIncrement() == 0) {
@@ -194,6 +199,7 @@ class SettingsModelTest {
       release.complete(null);
       earlier.join();
       ui.drain();
+      engine.close();
     }
   }
 

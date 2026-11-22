@@ -1,8 +1,8 @@
 # Build and quality
 
 The JVM code is one Maven reactor driven by the root [`pom.xml`](../pom.xml). `./mvnw verify` is
-the single local gate; GitHub Actions ([`ci.yml`](../.github/workflows/ci.yml)) is the
-authoritative one. This document explains how the build is organised and why. Day-to-day commands
+the single local gate; GitHub Actions is the authoritative one, through its single entry
+[`cicd.yml`](../.github/workflows/cicd.yml) and the stages it calls. This document explains how the build is organised and why. Day-to-day commands
 are in the [development guide](../docs/guides/development.md).
 
 ## Principles
@@ -20,7 +20,7 @@ are in the [development guide](../docs/guides/development.md).
 
 ## Reactor and modules
 
-The root project `com.example.datacraft:datacraft-lab:0.1.0-SNAPSHOT` (packaging `pom`) aggregates
+The root project `com.example.datacraft:datacraft-lab:${revision}` (packaging `pom`) aggregates
 eight modules, nine reactor projects in all. They are declared in an order that already satisfies
 the dependency graph; Maven sorts the reactor by dependencies anyway.
 
@@ -70,7 +70,15 @@ Consequences elsewhere in the build:
 
 ## Version management
 
-- `properties` in the root POM are the single version matrix. `dependencyManagement` pins every
+- The product version is the root POM's `revision` property, the repository's only version
+  literal: the root's `<version>` and every module's and the desktop's `<parent><version>` are
+  `${revision}` (Maven's CI-friendly version placeholder). The value is `MAJOR.MINOR.PATCH` with no
+  suffix; `datacraft-common` and the desktop filter it into a `version.properties` that the CLI
+  header, the engine's `GET /status` and the desktop read, and `cicd/release/version.py` gives it to
+  packaging, the installer and CI. Nothing installs or deploys these artifacts to a repository, so
+  no flattened POM is needed. [Versioning](../docs/versioning.md) lists every consumer and the
+  change procedure; `tests/ci/test_versioning.py` fails on a second literal.
+- `properties` in the root POM are the single version matrix of the dependencies. `dependencyManagement` pins every
   third-party dependency; modules refer to project modules at `${project.version}`.
 - Jackson is imported as a BOM (`jackson-bom` at `${jackson.version}`), which aligns every Jackson
   artifact, including transitive ones.
@@ -313,18 +321,18 @@ end-to-end cases that require running backends.
 not count) and fails when a module is below its floor. Floors are minimums: adding tests needs no
 change, removing tests needs a lower floor in the same commit. A test in `tests/ci` checks that
 the script's module map matches the POM's `<modules>`. The desktop console, outside the default reactor,
-is checked with `--project desktop` against floors of 180 on Linux and 183 on Windows; Windows
+is checked with `--project desktop` against floors of 203 on Linux and 206 on Windows; Windows
 additionally exercises three real native accessibility lifecycle and property contracts.
 
 | Module | Linux executes (CI floor) | Windows executes (Windows floor) | Tagged for the other OS |
 | --- | --- | --- | --- |
-| `datacraft-common` | 7 | 7 | none |
+| `datacraft-common` | 10 | 10 | none |
 | `datacraft-config` | 14 | 14 | none |
 | `datacraft-io` | 64 | 66 | 7 `windows-only`, 5 `posix-only` |
 | `datacraft-engine` | 34 | 34 | none |
 | `datacraft-jobs` | 91 | 89 | 2 `posix-only` |
 | `datacraft-spark` | 64 | 54 | 10 `posix-only` |
-| `datacraft-api` | 33 | 33 | none |
+| `datacraft-api` | 36 | 36 | none |
 | `datacraft-cli` | 32 | 32 | none |
 | Total | 339 | 329 | |
 
@@ -336,20 +344,22 @@ passing check also records the counts as a notice annotation (see [CI gates](#ci
 
 ### Python and Node suites
 
-The inventory is 283 cases: 71 deployment, 159 CI/CD, 16 documentation, 31 DAG/path and six
-calculator cases. Platform requirements determine which cases execute; an inventory is not a
+The inventory is 307 cases: 71 deployment, 176 CI/CD, 7 design, 16 documentation, 31 DAG/path and
+six calculator cases. Platform requirements determine which cases execute; an inventory is not a
 record of a passing run.
 
 | Suite | Location | Needs | Runs in |
 | --- | --- | --- | --- |
-| DAG contracts | `tests/orchestration` | Airflow 3.3.2 and providers | CI `dags`; `make dags` |
-| Real pipelines | `tests/smoke/airflow_runtime_smoke.py` | Airflow 3.3.2, pyspark 4.2.0, the jar | CI `dags` and `containers` |
-| Images and stacks | `cicd/images/smoke-images.sh`, `cicd/images/smoke-compose.sh`, `cicd/images/smoke-swarm.sh` (pipeline steps, not test suites) | Docker; `smoke-compose.sh` and `smoke-swarm.sh` refuse to run outside CI | CI `containers` |
+| DAG contracts | `tests/orchestration` | Airflow 3.3.2 and providers | CI test `airflow`; `make dags` |
+| Real pipelines | `tests/smoke/airflow_runtime_smoke.py` | Airflow 3.3.2, pyspark 4.2.0, the jar | CI test `airflow` and build `images` |
+| Images and stacks | `cicd/images/smoke-images.sh`, `cicd/images/smoke-compose.sh`, `cicd/images/smoke-swarm.sh` (pipeline steps, not test suites) | Docker; `smoke-compose.sh` and `smoke-swarm.sh` refuse to run outside CI | CI build `images` |
 | Deployment scripts and templates | `tests/deploy` | Python standard library | CI `scripts`; `make test-scripts` |
 | CI/CD scripts, workflow structure and build settings | `tests/ci` | Python standard library; Bash for the tests that run a `cicd/` shell script (skipped on Windows) | CI `scripts`; `make test-scripts` |
 | Documentation consistency | `tests/docs/test_docs_consistency.py` | Python standard library | CI `scripts`; `make test-scripts` |
 | Cost calculator | `tests/docs/cloud-costs.test.cjs` | Node | CI `scripts`; `make test-scripts` |
-| Desktop console | `tests/jvm/datacraft-desktop` (run by `desktop/pom.xml`), `cicd/desktop/package_desktop.py` (a pipeline step) | JDK 25 and a display (Xvfb on Linux) | CI `desktop` |
+| Desktop console | `tests/jvm/datacraft-desktop` (run by `desktop/pom.xml`), `cicd/desktop/package_desktop.py` (a pipeline step) | JDK 25 and a display (Xvfb on Linux) | CI test `desktop`, build `app-image` and `installer` |
+| Design tokens | `tests/design` (`design/ui/build.py`: generated themes current, base.css on the scales, readable state pairs) | Python 3.12+, standard library | CI check `lint` (`--check`) and test `scripts`; `make design` |
+| Installer and release | `tests/ci/test_installer.py`, `tests/ci/test_versioning.py` (installer source, fixture layout, version source, deploy gate) | Python 3.12+; the lifecycle itself needs Windows and Inno Setup | CI test `scripts`; build `installer` runs `verify_install.py` |
 
 ## Packaging
 
@@ -425,7 +435,7 @@ laptop experiments without `spark-submit`. CI checks the shaded jar in the `buil
 Airflow, its providers, paramiko, pyspark and
 packaging exist only in the Airflow environment, so the execution environments for
 `orchestration/airflow/dags`, `tests/orchestration`, `tests/smoke` (which see the DAG helpers
-through `extraPaths`) and `cicd/airflow` do not report missing imports; CI's `dags` job exercises
+through `extraPaths`) and `cicd/airflow` do not report missing imports; CI's test-stage `airflow` job exercises
 those imports with Airflow installed.
 
 CI's `scripts` job runs `npx --yes pyright@1.1.414 --warnings`, and `make typecheck` runs the same
@@ -435,11 +445,20 @@ diagnostics.
 
 ## CI gates
 
-GitHub reads workflows only from `.github/workflows`, so `ci.yml` stays there, but it only
-orchestrates: triggers, permissions, runners, toolchain setup (the pinned actions) and job order.
-Every step runs one command: a script in `cicd/`, grouped by the job that runs it (`build/`,
-`airflow/`, `lint/`, `stacks/`, `images/`, with shared helpers in `cicd/lib.sh`), a test entry
-point in `tests/`, or a single tool (`./mvnw -B -ntp verify`, pyright, a clean-up `rm`). The
+The pipeline is one entry, [`cicd.yml`](../.github/workflows/cicd.yml), that calls four reusable
+stage workflows in order: [`check.yml`](../.github/workflows/check.yml) (pins, advisories, the
+Temurin pin, shell scripts, Python types, the design tokens, the version source, the stack files),
+[`test.yml`](../.github/workflows/test.yml) (backend, airflow, scripts, desktop),
+[`build.yml`](../.github/workflows/build.yml) (images, the Linux app image, the Windows installer
+and its lifecycle) and [`deploy.yml`](../.github/workflows/deploy.yml) (a publication placeholder,
+only on a manual run of `main` with the version entered). The stages have no triggers of their own;
+`needs` stops the run at the first stage that fails, and the Monday schedule runs the check stage
+alone. GitHub reads workflows only from `.github/workflows`, so the files stay there, but they only
+orchestrate: triggers, permissions, runners, toolchain setup (the pinned actions) and job order.
+Every step runs one command: a script in `cicd/`, grouped by the stage and job that run it
+(`release/`, `build/`, `airflow/`, `lint/`, `stacks/`, `security/`, `images/`, `desktop/`, with
+shared helpers in `cicd/lib.sh`), a test entry point in `tests/`, the root `build.bat`, or a single
+tool (`./mvnw -B -ntp verify`, pyright, a clean-up `rm`). The
 scripts therefore run and can be reviewed outside GitHub Actions. The shell scripts report through
 `fail` in `cicd/lib.sh`: an `::error::` annotation on a runner, standard error elsewhere; the
 Python checks print `::error::` lines on standard output everywhere.
@@ -454,8 +473,8 @@ what a reader needs into annotations:
   the exit status. After the command exits, the wrapper drains output for two seconds at most,
   even if a background process keeps the pipe open. POSIX waits for readable descriptors; Windows
   uses nonblocking pipes, which require Python 3.12 or newer. It does not terminate background
-  processes or leave a reader thread behind. The desktop matrix selects Python 3.13 after
-  checkout and before its first wrapped command. No step may set a
+  processes or leave a reader thread behind. The Windows jobs (the desktop matrix and the installer)
+  select Python 3.13 after checkout and before their first wrapped command. No step may set a
   `working-directory`, because the wrapper is named relative to the checkout.
   When the step fails on a runner it adds one `::error` annotation: the job and
   the step's command in the title, and in the message the first lines that name a failure (Maven
@@ -503,21 +522,23 @@ anything it could misread: another spelling of the key (flow style, a quoted or 
 value on the next line), a `uses:` in a comment, which may be the continuation of a quoted scalar,
 and a key it cannot read (an escape in a quoted key, an alias as a key).
 
-`setup-java` in the `build` job sets `check-latest: true`: the build enforces a JDK patch floor,
-and without it the action would use the Temurin 25 preinstalled on the runner image even when a
-newer release exists. The `containers` job, the longest, declares `needs: [build, scripts,
-compose]`, so it does not start while a cheaper gate is failing.
+`setup-java` sets `check-latest: true` wherever the build runs: the build enforces a JDK patch
+floor, and without it the action would use the Temurin 25 preinstalled on the runner image even when
+a newer release exists. The longest jobs, the images and the Windows installer, are in the build
+stage, which starts only once the check and test stages have passed.
 
 | Job | What it gates |
 | --- | --- |
-| `build`: Build & verify (JDK 25) | Temurin 25; `cicd/build/check-maven-wrapper.sh`: the wrapper must refuse a Maven download with a wrong SHA-256 (a copy with a zeroed `distributionSha256Sum` and an empty `MAVEN_USER_HOME`), and no `maven-wrapper.jar` may be committed; `./mvnw -B -ntp verify`; the test floors (`cicd/build/check_test_counts.py`); `cicd/build/check-spark-suite.sh`: the Spark suite must have run `SparkPipelineSpec` with `canceled 0`; the jar and exit-code checks and the build-context check below. |
-| `dags`: Airflow contracts and real pipelines (3.3.2) | Python 3.13, the version the `apache/airflow:3.3.2` image runs; `cicd/airflow/install-airflow.sh`: `apache-airflow==3.3.2` and the providers under the official `constraints-3.3.2` file for the running Python (the script derives the version, as `Dockerfile.airflow` does, and a test in `tests/docs` keeps it from being fixed), `pip check`, then pyspark 4.2.0, then the fixed releases of `orchestration/airflow/security-overrides.txt` over the constrained ones and `pip check` again; `cicd/airflow/check_security_floor.py`: apache-airflow 3.3.2, FAB provider 3.9.0 and every release of the overrides file at least; `tests/orchestration`; `tests/smoke/airflow_runtime_smoke.py` against the jar built by `build`, with pyspark 4.2.0's `spark-submit`. |
-| `scripts`: Script, documentation and type checks | `cicd/lint/check-actions-pinned.sh`; Python 3.13 and Node 24; `cicd/lint/install-shellcheck.sh`: ShellCheck 0.11.0 from the PyPI package `shellcheck-py`, so the result does not depend on the runner image; `cicd/lint/check-shell-scripts.sh`: `bash -n` and ShellCheck on every `*.sh` git knows (tracked or not yet ignored), with sourced files followed and every finding fatal; `tests/deploy`, `tests/ci` and `tests/docs`; `node --test tests/docs/cloud-costs.test.cjs`; pyright 1.1.414 with `--warnings`. |
-| `desktop`: Desktop console (JavaFX 25) | A Windows 2025 / Ubuntu 24.04 matrix with Temurin 25 and explicitly selected Python 3.13 (Linux uses a private D-Bus session and Xvfb). `./mvnw -B -ntp -Pdesktop -pl :datacraft-desktop -am verify` runs the parent and desktop gates, including external test formatting, both UI themes and bounded FX-thread stalls. A version/hash-locked JavaFX accessibility patch is shared by tests, development launch and jlink; Windows also checks real retained UIA text ranges. `cicd/build/check_test_counts.py --project desktop` requires 183 executed tests on Windows and 180 on Linux. `cicd/desktop/package_desktop.py` trains AOT on all views/themes, then checks actual cache use, clean diagnostics and the 1500 ms budget on all 20 fresh/reused starts. UI snapshots and every startup sample are retained as separate platform artifacts. |
-| `compose`: Compose / Swarm file validation | `cicd/stacks/check-stack-files.sh`: `docker compose config` and `docker stack config` with test-only secrets; for each required secret, the API token and for the stack the Redis password included, interpolation must fail when it is missing (for the Compose file's database password, whose placeholder the copied `.env` carries, from a copy of that file without the line). Nothing is built or deployed; the script refuses to run while `deploy/compose/.env` exists, because it writes that file from `.env.example`. |
-| `containers`: Build and smoke-test runtime images | Runs after `build`, `scripts` and `compose`. `cicd/images/smoke-images.sh`: builds the images, the optional `datacraft/spark` among them; the build context must exclude `.env` and `backups/`; the builder and the three runtime images run the Temurin release pinned in `Dockerfile.temurin`, at least 25.0.5; the Spark image converts and counts a file inside its data directory as its non-root user and refuses an output outside it; the API image refuses to start without `DATACRAFT_API_TOKEN`, and with one it answers 401 to a `/jobs` request without or with a wrong token; it runs as non-root, cannot modify its jar and answers `spark-version` with HTTP 500 FAILED; `pip check` and `cicd/airflow/check_security_floor.py` inside the Airflow image; a fresh data volume is writable by an Airflow task and read-only for the API; the one-shot initializer, started as both stacks start it, migrates a database and creates the admin under `AIRFLOW_UID=1000`; the real pipelines inside the image, a GBK file converted with `encoding=GBK` among them, and the SFTP pipeline refused through a connection that verifies no host key. `cicd/images/smoke-compose.sh`: the full Compose stack with generated secrets, the generated API token opening `datacraft-api` on its loopback port, all three image-baked DAGs registered, a triggered `datacraft_engine_jobs` run through the scheduler and LocalExecutor, and a `pg_dump` backup restored into a separate database that must contain the successful run; a failure reports the service logs, the task logs and the container states before the stack is removed. `cicd/images/smoke-swarm.sh`: the Swarm stack on a swarm of one node, deployed from a loopback registry by `swarm-deploy.sh` and `airflow-init.sh`; every long-running service running its current tasks (healthy where it has a health check); `datacraft-api` without a published port, answering its token only on the overlay network; the generated admin signing in through the routing mesh; the data volume writable for a worker and read-only for the API; a `datacraft_engine_jobs` run through Redis and a Celery worker; then an upgrade to a second tag, which must run the initializer again, replace every Airflow task, keep the earlier run and run the DAG again. When it ends it leaves the swarm and removes the stack, its volumes, the registry and the image names it created, and it fails when a volume stays behind. It does not cover more than one node; two nodes were tried once by hand (decision 14). |
+| test `backend`: JDK 25 verify and jar checks | Temurin 25; `cicd/build/check-maven-wrapper.sh`: the wrapper must refuse a Maven download with a wrong SHA-256 (a copy with a zeroed `distributionSha256Sum` and an empty `MAVEN_USER_HOME`), and no `maven-wrapper.jar` may be committed; `./mvnw -B -ntp verify`; the test floors (`cicd/build/check_test_counts.py`); `cicd/build/check-spark-suite.sh`: the Spark suite must have run `SparkPipelineSpec` with `canceled 0`; the jar and exit-code checks and the build-context check below. |
+| test `airflow`: contracts and real pipelines (3.3.2) | Python 3.13, the version the `apache/airflow:3.3.2` image runs; `cicd/airflow/install-airflow.sh`: `apache-airflow==3.3.2` and the providers under the official `constraints-3.3.2` file for the running Python (the script derives the version, as `Dockerfile.airflow` does, and a test in `tests/docs` keeps it from being fixed), `pip check`, then pyspark 4.2.0, then the fixed releases of `orchestration/airflow/security-overrides.txt` over the constrained ones and `pip check` again; `cicd/airflow/check_security_floor.py`: apache-airflow 3.3.2, FAB provider 3.9.0 and every release of the overrides file at least; `tests/orchestration`; `tests/smoke/airflow_runtime_smoke.py` against the jar built by `build`, with pyspark 4.2.0's `spark-submit`. |
+| check `security` and `lint`, test `scripts` | `cicd/lint/check-actions-pinned.sh`; Python 3.13 and Node 24; `cicd/lint/install-shellcheck.sh`: ShellCheck 0.11.0 from the PyPI package `shellcheck-py`, so the result does not depend on the runner image; `cicd/lint/check-shell-scripts.sh`: `bash -n` and ShellCheck on every `*.sh` git knows (tracked or not yet ignored), with sourced files followed and every finding fatal; `tests/deploy`, `tests/ci` and `tests/docs`; `node --test tests/docs/cloud-costs.test.cjs`; pyright 1.1.414 with `--warnings`. |
+| test `desktop` and build `app-image`: Desktop console (JavaFX 25) | A Windows 2025 / Ubuntu 24.04 matrix with Temurin 25 and explicitly selected Python 3.13 (Linux uses a private D-Bus session and Xvfb). `./mvnw -B -ntp -Pdesktop -pl :datacraft-desktop -am verify` runs the parent and desktop gates, including external test formatting, both UI themes and bounded FX-thread stalls. A version/hash-locked JavaFX accessibility patch is shared by tests, development launch and jlink; Windows also checks real retained UIA text ranges. `cicd/build/check_test_counts.py --project desktop` requires 206 executed tests on Windows and 203 on Linux; the packaging below runs in the build stage's `app-image` job on Linux and inside `build.bat` on Windows. `cicd/desktop/package_desktop.py` trains AOT on all views/themes, then checks actual cache use, clean diagnostics and the 1500 ms budget on all 20 fresh/reused starts. UI snapshots and every startup sample are retained as separate platform artifacts. |
+| check `lint`: Compose / Swarm file validation | `cicd/stacks/check-stack-files.sh`: `docker compose config` and `docker stack config` with test-only secrets; for each required secret, the API token and for the stack the Redis password included, interpolation must fail when it is missing (for the Compose file's database password, whose placeholder the copied `.env` carries, from a copy of that file without the line). Nothing is built or deployed; the script refuses to run while `deploy/compose/.env` exists, because it writes that file from `.env.example`. |
+| build `images`: Build and smoke-test runtime images | Runs after the check and test stages. `cicd/images/smoke-images.sh`: builds the images, the optional `datacraft/spark` among them; the build context must exclude `.env` and `backups/`; the builder and the three runtime images run the Temurin release pinned in `Dockerfile.temurin`, at least 25.0.5; the Spark image converts and counts a file inside its data directory as its non-root user and refuses an output outside it; the API image refuses to start without `DATACRAFT_API_TOKEN`, and with one it answers 401 to a `/jobs` request without or with a wrong token; it runs as non-root, cannot modify its jar and answers `spark-version` with HTTP 500 FAILED; `pip check` and `cicd/airflow/check_security_floor.py` inside the Airflow image; a fresh data volume is writable by an Airflow task and read-only for the API; the one-shot initializer, started as both stacks start it, migrates a database and creates the admin under `AIRFLOW_UID=1000`; the real pipelines inside the image, a GBK file converted with `encoding=GBK` among them, and the SFTP pipeline refused through a connection that verifies no host key. `cicd/images/smoke-compose.sh`: the full Compose stack with generated secrets, the generated API token opening `datacraft-api` on its loopback port, all three image-baked DAGs registered, a triggered `datacraft_engine_jobs` run through the scheduler and LocalExecutor, and a `pg_dump` backup restored into a separate database that must contain the successful run; a failure reports the service logs, the task logs and the container states before the stack is removed. `cicd/images/smoke-swarm.sh`: the Swarm stack on a swarm of one node, deployed from a loopback registry by `swarm-deploy.sh` and `airflow-init.sh`; every long-running service running its current tasks (healthy where it has a health check); `datacraft-api` without a published port, answering its token only on the overlay network; the generated admin signing in through the routing mesh; the data volume writable for a worker and read-only for the API; a `datacraft_engine_jobs` run through Redis and a Celery worker; then an upgrade to a second tag, which must run the initializer again, replace every Airflow task, keep the earlier run and run the DAG again. When it ends it leaves the swarm and removes the stack, its volumes, the registry and the image names it created, and it fails when a volume stays behind. It does not cover more than one node; two nodes were tried once by hand (decision 14). |
+| build `installer`: Windows Setup.exe lifecycle | Windows 2025 with Temurin 25 and Python 3.13. `cicd/desktop/prepare_inno.py` unpacks Inno Setup 6.7.4 after checking its SHA-256. `build.bat` (the developer's entry point) runs a clean desktop package, `package_desktop.py` with its 20 timed starts and `build_installer.py`, which compiles `deploy/windows/installer.iss` with the version source's version, the app image, its icon and the reviewed Chinese messages into `dist/Setup.exe`. `cicd/desktop/verify_install.py` then installs it silently into the default folder (uninstall key, Start menu shortcut, launcher, jar and runtime), starts the installed app, requires Setup to refuse while the app holds its mutex, repairs, requires a refused downgrade, uninstalls (folder, shortcut and key gone, the data folder kept), installs into a chosen folder and uninstalls again. `cicd/desktop/release.py outputs` names the artifact and its SHA-256, which are uploaded with the lifecycle report. |
+| deploy `publish` | Only on a manual run of `main` whose `deploy-version` passed `cicd/release/deploy.py request` (branch, version source, free tag). `cicd/release/deploy.py publish` checks the branch and the installer's version again and writes the run summary; the publication target is not decided, so it publishes and tags nothing. |
 
-Checks of the shaded jar in the `build` job:
+Checks of the shaded jar in the test stage's `backend` job:
 
 - `cicd/build/smoke-cli-jar.sh`: `list-jobs`, `echo` and `noop` run under plain `java -jar`, which
   proves the jar is runnable and that these commands need no Spark; `csv-profile` with
@@ -532,7 +553,7 @@ Checks of the shaded jar in the `build` job:
   writes a FAILED `--result-file`; an unknown command, a malformed `--param` and a missing
   `--config` exit 2; none of them may end with an uncaught exception.
 
-The build-context check, also in the `build` job:
+The build-context check, also in the `backend` job:
 
 - `docker build` sends only the build context, the checkout minus what `.dockerignore` excludes,
   so the builder image compiles a tree that `./mvnw verify` never sees: no `tests/`, `docs/`,
@@ -542,8 +563,8 @@ The build-context check, also in the `build` job:
   rules of Docker's pattern matcher, reads the Maven arguments from `Dockerfile.build` itself,
   runs them in the copy (offline, from the local Maven repository that `verify` filled) and
   requires the jar.
-- A build that only works with the full checkout therefore fails in `build`, with Maven's own
-  error, instead of inside the image build of the `containers` job. It needs no Docker, so it
+- A build that only works with the full checkout therefore fails in `backend`, with Maven's own
+  error, instead of inside the image build of the build stage's `images` job. It needs no Docker, so it
   also runs on a workstation without one.
 - [`tests/deploy/test_dockerignore.py`](../tests/deploy/test_dockerignore.py) uses the same
   matcher and requires every path a Dockerfile copies from the context to exist in it;
@@ -551,15 +572,15 @@ The build-context check, also in the `build` job:
   the argument parsing.
 
 On failure the job uploads the test reports; on success it shares the verified jar with the
-`dags` job for one day.
+`airflow` job for one day.
 
 ### Advisory check
 
 Pinning every version keeps the build reproducible, and also keeps a version in place after an
-advisory is published for it. A second workflow,
-[`advisories.yml`](../.github/workflows/advisories.yml), therefore runs
-[`cicd/security/check_advisories.py`](../cicd/security/check_advisories.py) every Monday, on demand
-and on a push that changes a file which pins a version:
+advisory is published for it. The check stage therefore runs
+[`cicd/security/check_advisories.py`](../cicd/security/check_advisories.py) on every push and pull
+request and every Monday, so a changed pin is checked at once and a new advisory for an untouched pin
+within a week:
 
 - It reads the pins from the files that hold them: the dependencies the root POM manages (the
   Jackson BOM stands for `jackson-core` and `jackson-databind`), the ones the desktop console's
